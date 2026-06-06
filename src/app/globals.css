@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --moss: #2e5a44;
+  --moss-dark: #1f4030;
+  --moss-soft: #e9f0ea;
+  --durian: #eed56d;
+  --durian-soft: #fbf4cf;
+  --ink: #203329;
+  --muted: #718078;
+  --canvas: #f4f6f1;
+  --line: #e1e7df;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 5%, rgba(238, 213, 109, .16), transparent 23rem),
+    var(--canvas);
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 10px 35px rgba(39, 73, 54, .06);
+}
+
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #bac7bd; border-radius: 999px; }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(94, 155, 111, .35); }
+  70% { box-shadow: 0 0 0 7px rgba(94, 155, 111, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(94, 155, 111, 0); }
+}
+.live-dot { animation: pulse-ring 1.8s infinite; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .panel { box-shadow: none; }
+}
