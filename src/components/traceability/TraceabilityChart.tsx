@@ -12,12 +12,13 @@ export function TraceabilityChart() {
             <linearGradient id="traceSoil" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2E5A44" stopOpacity={0.3}/><stop offset="95%" stopColor="#2E5A44" stopOpacity={0}/></linearGradient>
           </defs>
           <CartesianGrid stroke="#e8ece7" strokeDasharray="4 4" vertical={false} />
-          <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#7d8a82" }} />
-          <YAxis domain={[60, 90]} axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#7d8a82" }} />
-          <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 10 }} />
+          <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#7d8a82" }} />
+          <YAxis domain={[60, 90]} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#7d8a82" }} />
+          <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 13 }} />
           <Area type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#2E5A44" strokeWidth={2.5} fill="url(#traceSoil)" />
         </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
+
