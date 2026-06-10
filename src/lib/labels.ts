@@ -5,3 +5,4 @@ export const diseaseLabels: Record<string, string> = {
   Phomopsis_Leaf_Spot: "Đốm lá Phomopsis",
   Allocaridara_Attacked: "Rầy xanh tấn công",
 };
+

@@ -20,10 +20,26 @@ body {
     radial-gradient(circle at 8% 5%, rgba(238, 213, 109, .16), transparent 23rem),
     var(--canvas);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
 }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+
+.input-control {
+  width: 100%;
+  height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: .875rem;
+  background: white;
+  padding: 0 .75rem;
+  color: var(--ink);
+  font-size: .875rem;
+  font-weight: 700;
+  outline: none;
+}
+.input-control:focus {
+  border-color: #9bb4a3;
+  box-shadow: 0 0 0 3px rgba(46, 90, 68, .08);
+}
 
 .panel {
   border: 1px solid var(--line);
@@ -54,3 +70,4 @@ button { cursor: pointer; }
   body { background: white; }
   .panel { box-shadow: none; }
 }
+

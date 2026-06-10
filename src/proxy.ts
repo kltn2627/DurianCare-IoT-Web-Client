@@ -22,3 +22,4 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: ["/dashboard/client/:path*", "/dashboard/admin/:path*", "/profile/:path*"],
 };
+
