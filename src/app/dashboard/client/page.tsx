@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bot, CalendarDays, Leaf, Map, Radio, ScanSearch, ShieldCheck, Sprout, ThermometerSun } from "lucide-react";
+import {
+  BookOpenText,
+  Bot,
+  CalendarDays,
+  MessageCircleMore,
+  ScanSearch,
+  ShieldCheck,
+  Sprout,
+  ThermometerSun,
+} from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
-import { dashboardStats, farmZones } from "@/constants/durianMockData";
+import { dashboardStats } from "@/constants/durianMockData";
 
 export const metadata: Metadata = { title: "Dashboard chủ trang trại" };
 
@@ -38,6 +47,20 @@ const featureLinks = [
     subtitle: "Quản lý lô thu hoạch và tạo mã truy xuất nguồn gốc công khai.",
     icon: Sprout,
   },
+  {
+    href: "/dashboard/client/chat",
+    title: "Tư vấn AI & Kỹ sư",
+    subtitle:
+      "Hỏi nhanh trợ lý 24/7 hoặc gửi ảnh cứu trợ theo đúng phân khu vườn.",
+    icon: MessageCircleMore,
+  },
+  {
+    href: "/dashboard/client/knowledge",
+    title: "Cẩm nang VietGAP",
+    subtitle:
+      "Đọc hướng dẫn sầu riêng đã kiểm duyệt theo dinh dưỡng, sâu bệnh và mùa vụ.",
+    icon: BookOpenText,
+  },
 ];
 
 export default function ClientDashboardPage() {
@@ -68,7 +91,7 @@ export default function ClientDashboardPage() {
 
         <StatCards items={dashboardStats.owner} />
 
-        <section className="grid gap-8 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <section className="grid gap-8 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {featureLinks.map(({ href, title, subtitle, icon: Icon }) => (
             <Link key={href} href={href} className="panel group flex min-h-[170px] flex-col justify-between p-7 transition hover:-translate-y-0.5 hover:border-[#cad9ce] hover:shadow-lg hover:shadow-[#2e5a4412]">
               <span className="grid size-11 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11] transition group-hover:bg-[#2E5A44] group-hover:text-[#EED56D]">
@@ -80,27 +103,6 @@ export default function ClientDashboardPage() {
               </span>
             </Link>
           ))}
-        </section>
-
-        <section className="grid gap-7 md:grid-cols-3">
-          {[
-            ["Sơ đồ phân khu", `${farmZones.length} khu vườn đang quản lý`, Map],
-            ["Lịch canh tác", "5 công việc trong 7 ngày tới", CalendarDays],
-            ["Thiết bị tại vườn", "12 trạm đang trực tuyến", Radio],
-          ].map(([title, subtitle, Icon]) => {
-            const CardIcon = Icon as typeof Leaf;
-            return (
-              <article key={String(title)} className="panel flex items-center gap-8 p-7">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]">
-                  <CardIcon size={19} />
-                </span>
-                <span>
-                  <b className="block text-[14px]">{String(title)}</b>
-                  <small className="mt-1 block text-[14px] text-[#87938b]">{String(subtitle)}</small>
-                </span>
-              </article>
-            );
-          })}
         </section>
 
         <section className="panel flex flex-col gap-8 p-7 sm:flex-row sm:items-center sm:justify-between">
