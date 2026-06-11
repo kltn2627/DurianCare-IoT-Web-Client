@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#e6d8bd"/>
+  <path d="M740 60c-246 79-408 270-397 526 225 25 415-80 505-289 43-99 43-183 30-254-46-10-92-11-138-3z" fill="#315f43"/>
+  <path d="M375 585c164-179 314-310 471-499" fill="none" stroke="#d5bf63" stroke-width="14"/>
+  <g fill="#a95d3e" opacity=".92">
+    <circle cx="615" cy="321" r="49"/><circle cx="710" cy="235" r="31"/>
+    <circle cx="536" cy="432" r="36"/><circle cx="744" cy="392" r="24"/>
+  </g>
+  <g fill="none" stroke="#6d3928" stroke-width="8" opacity=".8">
+    <circle cx="615" cy="321" r="61"/><circle cx="536" cy="432" r="47"/>
+  </g>
+  <text x="70" y="98" fill="#284735" font-family="Arial" font-size="28" font-weight="700" letter-spacing="4">PLANT HEALTH DOSSIER</text>
+</svg>

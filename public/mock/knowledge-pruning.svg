@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#dfe8dc"/>
+  <path d="M180 720c112-209 198-390 307-620M484 100c82 118 161 204 280 276M381 319c-91-13-171-49-242-107" fill="none" stroke="#244735" stroke-width="31" stroke-linecap="round"/>
+  <g fill="#56815c">
+    <ellipse cx="183" cy="204" rx="110" ry="46" transform="rotate(25 183 204)"/>
+    <ellipse cx="779" cy="363" rx="130" ry="53" transform="rotate(29 779 363)"/>
+    <ellipse cx="475" cy="86" rx="112" ry="45" transform="rotate(-35 475 86)"/>
+  </g>
+  <g transform="translate(710 420) rotate(-18)">
+    <circle cx="0" cy="90" r="50" fill="none" stroke="#b68b36" stroke-width="24"/>
+    <circle cx="114" cy="90" r="50" fill="none" stroke="#b68b36" stroke-width="24"/>
+    <path d="M45 65l248-178M70 75l245 39" fill="none" stroke="#3e4741" stroke-width="23" stroke-linecap="round"/>
+  </g>
+  <text x="70" y="98" fill="#284735" font-family="Arial" font-size="28" font-weight="700" letter-spacing="4">CANOPY PRACTICE</text>
+</svg>

@@ -14,6 +14,8 @@ const ownerNav = [
   ["Ủy quyền vườn", "/dashboard/client/authorization"],
   ["Lịch canh tác", "/dashboard/client/calendar"],
   ["Vụ mùa & QR", "/dashboard/client/crops"],
+  ["Tư vấn AI & Kỹ sư", "/dashboard/client/chat"],
+  ["Cẩm nang VietGAP", "/dashboard/client/knowledge"],
 ];
 
 const adminNav = [
@@ -22,6 +24,16 @@ const adminNav = [
   ["Lịch canh tác", "/dashboard/admin/calendar"],
   ["Danh mục phác đồ", "/dashboard/admin#protocols"],
   ["Hồ sơ kỹ sư", "/dashboard/admin#engineers"],
+  ["Thư viện kỹ thuật", "/dashboard/admin/knowledge"],
+  ["Điều phối chat", "/dashboard/admin/expert-chat"],
+];
+
+const engineerNav = [
+  ["Tổng quan hệ thống", "/dashboard/admin"],
+  ["Mật độ dịch bệnh", "/dashboard/admin#diseases"],
+  ["Danh mục phác đồ", "/dashboard/admin#protocols"],
+  ["Thư viện kỹ thuật", "/dashboard/admin/knowledge"],
+  ["Chat nhà vườn", "/dashboard/admin/expert-chat"],
 ];
 
 function subscribeToHash(callback: () => void) {
@@ -47,7 +59,8 @@ export function DashboardShell({
   const hash = useSyncExternalStore(subscribeToHash, getHashSnapshot, () => "");
   const [open, setOpen] = useState(false);
   const profileName = userName ?? (role === "OWNER" ? "Nguyễn Minh" : "Tài khoản nội bộ");
-  const nav = role === "OWNER" ? ownerNav : adminNav;
+  const nav =
+    role === "OWNER" ? ownerNav : role === "ENGINEER" ? engineerNav : adminNav;
   const roleLabel = role === "OWNER" ? "Chủ trang trại" : role === "ENGINEER" ? "Kỹ sư hệ thống" : "Quản trị viên";
   const isActive = (href: string) => {
     const [targetPath, targetHash = ""] = href.split("#");
@@ -80,7 +93,7 @@ export function DashboardShell({
               <Link
                 key={label}
                 href={href}
-                className={`relative flex h-10 items-center rounded-xl px-4 text-[15px] font-semibold transition-colors duration-200 ${
+                className={`relative flex h-10 items-center rounded-xl px-2.5 text-[11px] font-semibold transition-colors duration-200 ${
                   isActive(href)
                     ? "bg-[#edf3ee] text-[#2E5A44]"
                     : "text-[#68776e] hover:bg-[#f6f8f5] hover:text-[#2E5A44]"

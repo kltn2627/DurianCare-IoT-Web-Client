@@ -6,7 +6,13 @@ Giao diện quản lý trang trại sầu riêng thông minh được xây dựn
 
 - `/login`: đăng nhập và chuyển hướng theo quyền
 - `/dashboard/client`: dashboard chủ trang trại
+- `/dashboard/client/calendar`: lịch canh tác, vật tư và xác nhận IoT
+- `/dashboard/client/chat`: cổng chat kép AI và Kỹ sư dành cho chủ vườn
+- `/dashboard/client/knowledge`: kho cẩm nang VietGAP dành cho chủ vườn
+- `/dashboard/client/knowledge/[slug]`: trang đọc chi tiết bài viết
 - `/dashboard/admin`: dashboard quản trị viên và kỹ sư
+- `/dashboard/admin/knowledge`: quản lý bài viết và thư viện kiến thức nông nghiệp
+- `/dashboard/admin/expert-chat`: bảng điều phối của Admin hoặc workspace chat của Kỹ sư theo quyền
 - `/profile`: hồ sơ cá nhân theo quyền đăng nhập
 - `/traceability/DC-2026-DONA-018`: trang truy xuất công khai
 
