@@ -1,139 +1,340 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Leaf, LogOut, Menu, Search, UserRound, X } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import {
+  Bell,
+  Leaf,
+  LogOut,
+  Menu,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { authClient } from "@/lib/auth/client";
+import type { DashboardRole } from "@/lib/auth/types";
+import { notificationClient } from "@/lib/notification/client";
 
-export type DashboardRole = "OWNER" | "ADMIN" | "ENGINEER";
-
-const ownerNav = [
-  ["Tổng quan", "/dashboard/client"],
-  ["Cảm biến IoT", "/dashboard/client/sensors"],
-  ["Nhật ký AI", "/dashboard/client/diagnosis"],
-  ["Ủy quyền vườn", "/dashboard/client/authorization"],
-  ["Lịch canh tác", "/dashboard/client/calendar"],
-  ["Vụ mùa & QR", "/dashboard/client/crops"],
-  ["Tư vấn AI & Kỹ sư", "/dashboard/client/chat"],
-  ["Cẩm nang VietGAP", "/dashboard/client/knowledge"],
-];
-
-const adminNav = [
-  ["Tổng quan hệ thống", "/dashboard/admin"],
-  ["Mật độ dịch bệnh", "/dashboard/admin#diseases"],
-  ["Lịch canh tác", "/dashboard/admin/calendar"],
-  ["Danh mục phác đồ", "/dashboard/admin#protocols"],
-  ["Hồ sơ kỹ sư", "/dashboard/admin#engineers"],
-  ["Thư viện kỹ thuật", "/dashboard/admin/knowledge"],
-  ["Điều phối chat", "/dashboard/admin/expert-chat"],
-];
-
-const engineerNav = [
-  ["Tổng quan hệ thống", "/dashboard/admin"],
-  ["Mật độ dịch bệnh", "/dashboard/admin#diseases"],
-  ["Danh mục phác đồ", "/dashboard/admin#protocols"],
-  ["Thư viện kỹ thuật", "/dashboard/admin/knowledge"],
-  ["Chat nhà vườn", "/dashboard/admin/expert-chat"],
-];
-
-function subscribeToHash(callback: () => void) {
-  window.addEventListener("hashchange", callback);
-  return () => window.removeEventListener("hashchange", callback);
-}
-
-function getHashSnapshot() {
-  return window.location.hash;
-}
-
-export function DashboardShell({
-  role,
-  userName,
-  children,
-}: {
+type DashboardShellProps = {
   role: DashboardRole;
   userName?: string;
   children: React.ReactNode;
-}) {
+};
+
+type NavItem = {
+  href: string;
+  label: string;
+};
+
+const ownerNav: NavItem[] = [
+  { href: "/dashboard/client", label: "Tổng quan" },
+  { href: "/dashboard/client/sensors", label: "Cảm biến IoT" },
+  { href: "/dashboard/client/diagnosis", label: "Nhật ký AI" },
+  { href: "/dashboard/client/authorization", label: "Ủy quyền" },
+  { href: "/dashboard/client/calendar", label: "Lịch canh tác" },
+  { href: "/dashboard/client/crops", label: "Vụ mùa & QR" },
+  { href: "/dashboard/client/chat", label: "Chat AI & kỹ sư" },
+  { href: "/dashboard/client/knowledge", label: "Kiến thức" },
+  { href: "/notifications", label: "Thông báo" },
+];
+
+const adminNav: NavItem[] = [
+  { href: "/dashboard/admin", label: "Tổng quan" },
+  { href: "/dashboard/admin/expert-chat", label: "Điều phối chat" },
+  { href: "/dashboard/admin/knowledge", label: "Bài viết" },
+  { href: "/dashboard/admin/calendar", label: "Lịch điều trị" },
+  { href: "/notifications", label: "Thông báo" },
+];
+
+const engineerNav: NavItem[] = [
+  { href: "/dashboard/admin", label: "Tổng quan" },
+  { href: "/dashboard/admin/expert-chat", label: "Phòng chat" },
+  { href: "/dashboard/admin/knowledge", label: "Tri thức" },
+  { href: "/dashboard/admin/calendar", label: "Lịch điều trị" },
+  { href: "/notifications", label: "Thông báo" },
+];
+
+const roleLabels: Record<DashboardRole, string> = {
+  OWNER: "Chủ vườn",
+  ADMIN: "Quản trị viên",
+  ENGINEER: "Kỹ sư nông nghiệp",
+};
+
+function buildNav(role: DashboardRole) {
+  if (role === "ADMIN") return adminNav;
+  if (role === "ENGINEER") return engineerNav;
+  return ownerNav;
+}
+
+function getInitials(name?: string) {
+  if (!name) return "DC";
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "DC";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+export function DashboardShell({ role, userName, children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const hash = useSyncExternalStore(subscribeToHash, getHashSnapshot, () => "");
-  const [open, setOpen] = useState(false);
-  const profileName = userName ?? (role === "OWNER" ? "Nguyễn Minh" : "Tài khoản nội bộ");
-  const nav =
-    role === "OWNER" ? ownerNav : role === "ENGINEER" ? engineerNav : adminNav;
-  const roleLabel = role === "OWNER" ? "Chủ trang trại" : role === "ENGINEER" ? "Kỹ sư hệ thống" : "Quản trị viên";
-  const isActive = (href: string) => {
-    const [targetPath, targetHash = ""] = href.split("#");
-    if (pathname !== targetPath) return false;
-    return targetHash ? hash === `#${targetHash}` : hash === "";
-  };
+  const { user, logout } = useAuth();
+  const navItems = useMemo(() => buildNav(role), [role]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState<number | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const logout = () => {
-    sessionStorage.removeItem("durian-session");
-    document.cookie = "durian-role=; path=/; max-age=0; samesite=lax";
-    router.push("/login");
+  const currentName = user?.profile.fullName ?? userName ?? "Người dùng";
+  const currentAvatar = user?.profile.avatarUrl ?? null;
+  const currentInitials = getInitials(currentName);
+
+  useEffect(() => {
+    let active = true;
+    notificationClient
+      .count()
+      .then((result) => {
+        if (active) setNotificationCount(result.count);
+      })
+      .catch(() => {
+        if (active) setNotificationCount(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const closeMenus = () => {
+      setProfileMenuOpen(false);
+      setMenuOpen(false);
+    };
+
+    window.addEventListener("resize", closeMenus);
+    return () => window.removeEventListener("resize", closeMenus);
+  }, []);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } catch {
+      await authClient.logout();
+    } finally {
+      router.push("/login");
+      router.refresh();
+      setLoggingOut(false);
+    }
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="no-print sticky top-0 z-40 border-b border-[#dfe6df] bg-white/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-[1500px] items-center gap-6 px-6 lg:px-10">
-          <Link href={role === "OWNER" ? "/dashboard/client" : "/dashboard/admin"} className="flex shrink-0 items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-[14px_14px_14px_5px] bg-[#2E5A44] text-[#EED56D]">
-              <Leaf size={23} />
+    <div className="min-h-screen bg-[#f5f7f4] text-neutral-900">
+      <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <Link
+            href={role === "OWNER" ? "/dashboard/client" : "/dashboard/admin"}
+            className="flex items-center gap-3 rounded-2xl px-2 py-1 transition hover:bg-neutral-50"
+          >
+            <span className="grid size-11 place-items-center rounded-2xl bg-[#2E5A44] text-[#EED56D] shadow-sm">
+              <Leaf size={20} />
             </span>
-            <span>
-              <b className="block text-[18px] tracking-[-.5px] text-[#2E5A44]">DurianCare</b>
-              <small className="block text-[13px] font-bold tracking-[2.2px] text-[#87958c]">{role === "OWNER" ? "FARM OWNER" : "CONTROL CENTER"}</small>
+            <span className="hidden sm:block">
+              <strong className="block text-[14px] tracking-tight text-neutral-900">
+                DurianCare
+              </strong>
+              <span className="block text-[11px] text-neutral-500">
+                {roleLabels[role]}
+              </span>
             </span>
           </Link>
 
-          <nav className="hidden h-full flex-1 items-center justify-center gap-2 lg:flex">
-            {nav.map(([label, href]) => (
-              <Link
-                key={label}
-                href={href}
-                className={`relative flex h-10 items-center rounded-xl px-2.5 text-[11px] font-semibold transition-colors duration-200 ${
-                  isActive(href)
-                    ? "bg-[#edf3ee] text-[#2E5A44]"
-                    : "text-[#68776e] hover:bg-[#f6f8f5] hover:text-[#2E5A44]"
-                }`}
-              >
-                {label}
-                {isActive(href) && <i className="absolute -bottom-[17px] left-1/2 h-[3px] w-6 -translate-x-1/2 rounded-full bg-[#D8B43F]" />}
-              </Link>
-            ))}
+          <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            {navItems.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-all duration-200 ${
+                    active
+                      ? "bg-[#edf3ee] text-[#2E5A44]"
+                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
-            <button className="hidden size-9 place-items-center rounded-xl border border-[#e4e9e3] text-[#607067] sm:grid" aria-label="Tìm kiếm"><Search size={18} /></button>
-            <button className="relative hidden size-9 place-items-center rounded-xl border border-[#e4e9e3] text-[#607067] sm:grid" aria-label="Thông báo">
-              <Bell size={18} /><i className="absolute right-2 top-2 size-1.5 rounded-full bg-[#D6A928]" />
-            </button>
-            <Link href="/profile" className={`hidden items-center gap-3 rounded-xl border-l border-[#e4e8e3] py-1 pl-4 pr-3 transition-colors md:flex ${pathname === "/profile" ? "bg-[#edf3ee]" : "hover:bg-[#f5f7f4]"}`}>
-              <span className="grid size-9 place-items-center rounded-xl bg-[#f2d86e] text-[14px] font-extrabold text-[#2E5A44]">
-                {profileName.split(" ").slice(-2).map((word) => word[0]).join("")}
-              </span>
-              <span><b className="block text-[14px]">{profileName}</b><small className="text-[14px] text-[#89958e]">{roleLabel}</small></span>
-              <UserRound size={14} className="text-[#87938b]" />
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/search"
+              className="inline-flex size-11 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-600 transition-all duration-200 hover:border-[#c8d9cf] hover:bg-[#f4f8f4] hover:text-[#2E5A44] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418]"
+              aria-label="Tìm kiếm"
+            >
+              <Search size={18} />
             </Link>
-            <button onClick={logout} className="hidden size-9 place-items-center rounded-xl text-[#7a887f] hover:bg-[#f3f5f1] md:grid" aria-label="Đăng xuất"><LogOut size={17} /></button>
-            <button onClick={() => setOpen(!open)} className="grid size-10 place-items-center rounded-xl border border-[#e1e6df] lg:hidden" aria-label="Mở menu">
-              {open ? <X size={20} /> : <Menu size={20} />}
+
+            <Link
+              href="/notifications"
+              className="relative inline-flex size-11 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-600 transition-all duration-200 hover:border-[#c8d9cf] hover:bg-[#f4f8f4] hover:text-[#2E5A44] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418]"
+              aria-label="Thông báo"
+            >
+              <Bell size={18} />
+              {notificationCount != null && notificationCount > 0 ? (
+                <span className="absolute right-2 top-2 min-w-4 rounded-full bg-[#EED56D] px-1 py-0.5 text-[10px] font-bold leading-none text-[#2E5A44]">
+                  {notificationCount > 99 ? "99+" : notificationCount}
+                </span>
+              ) : null}
+            </Link>
+
+            <div className="relative hidden md:block">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((current) => !current)}
+                className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-3 py-2 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418]"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+              >
+                <span className="grid size-8 overflow-hidden rounded-xl bg-[#edf3ee] text-[#2E5A44]">
+                  {currentAvatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={currentAvatar} alt={currentName} className="size-full object-cover" />
+                  ) : (
+                    <span className="grid size-full place-items-center text-[11px] font-bold">
+                      {currentInitials}
+                    </span>
+                  )}
+                </span>
+                <span className="leading-tight">
+                  <strong className="block max-w-[140px] truncate text-[13px] text-neutral-900">
+                    {currentName}
+                  </strong>
+                  <span className="block text-[11px] text-neutral-500">{roleLabels[role]}</span>
+                </span>
+              </button>
+
+              {profileMenuOpen ? (
+                <div className="absolute right-0 top-[calc(100%+8px)] w-56 rounded-2xl border border-neutral-200 bg-white p-2 shadow-lg shadow-[#00000010]">
+                  <Link
+                    href="/profile"
+                    onClick={() => setProfileMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-neutral-700 hover:bg-neutral-50"
+                  >
+                    <UserRound size={16} className="text-[#2E5A44]" />
+                    Hồ sơ của tôi
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    <LogOut size={16} />
+                    Đăng xuất
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#2E5A44] px-4 text-[13px] font-semibold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:opacity-60 md:hidden"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">
+                {loggingOut ? "Đang thoát..." : "Đăng xuất"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMenuOpen((current) => !current)}
+              className="inline-flex size-11 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-700 transition-all duration-200 hover:bg-neutral-50 lg:hidden"
+              aria-label="Mở menu"
+            >
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
-        {open && (
-          <nav className="grid gap-1 border-t border-[#e7ebe5] bg-white p-5 lg:hidden">
-            {nav.map(([label, href]) => <Link key={label} href={href} onClick={() => setOpen(false)} className={`rounded-xl px-5 py-4 text-sm font-semibold ${isActive(href) ? "bg-[#edf3ee] text-[#2E5A44]" : "text-[#516158] hover:bg-[#f5f7f4]"}`}>{label}</Link>)}
-            <Link href="/profile" onClick={() => setOpen(false)} className={`flex items-center gap-4 rounded-xl px-5 py-4 text-sm font-semibold ${pathname === "/profile" ? "bg-[#edf3ee] text-[#2E5A44]" : "text-[#516158] hover:bg-[#f5f7f4]"}`}><UserRound size={17} /> Thông tin hồ sơ</Link>
-            <button onClick={logout} className="mt-2 flex items-center gap-4 rounded-xl px-5 py-4 text-left text-sm font-semibold text-[#9b4f3d]"><LogOut size={17} /> Đăng xuất</button>
-          </nav>
-        )}
+
+        {menuOpen ? (
+          <div className="border-t border-neutral-200 bg-white lg:hidden">
+            <div className="mx-auto max-w-7xl space-y-2 px-4 py-4 sm:px-6">
+              <div className="mb-3 flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                <span className="grid size-9 overflow-hidden rounded-xl bg-[#edf3ee] text-[#2E5A44]">
+                  {currentAvatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={currentAvatar} alt={currentName} className="size-full object-cover" />
+                  ) : (
+                    <span className="grid size-full place-items-center text-[11px] font-bold">
+                      {currentInitials}
+                    </span>
+                  )}
+                </span>
+                <div className="leading-tight">
+                  <strong className="block text-[13px] text-neutral-900">{currentName}</strong>
+                  <span className="block text-[11px] text-neutral-500">{roleLabels[role]}</span>
+                </div>
+              </div>
+
+              {navItems.map((item) => {
+                const active =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={`flex items-center justify-between rounded-2xl px-4 py-3 text-[13px] font-semibold transition-all duration-200 ${
+                      active
+                        ? "bg-[#edf3ee] text-[#2E5A44]"
+                        : "bg-neutral-50 text-neutral-600"
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {item.href === "/notifications" && notificationCount ? (
+                      <span className="rounded-full bg-[#EED56D] px-2 py-1 text-[10px] font-bold text-[#2E5A44]">
+                        {notificationCount > 99 ? "99+" : notificationCount}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+
+              <Link
+                href="/profile"
+                onClick={() => setMenuOpen(false)}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-[13px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50"
+              >
+                <UserRound size={16} className="text-[#2E5A44]" />
+                Hồ sơ của tôi
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2E5A44] px-4 py-3 text-[13px] font-semibold text-white transition-all duration-200 hover:bg-[#244a37]"
+              >
+                <LogOut size={16} />
+                Đăng xuất
+              </button>
+            </div>
+          </div>
+        ) : null}
       </header>
-      <main className="mx-auto max-w-[1500px] px-6 py-8 sm:px-8 lg:px-10 lg:py-10">{children}</main>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
 }
 
-
+export type { DashboardRole };

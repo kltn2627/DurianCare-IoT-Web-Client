@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
 const beVietnamPro = Be_Vietnam_Pro({
@@ -19,7 +20,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="vi">
-      <body className={beVietnamPro.className}>{children}</body>
+      <body className={beVietnamPro.className}>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

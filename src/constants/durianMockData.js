@@ -84,9 +84,9 @@ export const treatmentProtocols = [
 ];
 
 export const engineerApplications = [
-  { id: "APP-082", name: "Nguyễn Hải Yến", degree: "Thạc sĩ Bảo vệ thực vật", experience: "7 năm", submittedAt: "05/06/2026", status: "Chờ phê duyệt" },
-  { id: "APP-081", name: "Lâm Quốc Bảo", degree: "Kỹ sư Nông học", experience: "5 năm", submittedAt: "04/06/2026", status: "Chờ phê duyệt" },
-  { id: "APP-079", name: "Trần Thiên Phúc", degree: "Thạc sĩ Khoa học cây trồng", experience: "9 năm", submittedAt: "02/06/2026", status: "Đã xác minh" },
+  { id: "APP-082", userId: "c9a7c3b8-1d6f-45a9-8c34-7f2e6d3e1001", name: "Nguyễn Hải Yến", degree: "Thạc sĩ Bảo vệ thực vật", experience: "7 năm", submittedAt: "05/06/2026", status: "Chờ phê duyệt" },
+  { id: "APP-081", userId: "4b21950d-0f2b-4e0a-8a6f-9c6c4f29b002", name: "Lâm Quốc Bảo", degree: "Kỹ sư Nông học", experience: "5 năm", submittedAt: "04/06/2026", status: "Chờ phê duyệt" },
+  { id: "APP-079", userId: "1b5f2a03-73ed-4e5f-9c32-1a8cdd42c003", name: "Trần Thiên Phúc", degree: "Thạc sĩ Khoa học cây trồng", experience: "9 năm", submittedAt: "02/06/2026", status: "Đã xác minh" },
 ];
 
 export const systemFarms = [
