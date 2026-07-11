@@ -9,8 +9,11 @@ import {
 } from "react";
 import {
   ArrowUpRight,
+  CalendarDays,
+  Check,
   CheckCheck,
   ChevronDown,
+  Circle,
   CircleDot,
   Clock3,
   Droplets,
@@ -19,10 +22,13 @@ import {
   MessageCircleMore,
   MoreHorizontal,
   Paperclip,
+  Plus,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
+  Stethoscope,
+  Trash2,
   Wifi,
   X,
 } from "lucide-react";
@@ -32,9 +38,21 @@ import type {
   ExpertChatAction,
   ExpertChatState,
   ExpertConversation,
+  TreatmentRegimen,
 } from "./types";
 
 const conversations = expertConversations as ExpertConversation[];
+const emptyRegimenDraft: TreatmentRegimen = {
+  diagnosis: "",
+  expectedOutcome: "",
+  followUpDate: "",
+  steps: [
+    { completed: false, day: 1, task: "" },
+    { completed: false, day: 2, task: "" },
+    { completed: false, day: 3, task: "" },
+  ],
+  title: "",
+};
 
 const initialState: ExpertChatState = {
   conversations,
@@ -43,6 +61,8 @@ const initialState: ExpertChatState = {
   filter: "ALL",
   draft: "",
   attachment: null,
+  regimenDraft: emptyRegimenDraft,
+  showRegimenPlanner: false,
 };
 
 function currentTime() {
@@ -80,6 +100,122 @@ function chatReducer(
       return { ...state, attachment: action.attachment };
     case "REMOVE_ATTACHMENT":
       return { ...state, attachment: null };
+    case "TOGGLE_REGIMEN_PLANNER":
+      return { ...state, showRegimenPlanner: !state.showRegimenPlanner };
+    case "UPDATE_REGIMEN_FIELD":
+      return {
+        ...state,
+        regimenDraft: {
+          ...state.regimenDraft,
+          [action.field]: action.value,
+        },
+      };
+    case "UPDATE_REGIMEN_STEP":
+      return {
+        ...state,
+        regimenDraft: {
+          ...state.regimenDraft,
+          steps: state.regimenDraft.steps.map((step, index) =>
+            index === action.index ? { ...step, task: action.value } : step,
+          ),
+        },
+      };
+    case "ADD_REGIMEN_STEP":
+      return {
+        ...state,
+        regimenDraft: {
+          ...state.regimenDraft,
+          steps: [
+            ...state.regimenDraft.steps,
+            {
+              completed: false,
+              day: state.regimenDraft.steps.length + 1,
+              task: "",
+            },
+          ],
+        },
+      };
+    case "REMOVE_REGIMEN_STEP": {
+      const nextSteps = state.regimenDraft.steps
+        .filter((_, index) => index !== action.index)
+        .map((step, index) => ({ ...step, day: index + 1 }));
+      return {
+        ...state,
+        regimenDraft: {
+          ...state.regimenDraft,
+          steps: nextSteps.length > 0 ? nextSteps : [{ completed: false, day: 1, task: "" }],
+        },
+      };
+    }
+    case "PUBLISH_REGIMEN": {
+      const title = state.regimenDraft.title.trim();
+      const validSteps = state.regimenDraft.steps.filter((step) => step.task.trim());
+      if (!title || validSteps.length === 0) return state;
+      const sentAt = currentTime();
+      return {
+        ...state,
+        conversations: state.conversations.map((conversation) => {
+          if (conversation.id !== state.activeId) return conversation;
+          const nextMessage = {
+            id: `REGIMEN-${Date.now()}`,
+            sender: "EXPERT" as const,
+            content: title,
+            sentAt,
+            type: "TREATMENT_REGIMEN" as const,
+            image: null,
+            regimen: {
+              ...state.regimenDraft,
+              diagnosis: state.regimenDraft.diagnosis.trim(),
+              expectedOutcome: state.regimenDraft.expectedOutcome.trim(),
+              followUpDate: state.regimenDraft.followUpDate.trim(),
+              steps: validSteps.map((step, index) => ({
+                completed: false,
+                day: index + 1,
+                task: step.task.trim(),
+              })),
+              title,
+            },
+          };
+          return {
+            ...conversation,
+            status: "IN_PROGRESS" as const,
+            activityLabel: "Theo doi phac do dieu tri",
+            messages: [...conversation.messages, nextMessage],
+            lastMessage: `Phac do: ${title}`,
+            lastMessageAt: sentAt,
+            unreadCount: 0,
+          };
+        }),
+        regimenDraft: emptyRegimenDraft,
+        showRegimenPlanner: false,
+      };
+    }
+    case "TOGGLE_REGIMEN_PROGRESS":
+      return {
+        ...state,
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === state.activeId
+            ? {
+                ...conversation,
+                messages: conversation.messages.map((message) =>
+                  message.id === action.messageId && message.regimen
+                    ? {
+                        ...message,
+                        regimen: {
+                          ...message.regimen,
+                          steps: message.regimen.steps.map((step) =>
+                            step.day === action.day
+                              ? { ...step, completed: !step.completed }
+                              : step,
+                          ),
+                        },
+                      }
+                    : message,
+                ),
+              }
+            : conversation,
+        ),
+      };
     case "SET_STATUS":
       return {
         ...state,
@@ -356,8 +492,10 @@ function ImageMessage({
 
 function MessageStream({
   conversation,
+  onToggleRegimenProgress,
 }: {
   conversation: ExpertConversation;
+  onToggleRegimenProgress: (messageId: string, day: number) => void;
 }) {
   return (
     <div className="flex-1 space-y-4 overflow-y-auto bg-[#f7f8f5] px-4 py-5 scrollbar-thin sm:px-6">
@@ -385,6 +523,12 @@ function MessageStream({
               )}
               {message.type === "IMAGE" && message.image ? (
                 <ImageMessage image={message.image} content={message.content} />
+              ) : message.type === "TREATMENT_REGIMEN" && message.regimen ? (
+                <RegimenMessage
+                  messageId={message.id}
+                  regimen={message.regimen}
+                  onToggleProgress={onToggleRegimenProgress}
+                />
               ) : (
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-[9px] leading-relaxed shadow-sm ${
@@ -409,6 +553,73 @@ function MessageStream({
         );
       })}
     </div>
+  );
+}
+
+function RegimenMessage({
+  messageId,
+  onToggleProgress,
+  regimen,
+}: {
+  messageId: string;
+  onToggleProgress: (messageId: string, day: number) => void;
+  regimen: TreatmentRegimen;
+}) {
+  const completedCount = regimen.steps.filter((step) => step.completed).length;
+  const progress = Math.round((completedCount / regimen.steps.length) * 100);
+
+  return (
+    <article className="min-w-[260px] max-w-[420px] rounded-2xl bg-[#203e30] p-4 text-white shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#EED56D] text-[#203e30]">
+          <CalendarDays size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <small className="block text-[7px] font-bold uppercase tracking-[0.14em] text-[#EED56D]">
+            Phac do dieu tri
+          </small>
+          <b className="mt-1 block text-[11px] leading-snug">{regimen.title}</b>
+          {regimen.diagnosis && (
+            <p className="mt-2 text-[8px] leading-relaxed text-white/70">
+              Chan doan: {regimen.diagnosis}
+            </p>
+          )}
+        </span>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/15">
+        <i
+          className="block h-full rounded-full bg-[#EED56D]"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[7px] font-bold text-white/60">
+        <span>{completedCount}/{regimen.steps.length} buoc hoan thanh</span>
+        {regimen.followUpDate && <span>Tai kham: {regimen.followUpDate}</span>}
+      </div>
+      <div className="mt-3 space-y-2">
+        {regimen.steps.map((step) => (
+          <button
+            key={step.day}
+            type="button"
+            onClick={() => onToggleProgress(messageId, step.day)}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EED56D] ${
+              step.completed ? "bg-[#EED56D] text-[#203e30]" : "bg-white/10 text-white"
+            }`}
+          >
+            {step.completed ? <Check size={14} /> : <Circle size={14} />}
+            <b className="shrink-0 text-[8px]">Ngay {step.day}</b>
+            <span className="min-w-0 flex-1 text-[8px] leading-relaxed">
+              {step.task}
+            </span>
+          </button>
+        ))}
+      </div>
+      {regimen.expectedOutcome && (
+        <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-[8px] leading-relaxed text-white/72">
+          Muc tieu: {regimen.expectedOutcome}
+        </p>
+      )}
+    </article>
   );
 }
 
@@ -580,6 +791,124 @@ function MessageComposer({
   );
 }
 
+function RegimenPlanner({
+  draft,
+  onAddStep,
+  onChangeField,
+  onChangeStep,
+  onPublish,
+  onRemoveStep,
+}: {
+  draft: TreatmentRegimen;
+  onAddStep: () => void;
+  onChangeField: (
+    field: keyof Omit<TreatmentRegimen, "steps">,
+    value: string,
+  ) => void;
+  onChangeStep: (index: number, value: string) => void;
+  onPublish: () => void;
+  onRemoveStep: (index: number) => void;
+}) {
+  const canPublish =
+    draft.title.trim().length > 0 &&
+    draft.steps.some((step) => step.task.trim().length > 0);
+
+  return (
+    <section className="border-b border-neutral-100 bg-[#fbfcfa] px-4 py-4 sm:px-6">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <label className="grid gap-1.5">
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-neutral-400">
+            Ten phac do
+          </span>
+          <input
+            value={draft.title}
+            onChange={(event) => onChangeField("title", event.target.value)}
+            placeholder="VD: Phuc hoi Phomopsis giai doan som"
+            className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-[9px] font-semibold text-neutral-900 outline-none focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-neutral-400">
+            Ngay tai kham
+          </span>
+          <input
+            value={draft.followUpDate}
+            onChange={(event) => onChangeField("followUpDate", event.target.value)}
+            placeholder="VD: 18/06/2026"
+            className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-[9px] font-semibold text-neutral-900 outline-none focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-neutral-400">
+            Chan doan
+          </span>
+          <input
+            value={draft.diagnosis}
+            onChange={(event) => onChangeField("diagnosis", event.target.value)}
+            placeholder="VD: Dom la Phomopsis"
+            className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-[9px] font-semibold text-neutral-900 outline-none focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-neutral-400">
+            Muc tieu theo doi
+          </span>
+          <input
+            value={draft.expectedOutcome}
+            onChange={(event) =>
+              onChangeField("expectedOutcome", event.target.value)
+            }
+            placeholder="VD: Ngung lan vet trong 72 gio"
+            className="h-10 rounded-xl border border-neutral-200 bg-white px-3 text-[9px] font-semibold text-neutral-900 outline-none focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          />
+        </label>
+      </div>
+      <div className="mt-3 space-y-2">
+        {draft.steps.map((step, index) => (
+          <div key={step.day} className="flex items-center gap-2">
+            <span className="grid h-9 w-14 shrink-0 place-items-center rounded-xl bg-[#edf3ee] text-[8px] font-bold text-[#2E5A44]">
+              Ngay {index + 1}
+            </span>
+            <input
+              value={step.task}
+              onChange={(event) => onChangeStep(index, event.target.value)}
+              placeholder="Nhap viec can lam, lieu luong, dieu kien an toan..."
+              className="h-9 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 text-[9px] text-neutral-900 outline-none focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+            />
+            <button
+              type="button"
+              onClick={() => onRemoveStep(index)}
+              className="grid size-9 place-items-center rounded-xl text-neutral-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+              aria-label="Xoa buoc dieu tri"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onAddStep}
+          className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[8px] font-bold text-neutral-600 hover:border-[#9bb0a0] hover:bg-[#edf3ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
+        >
+          <Plus size={13} />
+          Them ngay dieu tri
+        </button>
+        <button
+          type="button"
+          disabled={!canPublish}
+          onClick={onPublish}
+          className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-3 py-2 text-[8px] font-bold text-white hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+        >
+          <Stethoscope size={13} />
+          Gui phac do vao chat
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ChatPanel({
   conversation,
   state,
@@ -617,6 +946,14 @@ function ChatPanel({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => dispatch({ type: "TOGGLE_REGIMEN_PLANNER" })}
+            className="hidden items-center gap-1.5 rounded-xl border border-[#d8c067] bg-[#fff9dc] px-3 py-2 text-[8px] font-bold text-[#594915] transition-all duration-200 ease-in-out hover:border-[#c7a72b] hover:bg-[#fff4bd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B43F] sm:inline-flex"
+          >
+            <Stethoscope size={13} />
+            Lap phac do
+          </button>
+          <button
+            type="button"
             className="hidden items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-2 text-[8px] font-bold text-neutral-600 transition-all duration-200 ease-in-out hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] sm:inline-flex"
           >
             <ArrowUpRight size={13} />
@@ -636,7 +973,28 @@ function ChatPanel({
         conversation={conversation}
         onStatus={(status) => dispatch({ type: "SET_STATUS", status })}
       />
-      <MessageStream conversation={conversation} />
+      {state.showRegimenPlanner && (
+        <RegimenPlanner
+          draft={state.regimenDraft}
+          onAddStep={() => dispatch({ type: "ADD_REGIMEN_STEP" })}
+          onChangeField={(field, value) =>
+            dispatch({ type: "UPDATE_REGIMEN_FIELD", field, value })
+          }
+          onChangeStep={(index, value) =>
+            dispatch({ type: "UPDATE_REGIMEN_STEP", index, value })
+          }
+          onPublish={() => dispatch({ type: "PUBLISH_REGIMEN" })}
+          onRemoveStep={(index) =>
+            dispatch({ type: "REMOVE_REGIMEN_STEP", index })
+          }
+        />
+      )}
+      <MessageStream
+        conversation={conversation}
+        onToggleRegimenProgress={(messageId, day) =>
+          dispatch({ type: "TOGGLE_REGIMEN_PROGRESS", messageId, day })
+        }
+      />
       <MessageComposer
         draft={state.draft}
         attachment={state.attachment}

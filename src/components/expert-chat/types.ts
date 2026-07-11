@@ -1,6 +1,20 @@
 export type ConversationStatus = "WAITING" | "IN_PROGRESS" | "RESOLVED";
 export type MessageSender = "OWNER" | "EXPERT";
-export type MessageType = "TEXT" | "IMAGE";
+export type MessageType = "TEXT" | "IMAGE" | "TREATMENT_REGIMEN";
+
+export interface TreatmentStep {
+  completed: boolean;
+  day: number;
+  task: string;
+}
+
+export interface TreatmentRegimen {
+  diagnosis: string;
+  expectedOutcome: string;
+  followUpDate: string;
+  steps: TreatmentStep[];
+  title: string;
+}
 
 export interface ExpertMessage {
   id: string;
@@ -9,6 +23,7 @@ export interface ExpertMessage {
   sentAt: string;
   type: MessageType;
   image: string | null;
+  regimen?: TreatmentRegimen | null;
 }
 
 export interface ExpertConversation {
@@ -41,6 +56,8 @@ export interface ExpertChatState {
   filter: "ALL" | ConversationStatus;
   draft: string;
   attachment: PendingAttachment | null;
+  regimenDraft: TreatmentRegimen;
+  showRegimenPlanner: boolean;
 }
 
 export type ExpertChatAction =
@@ -51,4 +68,11 @@ export type ExpertChatAction =
   | { type: "SET_ATTACHMENT"; attachment: PendingAttachment }
   | { type: "REMOVE_ATTACHMENT" }
   | { type: "SEND_MESSAGE" }
-  | { type: "SET_STATUS"; status: ConversationStatus };
+  | { type: "SET_STATUS"; status: ConversationStatus }
+  | { type: "TOGGLE_REGIMEN_PLANNER" }
+  | { type: "UPDATE_REGIMEN_FIELD"; field: keyof Omit<TreatmentRegimen, "steps">; value: string }
+  | { type: "UPDATE_REGIMEN_STEP"; index: number; value: string }
+  | { type: "ADD_REGIMEN_STEP" }
+  | { type: "REMOVE_REGIMEN_STEP"; index: number }
+  | { type: "PUBLISH_REGIMEN" }
+  | { type: "TOGGLE_REGIMEN_PROGRESS"; messageId: string; day: number };

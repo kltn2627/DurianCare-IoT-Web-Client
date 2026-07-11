@@ -29,3 +29,5 @@ out
 .env.local
 .env.development
 .env.production
+
+*.tsbuildinfo
