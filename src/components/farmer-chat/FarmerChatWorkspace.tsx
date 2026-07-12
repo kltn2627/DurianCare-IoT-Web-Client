@@ -11,8 +11,11 @@ import {
 import {
   Bot,
   BrainCircuit,
+  CalendarDays,
+  Check,
   CheckCheck,
   ChevronDown,
+  Circle,
   CircleDot,
   Clock3,
   ImagePlus,
@@ -20,6 +23,7 @@ import {
   MapPin,
   MessageCircleMore,
   Paperclip,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -38,17 +42,115 @@ import type {
   FarmerChatAction,
   FarmerChatMode,
   FarmerChatState,
+  FarmerConversationStatus,
+  FarmerExpertConversation,
   FarmerMessage,
   FarmerZone,
+  TreatmentRegimen,
 } from "./types";
 
 const zones = farmerZones as FarmerZone[];
-const existingOwnerConversation = expertConversations[0];
+const activeRegimen: TreatmentRegimen = {
+  diagnosis: "Nghi ngo dom la Phomopsis giai doan som",
+  expectedOutcome: "Vet benh ngung lan sau 72 gio, la non moi khong xuat hien dom moi.",
+  followUpDate: "18/06/2026",
+  steps: [
+    {
+      completed: true,
+      day: 1,
+      task: "Ngung tuoi phun len tan, cat bo la benh nang va gom ra khoi vuon.",
+    },
+    {
+      completed: false,
+      day: 2,
+      task: "Phun Bacillus subtilis luc chieu mat, chi lam khi gio duoi 8 km/h.",
+    },
+    {
+      completed: false,
+      day: 3,
+      task: "Chup lai 20 mau la tai B1 va gui anh cho ky su danh gia.",
+    },
+  ],
+  title: "Phac do phuc hoi la B1 trong 3 ngay",
+};
+
+const engineerProfiles = [
+  {
+    engineerInitials: "TN",
+    engineerName: "ThS. Tran Hoang Nam",
+    specialty: "Benh hoc thuc vat",
+    zoneId: "B1",
+  },
+  {
+    engineerInitials: "TC",
+    engineerName: "KS. Nguyen Thanh Cong",
+    specialty: "Dinh duong & quan ly nuoc",
+    zoneId: "A1",
+  },
+  {
+    engineerInitials: "PL",
+    engineerName: "KS. Pham Ngoc Lan",
+    specialty: "Canh tac VietGAP",
+    zoneId: "A2",
+  },
+  {
+    engineerInitials: "MA",
+    engineerName: "ThS. Vo Minh An",
+    specialty: "Phuc hoi sau benh re",
+    zoneId: "B2",
+  },
+];
+
+const expertConversationList: FarmerExpertConversation[] = expertConversations.map(
+  (conversation, index) => {
+    const engineer = engineerProfiles[index] ?? engineerProfiles[0];
+    const messages = conversation.messages as FarmerMessage[];
+    const nextMessages =
+      index === 0
+        ? [
+            ...messages,
+            {
+              id: "REGIMEN-1401",
+              sender: "EXPERT" as const,
+              content: activeRegimen.title,
+              sentAt: "09:45",
+              type: "TREATMENT_REGIMEN" as const,
+              image: null,
+              regimen: activeRegimen,
+            },
+          ]
+        : messages;
+
+    return {
+      activityLabel: conversation.activityLabel,
+      cropContext: conversation.cropContext,
+      engineerInitials: engineer.engineerInitials,
+      engineerName: engineer.engineerName,
+      farm: conversation.farm,
+      id: conversation.id,
+      lastMessage:
+        index === 0 ? `Phac do: ${activeRegimen.title}` : conversation.lastMessage,
+      lastMessageAt: index === 0 ? "09:45" : conversation.lastMessageAt,
+      location: conversation.location,
+      messages: nextMessages,
+      online: conversation.online,
+      sensorContext: conversation.sensorContext,
+      specialty: engineer.specialty,
+      status: conversation.status as FarmerConversationStatus,
+      unreadCount: conversation.unreadCount,
+      zone: conversation.zone,
+      zoneId: engineer.zoneId,
+    };
+  },
+);
 
 const initialState: FarmerChatState = {
   mode: "AI",
   aiMessages: farmerAiMessages as FarmerMessage[],
-  expertMessages: existingOwnerConversation.messages as FarmerMessage[],
+  expertConversations: expertConversationList,
+  activeExpertId: expertConversationList[0]?.id ?? "",
+  expertQuery: "",
+  expertFilter: "ALL",
   aiDraft: "",
   expertDraft: "",
   aiAttachment: null,
@@ -86,6 +188,27 @@ function reducer(
         : { ...state, expertAttachment: null };
     case "SELECT_ZONE":
       return { ...state, selectedZoneId: action.zoneId };
+    case "SELECT_EXPERT_CONVERSATION": {
+      const selectedConversation = state.expertConversations.find(
+        (conversation) => conversation.id === action.id,
+      );
+      return {
+        ...state,
+        activeExpertId: action.id,
+        expertDraft: "",
+        expertAttachment: null,
+        selectedZoneId: selectedConversation?.zoneId ?? state.selectedZoneId,
+        expertConversations: state.expertConversations.map((conversation) =>
+          conversation.id === action.id
+            ? { ...conversation, unreadCount: 0 }
+            : conversation,
+        ),
+      };
+    }
+    case "SEARCH_EXPERT_CONVERSATIONS":
+      return { ...state, expertQuery: action.value };
+    case "FILTER_EXPERT_CONVERSATIONS":
+      return { ...state, expertFilter: action.value };
     case "SEND_OWNER_MESSAGE": {
       const draft = action.mode === "AI" ? state.aiDraft : state.expertDraft;
       const attachment =
@@ -114,7 +237,25 @@ function reducer(
 
       return {
         ...state,
-        expertMessages: [...state.expertMessages, message],
+        expertConversations: state.expertConversations
+          .map((conversation) => {
+            if (conversation.id !== state.activeExpertId) return conversation;
+            return {
+              ...conversation,
+              activityLabel: "Cho ky su phan hoi",
+              lastMessage: message.content,
+              lastMessageAt: message.sentAt,
+              messages: [...conversation.messages, message],
+              status:
+                conversation.status === "RESOLVED"
+                  ? conversation.status
+                  : ("IN_PROGRESS" as const),
+              unreadCount: 0,
+            };
+          })
+          .sort((a, b) =>
+            a.id === state.activeExpertId ? -1 : b.id === state.activeExpertId ? 1 : 0,
+          ),
         expertDraft: "",
         expertAttachment: null,
         requestStatus: "WAITING_ASSIGNMENT",
@@ -124,6 +265,32 @@ function reducer(
       return {
         ...state,
         aiMessages: [...state.aiMessages, action.message],
+      };
+    case "TOGGLE_REGIMEN_PROGRESS":
+      return {
+        ...state,
+        expertConversations: state.expertConversations.map((conversation) =>
+          conversation.id === state.activeExpertId
+            ? {
+                ...conversation,
+                messages: conversation.messages.map((message) =>
+                  message.id === action.messageId && message.regimen
+                    ? {
+                        ...message,
+                        regimen: {
+                          ...message.regimen,
+                          steps: message.regimen.steps.map((step) =>
+                            step.day === action.day
+                              ? { ...step, completed: !step.completed }
+                              : step,
+                          ),
+                        },
+                      }
+                    : message,
+                ),
+              }
+            : conversation,
+        ),
       };
     default:
       return state;
@@ -164,6 +331,187 @@ const modeMeta: Record<
   },
 };
 
+const expertFilterOptions: Array<{
+  value: FarmerChatState["expertFilter"];
+  label: string;
+}> = [
+  { value: "ALL", label: "Tat ca" },
+  { value: "WAITING", label: "Cho phan hoi" },
+  { value: "IN_PROGRESS", label: "Dang theo doi" },
+  { value: "RESOLVED", label: "Da on dinh" },
+];
+
+const STATUS_META: Record<
+  FarmerConversationStatus,
+  { label: string; className: string; dotClass: string }
+> = {
+  WAITING: {
+    label: "Cho phan hoi",
+    className: "bg-amber-50 text-amber-700 ring-amber-100",
+    dotClass: "bg-amber-500",
+  },
+  IN_PROGRESS: {
+    label: "Dang theo doi",
+    className: "bg-sky-50 text-sky-700 ring-sky-100",
+    dotClass: "bg-sky-500",
+  },
+  RESOLVED: {
+    label: "Da on dinh",
+    className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    dotClass: "bg-emerald-500",
+  },
+};
+
+function StatusPill({ status }: { status: FarmerConversationStatus }) {
+  const meta = STATUS_META[status];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[7px] font-bold ring-1 ${meta.className}`}
+    >
+      <i className={`size-1.5 rounded-full ${meta.dotClass}`} />
+      {meta.label}
+    </span>
+  );
+}
+
+function ExpertConversationRail({
+  activeId,
+  filter,
+  items,
+  onFilter,
+  onSearch,
+  onSelect,
+  query,
+}: {
+  activeId: string;
+  filter: FarmerChatState["expertFilter"];
+  items: FarmerExpertConversation[];
+  onFilter: (value: FarmerChatState["expertFilter"]) => void;
+  onSearch: (value: string) => void;
+  onSelect: (id: string) => void;
+  query: string;
+}) {
+  return (
+    <aside className="flex min-h-0 flex-col border-b border-neutral-100 bg-white lg:border-b-0 lg:border-r">
+      <div className="space-y-3 border-b border-neutral-100 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <span>
+            <small className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#6a806f]">
+              Expert inbox
+            </small>
+            <h2 className="mt-1 text-base font-bold tracking-tight text-neutral-900">
+              Ky su dang ho tro
+            </h2>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#edf3ee] px-2.5 py-1.5 text-[8px] font-bold text-[#2E5A44]">
+            <Wifi size={11} />
+            {items.filter((item) => item.online).length} online
+          </span>
+        </div>
+        <label className="relative block">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+          />
+          <input
+            value={query}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Tim ky su, phan khu..."
+            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-[10px] text-neutral-900 outline-none transition-all duration-200 placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          />
+        </label>
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-neutral-100 p-1 scrollbar-thin">
+          {expertFilterOptions.map((item) => (
+            <button
+              type="button"
+              key={item.value}
+              onClick={() => onFilter(item.value)}
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[7px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
+                filter === item.value
+                  ? "bg-white text-[#2E5A44] shadow-sm"
+                  : "text-neutral-500 hover:bg-white/60 hover:text-neutral-800"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-h-[420px] overflow-y-auto p-2 scrollbar-thin lg:max-h-none lg:flex-1">
+        {items.map((conversation) => {
+          const selected = activeId === conversation.id;
+          return (
+            <button
+              type="button"
+              key={conversation.id}
+              onClick={() => onSelect(conversation.id)}
+              className={`group relative mb-1 grid w-full grid-cols-[42px_1fr_auto] gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
+                selected ? "bg-[#edf3ee] shadow-sm" : "hover:bg-neutral-50"
+              }`}
+            >
+              {selected && (
+                <i className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-[#2E5A44]" />
+              )}
+              <span className="relative grid size-10 place-items-center rounded-xl bg-[#EED56D] text-[10px] font-extrabold text-[#2E5A44]">
+                {conversation.engineerInitials}
+                <i
+                  className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white ${
+                    conversation.online ? "bg-emerald-500" : "bg-neutral-300"
+                  }`}
+                />
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-2">
+                  <b className="truncate text-[10px] text-neutral-900">
+                    {conversation.engineerName}
+                  </b>
+                  {conversation.unreadCount > 0 && (
+                    <span className="grid min-w-4 place-items-center rounded-full bg-[#b95639] px-1 py-0.5 text-[7px] font-bold text-white">
+                      {conversation.unreadCount}
+                    </span>
+                  )}
+                </span>
+                <small className="mt-1 block truncate text-[7px] font-medium text-neutral-400">
+                  {conversation.zone} - {conversation.specialty}
+                </small>
+                <p
+                  className={`mt-1.5 truncate text-[8px] ${
+                    conversation.unreadCount > 0
+                      ? "font-semibold text-neutral-700"
+                      : "text-neutral-500"
+                  }`}
+                >
+                  {conversation.lastMessage}
+                </p>
+                <span className="mt-2 block">
+                  <StatusPill status={conversation.status} />
+                </span>
+              </span>
+              <small className="text-[7px] text-neutral-400">
+                {conversation.lastMessageAt}
+              </small>
+            </button>
+          );
+        })}
+        {items.length === 0 && (
+          <div className="grid min-h-56 place-items-center text-center">
+            <span>
+              <Search className="mx-auto text-neutral-300" size={25} />
+              <b className="mt-3 block text-[10px] text-neutral-700">
+                Khong co cuoc tro chuyen phu hop
+              </b>
+              <p className="mt-1 text-[8px] text-neutral-400">
+                Thu doi bo loc hoac tu khoa.
+              </p>
+            </span>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 function ImageBubble({
   message,
   fromOwner,
@@ -199,9 +547,11 @@ function ImageBubble({
 function MessageStream({
   messages,
   isThinking,
+  onToggleRegimenProgress,
 }: {
   messages: FarmerMessage[];
   isThinking: boolean;
+  onToggleRegimenProgress: (messageId: string, day: number) => void;
 }) {
   return (
     <div className="flex-1 space-y-4 overflow-y-auto bg-[#f6f8f4] px-4 py-5 scrollbar-thin sm:px-6">
@@ -234,6 +584,12 @@ function MessageStream({
               )}
               {message.type === "IMAGE" && message.image ? (
                 <ImageBubble message={message} fromOwner={fromOwner} />
+              ) : message.type === "TREATMENT_REGIMEN" && message.regimen ? (
+                <RegimenBubble
+                  messageId={message.id}
+                  regimen={message.regimen}
+                  onToggleProgress={onToggleRegimenProgress}
+                />
               ) : (
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-[9px] leading-relaxed shadow-sm ${
@@ -273,6 +629,69 @@ function MessageStream({
         </div>
       )}
     </div>
+  );
+}
+
+function RegimenBubble({
+  messageId,
+  onToggleProgress,
+  regimen,
+}: {
+  messageId: string;
+  onToggleProgress: (messageId: string, day: number) => void;
+  regimen: TreatmentRegimen;
+}) {
+  const completedCount = regimen.steps.filter((step) => step.completed).length;
+  const progress = Math.round((completedCount / regimen.steps.length) * 100);
+
+  return (
+    <article className="min-w-[260px] max-w-[430px] rounded-2xl bg-[#203e30] p-4 text-white shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#EED56D] text-[#203e30]">
+          <CalendarDays size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <small className="block text-[7px] font-bold uppercase tracking-[0.14em] text-[#EED56D]">
+            Phac do tu ky su
+          </small>
+          <b className="mt-1 block text-[11px] leading-snug">{regimen.title}</b>
+          <p className="mt-2 text-[8px] leading-relaxed text-white/70">
+            {regimen.diagnosis}
+          </p>
+        </span>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/15">
+        <i
+          className="block h-full rounded-full bg-[#EED56D]"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[7px] font-bold text-white/60">
+        <span>{completedCount}/{regimen.steps.length} buoc da lam</span>
+        <span>Tai kham: {regimen.followUpDate}</span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {regimen.steps.map((step) => (
+          <button
+            key={step.day}
+            type="button"
+            onClick={() => onToggleProgress(messageId, step.day)}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EED56D] ${
+              step.completed ? "bg-[#EED56D] text-[#203e30]" : "bg-white/10 text-white"
+            }`}
+          >
+            {step.completed ? <Check size={14} /> : <Circle size={14} />}
+            <b className="shrink-0 text-[8px]">Ngay {step.day}</b>
+            <span className="min-w-0 flex-1 text-[8px] leading-relaxed">
+              {step.task}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-[8px] leading-relaxed text-white/72">
+        Muc tieu: {regimen.expectedOutcome}
+      </p>
+    </article>
   );
 }
 
@@ -453,11 +872,41 @@ export function FarmerChatWorkspace() {
 
   const selectedZone =
     zones.find((zone) => zone.id === state.selectedZoneId) ?? zones[0];
+  const activeExpertConversation =
+    state.expertConversations.find(
+      (conversation) => conversation.id === state.activeExpertId,
+    ) ?? state.expertConversations[0];
+  const filteredExpertConversations = useMemo(() => {
+    const query = state.expertQuery.trim().toLocaleLowerCase("vi");
+    return state.expertConversations.filter((conversation) => {
+      const matchesFilter =
+        state.expertFilter === "ALL" || conversation.status === state.expertFilter;
+      const matchesQuery =
+        !query ||
+        conversation.engineerName.toLocaleLowerCase("vi").includes(query) ||
+        conversation.specialty.toLocaleLowerCase("vi").includes(query) ||
+        conversation.zone.toLocaleLowerCase("vi").includes(query);
+      return matchesFilter && matchesQuery;
+    });
+  }, [state.expertConversations, state.expertFilter, state.expertQuery]);
   const currentMessages =
-    state.mode === "AI" ? state.aiMessages : state.expertMessages;
+    state.mode === "AI"
+      ? state.aiMessages
+      : activeExpertConversation?.messages ?? [];
   const currentDraft = state.mode === "AI" ? state.aiDraft : state.expertDraft;
   const currentAttachment =
     state.mode === "AI" ? state.aiAttachment : state.expertAttachment;
+  const currentRegimen = activeExpertConversation?.messages.find(
+    (message) => message.type === "TREATMENT_REGIMEN" && message.regimen,
+  )?.regimen;
+  const nextRegimenStep = currentRegimen?.steps.find((step) => !step.completed);
+  const regimenProgress = currentRegimen
+    ? Math.round(
+        (currentRegimen.steps.filter((step) => step.completed).length /
+          currentRegimen.steps.length) *
+          100,
+      )
+    : 0;
 
   const modeStats = useMemo(
     () => [
@@ -572,6 +1021,7 @@ export function FarmerChatWorkspace() {
           })}
         </div>
 
+        {state.mode === "AI" ? (
         <section className="grid min-h-[680px] lg:grid-cols-[minmax(0,1fr)_270px]">
           <div className="flex min-h-[680px] min-w-0 flex-col border-b border-neutral-100 lg:border-b-0 lg:border-r">
             <header className="flex items-center justify-between gap-3 border-b border-neutral-100 bg-white px-4 py-3 sm:px-6">
@@ -598,7 +1048,7 @@ export function FarmerChatWorkspace() {
                   </small>
                 </span>
               </div>
-              {state.mode === "EXPERT" && (
+              {false && (
                 <span className="rounded-full bg-amber-50 px-2.5 py-1.5 text-[7px] font-bold text-amber-700 ring-1 ring-amber-100">
                   Chờ phân công
                 </span>
@@ -615,6 +1065,9 @@ export function FarmerChatWorkspace() {
             <MessageStream
               messages={currentMessages}
               isThinking={state.mode === "AI" && isThinking}
+              onToggleRegimenProgress={(messageId, day) =>
+                dispatch({ type: "TOGGLE_REGIMEN_PROGRESS", messageId, day })
+              }
             />
             <Composer
               mode={state.mode}
@@ -665,6 +1118,35 @@ export function FarmerChatWorkspace() {
                   {selectedZone.snapshot}
                 </p>
               </article>
+              {currentRegimen && (
+                <article className="rounded-2xl border border-[#d8c067] bg-[#fff9dc] p-4 shadow-sm">
+                  <div className="flex items-center gap-2 text-[#2E5A44]">
+                    <CalendarDays size={15} />
+                    <b className="text-[10px]">Theo doi phac do</b>
+                  </div>
+                  <p className="mt-2 text-[9px] font-semibold leading-relaxed text-neutral-800">
+                    {currentRegimen.title}
+                  </p>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white">
+                    <i
+                      className="block h-full rounded-full bg-[#2E5A44]"
+                      style={{ width: `${regimenProgress}%` }}
+                    />
+                  </div>
+                  <small className="mt-2 block text-[7px] font-bold text-[#6a5a1d]">
+                    {regimenProgress}% hoan thanh
+                  </small>
+                  {nextRegimenStep ? (
+                    <p className="mt-2 text-[8px] leading-relaxed text-neutral-600">
+                      Tiep theo: ngay {nextRegimenStep.day} - {nextRegimenStep.task}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[8px] leading-relaxed text-emerald-700">
+                      Tat ca buoc trong phac do da duoc danh dau hoan thanh.
+                    </p>
+                  )}
+                </article>
+              )}
               <article className="rounded-2xl bg-[#2E5A44] p-4 text-white">
                 <Leaf size={18} className="text-[#EED56D]" />
                 <b className="mt-4 block text-[10px]">
@@ -678,6 +1160,124 @@ export function FarmerChatWorkspace() {
             </div>
           </aside>
         </section>
+        ) : (
+          <section className="grid min-h-[720px] lg:grid-cols-[340px_minmax(0,1fr)]">
+            <ExpertConversationRail
+              activeId={state.activeExpertId}
+              filter={state.expertFilter}
+              items={filteredExpertConversations}
+              onFilter={(value) =>
+                dispatch({ type: "FILTER_EXPERT_CONVERSATIONS", value })
+              }
+              onSearch={(value) =>
+                dispatch({ type: "SEARCH_EXPERT_CONVERSATIONS", value })
+              }
+              onSelect={(id) =>
+                dispatch({ type: "SELECT_EXPERT_CONVERSATION", id })
+              }
+              query={state.expertQuery}
+            />
+
+            <div className="flex min-h-[720px] min-w-0 flex-col bg-white">
+              <header className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-[#EED56D] text-[10px] font-extrabold text-[#2E5A44]">
+                    {activeExpertConversation.engineerInitials}
+                    <i
+                      className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white ${
+                        activeExpertConversation.online
+                          ? "bg-emerald-500"
+                          : "bg-neutral-300"
+                      }`}
+                    />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <b className="truncate text-[11px] text-neutral-900">
+                        {activeExpertConversation.engineerName}
+                      </b>
+                      <StatusPill status={activeExpertConversation.status} />
+                    </span>
+                    <small className="mt-1 flex items-center gap-1 truncate text-[7px] text-neutral-400">
+                      <MapPin size={10} />
+                      {activeExpertConversation.zone} - {activeExpertConversation.specialty}
+                    </small>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="hidden items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-2 text-[8px] font-bold text-neutral-600 transition-all duration-200 hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] sm:inline-flex"
+                >
+                  <UserRoundCheck size={13} />
+                  Ho so ky su
+                </button>
+              </header>
+
+              <ZoneContext
+                selectedZone={selectedZone}
+                selectedZoneId={state.selectedZoneId}
+                onSelect={(zoneId) => dispatch({ type: "SELECT_ZONE", zoneId })}
+              />
+
+              {currentRegimen && (
+                <div className="border-b border-neutral-100 bg-[#fff9dc] px-4 py-3 sm:px-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <small className="text-[7px] font-bold uppercase tracking-[0.14em] text-[#6a5a1d]">
+                        Theo doi phac do
+                      </small>
+                      <p className="mt-1 truncate text-[9px] font-bold text-neutral-900">
+                        {currentRegimen.title}
+                      </p>
+                    </div>
+                    <span className="text-[8px] font-bold text-[#2E5A44]">
+                      {regimenProgress}% hoan thanh
+                    </span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                    <i
+                      className="block h-full rounded-full bg-[#2E5A44]"
+                      style={{ width: `${regimenProgress}%` }}
+                    />
+                  </div>
+                  {nextRegimenStep && (
+                    <p className="mt-2 text-[8px] leading-relaxed text-neutral-600">
+                      Tiep theo: ngay {nextRegimenStep.day} - {nextRegimenStep.task}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <MessageStream
+                messages={currentMessages}
+                isThinking={false}
+                onToggleRegimenProgress={(messageId, day) =>
+                  dispatch({ type: "TOGGLE_REGIMEN_PROGRESS", messageId, day })
+                }
+              />
+              <Composer
+                mode={state.mode}
+                draft={currentDraft}
+                attachment={currentAttachment}
+                disabled={false}
+                onDraft={(value) =>
+                  dispatch({ type: "SET_DRAFT", mode: state.mode, value })
+                }
+                onAttachment={(attachment) =>
+                  dispatch({
+                    type: "SET_ATTACHMENT",
+                    mode: state.mode,
+                    attachment,
+                  })
+                }
+                onRemoveAttachment={() =>
+                  dispatch({ type: "REMOVE_ATTACHMENT", mode: state.mode })
+                }
+                onSend={sendMessage}
+              />
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
