@@ -37,9 +37,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         farmAddress:
           profile.address || profile.provinceCity
             ? [profile.address, profile.provinceCity].filter(Boolean).join(", ")
-            : session.profile.farmAddress,
+          : session.profile.farmAddress,
       };
-      const nextSession = { ...session, profile: mergedProfile };
+      const nextSession = {
+        ...session,
+        accountStatus: profile.accountStatus ?? session.accountStatus,
+        profile: mergedProfile,
+      };
       setUser(nextSession);
       return nextSession;
     } catch (error) {
