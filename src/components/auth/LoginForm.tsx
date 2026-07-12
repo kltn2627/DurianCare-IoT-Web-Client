@@ -103,7 +103,7 @@ export function LoginForm() {
     try {
       const session = await login({ email: email.trim(), password });
       persistRememberedEmail(email.trim(), rememberMe);
-      router.replace(dashboardPathFor(session.role));
+      router.replace(dashboardPathFor(session.role, session.accountStatus));
       router.refresh();
     } catch (cause) {
       const friendly = friendlyApiMessage(

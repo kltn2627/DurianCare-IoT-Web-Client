@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { DiagnosisLog } from "@/components/dashboard/DiagnosisLog";
+import { DiseaseDiagnosisWorkspace } from "@/components/ai/DiseaseDiagnosisWorkspace";
 
-export const metadata: Metadata = { title: "Nhật ký AI" };
+export const metadata: Metadata = { title: "Chẩn đoán AI" };
 
 export default function ClientDiagnosisPage() {
   return (
     <DashboardShell role="OWNER">
-      <DiagnosisLog />
+      <DiseaseDiagnosisWorkspace />
     </DashboardShell>
   );
 }
-
-

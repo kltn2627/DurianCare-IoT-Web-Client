@@ -6,6 +6,7 @@ import type {
   AccessTokenResponse,
   ApiErrorBody,
   AuthenticationResponse,
+  AccountStatus,
   AuthSession,
 } from "./types";
 import { toDashboardRole } from "./types";
@@ -16,6 +17,7 @@ export const AUTH_COOKIES = {
   session: "dc_session",
   backendRole: "dc_role",
   dashboardRole: "durian-role",
+  accountStatus: "dc_account_status",
 } as const;
 
 const API_BASE_URL = (
@@ -80,6 +82,51 @@ export async function backendRequest<T>(
   return payload as T;
 }
 
+export async function backendFormRequest<T>(
+  path: string,
+  formData: FormData,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set("accept", "application/json");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      body: formData,
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new AuthApiError(503, {
+      status: 503,
+      error: "Service Unavailable",
+      message: "Không thể kết nối đến DurianCare Gateway.",
+    });
+  }
+
+  const text = await response.text();
+  const payload = text ? safeJson(text) : null;
+  if (!response.ok) {
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const body = isApiError(payload)
+      ? {
+          ...payload,
+          ...(Number.isFinite(retryAfter) && retryAfter > 0
+            ? { retryAfterSeconds: retryAfter }
+            : {}),
+        }
+      : {
+          status: response.status,
+          error: response.statusText || "Request Failed",
+          message: "Yêu cầu xác thực không thành công.",
+        };
+    throw new AuthApiError(response.status, body);
+  }
+  return payload as T;
+}
+
 export function authErrorResponse(error: unknown) {
   if (error instanceof AuthApiError) {
     return NextResponse.json(error.body, { status: error.status });
@@ -97,11 +144,18 @@ export function authErrorResponse(error: unknown) {
 export function sessionFromAuthentication(
   authentication: AuthenticationResponse,
 ): AuthSession {
+  const accountStatus = normalizeAccountStatus(
+    authentication.accountStatus ?? authentication.profile.accountStatus,
+  );
   return {
     userId: authentication.userId,
     email: authentication.email,
     role: authentication.role,
-    profile: authentication.profile,
+    accountStatus,
+    profile: {
+      ...authentication.profile,
+      accountStatus,
+    },
   };
 }
 
@@ -109,9 +163,21 @@ export function readSession(cookies: ReadonlyRequestCookies) {
   const encoded = cookies.get(AUTH_COOKIES.session)?.value;
   if (!encoded) return null;
   try {
-    return JSON.parse(
+    const session = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf8"),
     ) as AuthSession;
+    return {
+      ...session,
+      accountStatus: normalizeAccountStatus(
+        session.accountStatus ?? session.profile?.accountStatus,
+      ),
+      profile: {
+        ...session.profile,
+        accountStatus: normalizeAccountStatus(
+          session.profile?.accountStatus ?? session.accountStatus,
+        ),
+      },
+    } satisfies AuthSession;
   } catch {
     return null;
   }
@@ -135,6 +201,12 @@ export function setAuthenticationCookies(
   );
   setCookie(response, AUTH_COOKIES.session, sessionValue, refreshMaxAge);
   setCookie(response, AUTH_COOKIES.backendRole, session.role, refreshMaxAge);
+  setCookie(
+    response,
+    AUTH_COOKIES.accountStatus,
+    session.accountStatus,
+    refreshMaxAge,
+  );
   const dashboardRole = toDashboardRole(session.role);
   if (dashboardRole) {
     setCookie(
@@ -242,6 +314,10 @@ function safeJson(value: string): unknown {
   } catch {
     return null;
   }
+}
+
+function normalizeAccountStatus(value: AccountStatus | null | undefined): AccountStatus {
+  return value ?? "ACTIVE";
 }
 
 function isApiError(value: unknown): value is ApiErrorBody {

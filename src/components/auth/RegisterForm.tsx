@@ -2,21 +2,22 @@
 
 import Link from "next/link";
 import {
+  ClipboardEvent,
   FormEvent,
+  KeyboardEvent,
+  ReactNode,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ClipboardEvent,
   type InputHTMLAttributes,
-  type KeyboardEvent,
-  type ReactNode,
+  type TextareaHTMLAttributes,
 } from "react";
 import {
   ArrowLeft,
-  CheckCircle2,
   Eye,
   EyeOff,
+  FilePlus2,
   LoaderCircle,
   MailCheck,
   RotateCw,
@@ -38,21 +39,29 @@ import {
   validatePhoneNumber,
 } from "@/lib/feedback";
 
+const MAX_QUALIFICATION_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_QUALIFICATION_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+
+type RegisterStage = "REGISTER" | "OTP" | "DONE";
+
+type BaseFieldTouched = {
+  email: boolean;
+  fullName: boolean;
+  phoneNumber: boolean;
+  password: boolean;
+  confirmPassword: boolean;
+  workplace: boolean;
+  specialization: boolean;
+  yearsExperience: boolean;
+  biography: boolean;
+};
+
 const initialForm: RegisterRequest = {
   email: "",
   password: "",
   fullName: "",
   phoneNumber: "",
   role: "FARMER",
-};
-
-type RegisterStage = "REGISTER" | "OTP" | "DONE";
-type FieldTouched = {
-  email: boolean;
-  fullName: boolean;
-  phoneNumber: boolean;
-  password: boolean;
-  confirmPassword: boolean;
 };
 
 export function RegisterForm() {
@@ -66,12 +75,23 @@ export function RegisterForm() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
-  const [touched, setTouched] = useState<FieldTouched>({
+  const [qualificationFiles, setQualificationFiles] = useState<File[]>([]);
+  const [engineerFields, setEngineerFields] = useState({
+    workplace: "",
+    specialization: "",
+    yearsExperience: "",
+    biography: "",
+  });
+  const [touched, setTouched] = useState<BaseFieldTouched>({
     email: false,
     fullName: false,
     phoneNumber: false,
     password: false,
     confirmPassword: false,
+    workplace: false,
+    specialization: false,
+    yearsExperience: false,
+    biography: false,
   });
 
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -117,11 +137,72 @@ export function RegisterForm() {
     return validateConfirmPassword(form.password, confirmPassword);
   }, [confirmPassword, form.password, touched.confirmPassword]);
 
+  const workplaceError = useMemo(() => {
+    if (form.role !== "ENGINEER") return "";
+    if (!touched.workplace && !engineerFields.workplace) return "";
+    if (!engineerFields.workplace.trim()) return "Vui lòng nhập nơi công tác.";
+    return "";
+  }, [engineerFields.workplace, form.role, touched.workplace]);
+
+  const specializationError = useMemo(() => {
+    if (form.role !== "ENGINEER") return "";
+    if (!touched.specialization && !engineerFields.specialization) return "";
+    if (!engineerFields.specialization.trim()) return "Vui lòng nhập chuyên môn.";
+    return "";
+  }, [engineerFields.specialization, form.role, touched.specialization]);
+
+  const yearsExperienceError = useMemo(() => {
+    if (form.role !== "ENGINEER") return "";
+    if (!touched.yearsExperience && !engineerFields.yearsExperience) return "";
+    const parsed = Number(engineerFields.yearsExperience);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 60) {
+      return "Số năm kinh nghiệm phải từ 0 đến 60.";
+    }
+    return "";
+  }, [engineerFields.yearsExperience, form.role, touched.yearsExperience]);
+
+  const biographyError = useMemo(() => {
+    if (form.role !== "ENGINEER") return "";
+    if (!touched.biography && !engineerFields.biography) return "";
+    if (!engineerFields.biography.trim()) return "Vui lòng nhập giới thiệu chuyên môn.";
+    if (engineerFields.biography.trim().length > 2000) {
+      return "Giới thiệu không được vượt quá 2000 ký tự.";
+    }
+    return "";
+  }, [engineerFields.biography, form.role, touched.biography]);
+
+  const qualificationError = useMemo(() => {
+    if (form.role !== "ENGINEER") return "";
+    if (qualificationFiles.length === 0) return "Vui lòng tải lên ít nhất một chứng chỉ hoặc bằng cấp.";
+    const invalid = qualificationFiles.find(
+      (file) =>
+        !ALLOWED_QUALIFICATION_TYPES.includes(file.type) ||
+        file.size > MAX_QUALIFICATION_FILE_SIZE,
+    );
+    if (!invalid) return "";
+    if (!ALLOWED_QUALIFICATION_TYPES.includes(invalid.type)) {
+      return "Chỉ chấp nhận file PDF, JPG hoặc PNG.";
+    }
+    return "Mỗi file chứng chỉ không được vượt quá 10MB.";
+  }, [form.role, qualificationFiles]);
+
   const passwordRulesState = useMemo(() => passwordRules(form.password), [form.password]);
   const strength = useMemo(() => passwordStrength(form.password), [form.password]);
 
+  const otpValue = otpDigits.join("");
   const hasRegisterErrors =
-    Boolean(emailError || fullNameError || phoneError || passwordError || confirmError);
+    Boolean(
+      emailError ||
+        fullNameError ||
+        phoneError ||
+        passwordError ||
+        confirmError ||
+        workplaceError ||
+        specializationError ||
+        yearsExperienceError ||
+        biographyError ||
+        qualificationError,
+    );
 
   const setTouchAll = () =>
     setTouched({
@@ -130,11 +211,11 @@ export function RegisterForm() {
       phoneNumber: true,
       password: true,
       confirmPassword: true,
+      workplace: true,
+      specialization: true,
+      yearsExperience: true,
+      biography: true,
     });
-
-  const startCountdown = (seconds: number) => {
-    setRetryAfter(seconds);
-  };
 
   const showFriendlyError = (cause: unknown, fallback: string, scope: "auth" = "auth") => {
     const message = friendlyApiMessage(
@@ -146,19 +227,25 @@ export function RegisterForm() {
     );
     setError(message);
     if (cause instanceof ClientAuthError && cause.retryAfterSeconds) {
-      startCountdown(cause.retryAfterSeconds);
+      setRetryAfter(cause.retryAfterSeconds);
     }
   };
-
-  const otpValue = otpDigits.join("");
-  const otpError = useMemo(() => {
-    if (!otpValue) return "";
-    return validateOtp(otpValue);
-  }, [otpValue]);
 
   const updateField = <K extends keyof RegisterRequest>(key: K, value: RegisterRequest[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setError("");
+  };
+
+  const updateEngineerField = <K extends keyof typeof engineerFields>(key: K, value: string) => {
+    setEngineerFields((current) => ({ ...current, [key]: value }));
+    setError("");
+  };
+
+  const startOtpFlow = (message: string) => {
+    setNotice(message);
+    setStage("OTP");
+    setRetryAfter(60);
+    window.setTimeout(() => otpRefs.current[0]?.focus(), 0);
   };
 
   const register = async (event: FormEvent<HTMLFormElement>) => {
@@ -166,44 +253,53 @@ export function RegisterForm() {
     setTouchAll();
     setError("");
 
-    const nextEmailError = validateEmail(form.email);
-    const nextFullNameError = form.fullName.trim() ? "" : "Vui lòng nhập họ và tên.";
-    const nextPhoneError = validatePhoneNumber(form.phoneNumber ?? "");
-    const nextPasswordError = validatePassword(form.password);
-    const nextConfirmError = validateConfirmPassword(form.password, confirmPassword);
+    const nextErrors = [
+      validateEmail(form.email),
+      form.fullName.trim() ? "" : "Vui lòng nhập họ và tên.",
+      validatePhoneNumber(form.phoneNumber ?? ""),
+      validatePassword(form.password),
+      validateConfirmPassword(form.password, confirmPassword),
+      form.role === "ENGINEER" ? workplaceError : "",
+      form.role === "ENGINEER" ? specializationError : "",
+      form.role === "ENGINEER" ? yearsExperienceError : "",
+      form.role === "ENGINEER" ? biographyError : "",
+      form.role === "ENGINEER" ? qualificationError : "",
+    ].filter(Boolean);
 
-    if (
-      nextEmailError ||
-      nextFullNameError ||
-      nextPhoneError ||
-      nextPasswordError ||
-      nextConfirmError
-    ) {
-      setError(
-        nextEmailError ||
-          nextFullNameError ||
-          nextPhoneError ||
-          nextPasswordError ||
-          nextConfirmError,
-      );
+    if (nextErrors.length > 0) {
+      setError(String(nextErrors[0]));
       return;
     }
 
     setLoading(true);
     try {
       const phoneNumber = form.phoneNumber?.trim() ?? "";
-      const result = await authClient.register({
+      const basePayload = {
         ...form,
         email: normalizeEmail(form.email),
         fullName: form.fullName.trim(),
         ...(phoneNumber ? { phoneNumber } : {}),
-      });
-      setNotice(result.message);
-      setStage("OTP");
-      startCountdown(60);
-      window.setTimeout(() => {
-        otpRefs.current[0]?.focus();
-      }, 0);
+      };
+
+      const result =
+        form.role === "ENGINEER"
+          ? await authClient.registerEngineer(
+              {
+                email: basePayload.email,
+                password: basePayload.password,
+                fullName: basePayload.fullName,
+                role: "ENGINEER",
+                ...(basePayload.phoneNumber ? { phoneNumber: basePayload.phoneNumber } : {}),
+                workplace: engineerFields.workplace.trim(),
+                specialization: engineerFields.specialization.trim(),
+                yearsExperience: Number(engineerFields.yearsExperience),
+                biography: engineerFields.biography.trim(),
+              },
+              qualificationFiles,
+            )
+          : await authClient.register(basePayload);
+
+      startOtpFlow(result.message);
     } catch (cause) {
       showFriendlyError(cause, "Đăng ký chưa thành công.");
     } finally {
@@ -227,10 +323,7 @@ export function RegisterForm() {
     setError("");
   };
 
-  const handleOtpKeyDown = (
-    event: KeyboardEvent<HTMLInputElement>,
-    index: number,
-  ) => {
+  const handleOtpKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
     if (event.key === "Backspace") {
       event.preventDefault();
       const next = [...otpDigits];
@@ -260,6 +353,7 @@ export function RegisterForm() {
     event.preventDefault();
     const pasted = normalizeOtpInput(event.clipboardData.getData("text"));
     if (!pasted) return;
+
     const nextDigits = Array.from({ length: OTP_LENGTH }, (_, index) => pasted[index] ?? "");
     setOtpDigits(nextDigits);
     window.setTimeout(() => {
@@ -298,7 +392,7 @@ export function RegisterForm() {
     try {
       const result = await authClient.resendOtp(normalizeEmail(form.email));
       setNotice(result.message);
-      startCountdown(60);
+      setRetryAfter(60);
       setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
       window.setTimeout(() => focusOtp(0), 0);
     } catch (cause) {
@@ -310,136 +404,129 @@ export function RegisterForm() {
 
   if (stage === "DONE") {
     return (
-      <div className="w-full max-w-[500px] rounded-[26px] border border-[#dbe5dc] bg-white p-7 text-center shadow-sm sm:p-9">
-        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#edf5ee] text-[#2E5A44]">
-          <CheckCircle2 size={28} />
+      <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+          <MailCheck size={13} /> Đã xác minh email
         </span>
-        <h1 className="mt-5 text-2xl font-extrabold tracking-tight text-neutral-900">
-          Xác minh hoàn tất
+        <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">
+          Tài khoản đã sẵn sàng
         </h1>
-        <p className="mt-3 text-[12px] leading-relaxed text-neutral-500">{notice}</p>
-        {form.role === "EXPERT" && (
-          <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-700">
-            Tài khoản kỹ sư cần được Admin phê duyệt trước khi có thể đăng nhập.
-          </p>
-        )}
-        <Link
-          href="/login"
-          className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-[#2E5A44] px-6 text-[12px] font-bold text-white transition-all duration-200 hover:bg-[#254c39] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430]"
-        >
-          Đến trang đăng nhập
-        </Link>
+        <p className="mt-3 text-[14px] leading-relaxed text-neutral-600">
+          {notice || "Email của bạn đã được xác minh thành công."}
+        </p>
+        <div className="mt-6 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-[13px] leading-relaxed text-neutral-600">
+          {form.role === "ENGINEER"
+            ? "Hồ sơ kỹ sư sẽ chờ quản trị viên duyệt. Bạn có thể theo dõi trạng thái trên màn hình chờ duyệt sau khi đăng nhập."
+            : "Bạn có thể chuyển sang màn hình đăng nhập để tiếp tục sử dụng hệ thống."}
+        </div>
+        <div className="mt-7 flex flex-wrap gap-3">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39]"
+          >
+            <ArrowLeft size={16} />
+            Đi đến đăng nhập
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setStage("REGISTER");
+              setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
+              setNotice("");
+              setError("");
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+          >
+            <RotateCw size={16} />
+            Đăng ký tài khoản khác
+          </button>
+        </div>
       </div>
     );
   }
 
   if (stage === "OTP") {
     return (
-      <div className="w-full max-w-[520px]">
-        <button
-          type="button"
-          onClick={() => setStage("REGISTER")}
-          className="mb-5 inline-flex items-center gap-2 text-[11px] font-bold text-neutral-500 hover:text-[#2E5A44] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
-        >
-          <ArrowLeft size={14} /> Sửa thông tin đăng ký
-        </button>
-        <span className="grid size-12 place-items-center rounded-2xl bg-[#EED56D] text-[#2E5A44]">
-          <MailCheck size={22} />
+      <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+          <MailCheck size={13} /> Xác minh email
         </span>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">
-          Xác minh email
+          Nhập mã OTP
         </h1>
-        <p className="mt-3 text-[12px] leading-relaxed text-neutral-500">
-          Nhập mã OTP 6 chữ số đã gửi đến <b>{form.email}</b>.
+        <p className="mt-3 text-[14px] leading-relaxed text-neutral-600">
+          {notice || "Mã OTP đã được gửi đến email của bạn."}
         </p>
-        {notice ? (
-          <p className="mt-4 rounded-xl bg-[#edf5ee] px-4 py-3 text-[11px] leading-relaxed text-[#39704f]">
-            {notice}
-          </p>
-        ) : null}
 
-        <form onSubmit={verify} className="mt-6 space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-500">
-                Mã OTP
-              </p>
-              <p className="text-[11px] text-neutral-500">
-                {retryAfter > 0 ? `Gửi lại sau ${retryAfter}s` : "Có thể gửi lại mã mới"}
-              </p>
-            </div>
-            <div className="grid grid-cols-6 gap-2 sm:gap-3">
-              {otpDigits.map((digit, index) => (
-                <input
-                  key={index}
-                  ref={(element) => {
-                    otpRefs.current[index] = element;
-                  }}
-                  value={digit}
-                  onChange={(event) => updateOtpAt(index, event.target.value)}
-                  onKeyDown={(event) => handleOtpKeyDown(event, index)}
-                  onPaste={handleOtpPaste}
-                  inputMode="numeric"
-                  autoComplete={index === 0 ? "one-time-code" : "off"}
-                  pattern="[0-9]{1}"
-                  maxLength={1}
-                  className="h-14 rounded-xl border border-neutral-200 bg-white text-center text-xl font-extrabold tracking-[0.2em] outline-none transition-all duration-200 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
-                  aria-label={`OTP số ${index + 1}`}
-                />
-              ))}
-            </div>
+        <form onSubmit={verify} className="mt-6 space-y-5">
+          <div className="grid grid-cols-6 gap-2">
+            {otpDigits.map((digit, index) => (
+              <input
+                key={index}
+                ref={(element) => {
+                  otpRefs.current[index] = element;
+                }}
+                value={digit}
+                onChange={(event) => updateOtpAt(index, event.target.value)}
+                onKeyDown={(event) => handleOtpKeyDown(event, index)}
+                onPaste={handleOtpPaste}
+                inputMode="numeric"
+                maxLength={1}
+                className="h-14 rounded-2xl border border-[#dfe6df] text-center text-lg font-extrabold outline-none transition focus:border-[#5d856c] focus:ring-4 focus:ring-[#e9f0ea]"
+              />
+            ))}
           </div>
 
           {error ? (
-            <p
-              role="alert"
-              className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[11px] leading-relaxed text-red-700"
-            >
+            <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-700">
               {error}
             </p>
           ) : null}
 
           <button
             type="submit"
-            disabled={loading || Boolean(otpError) || otpValue.length !== OTP_LENGTH}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-[12px] font-bold text-white transition-all duration-200 hover:bg-[#254c39] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={loading}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading && <LoaderCircle size={16} className="animate-spin" />}
-            Xác minh tài khoản
+            {loading ? <LoaderCircle size={16} className="animate-spin" /> : null}
+            Xác minh OTP
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={resend}
-          disabled={loading || retryAfter > 0}
-          className="mx-auto mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold text-[#2E5A44] hover:bg-[#edf3ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] disabled:opacity-50"
-        >
-          <RotateCw size={13} />
-          {retryAfter > 0 ? `Gửi lại sau ${retryAfter}s` : "Gửi lại mã OTP"}
-        </button>
+        <div className="mt-5 flex items-center justify-between gap-4 text-[12px] text-neutral-500">
+          <span>
+            OTP sẽ hết hạn trong 5 phút.{" "}
+            {retryAfter > 0 ? `Gửi lại sau ${retryAfter}s` : "Bạn có thể gửi lại OTP nếu cần."}
+          </span>
+          <button
+            type="button"
+            onClick={() => void resend()}
+            disabled={loading || retryAfter > 0}
+            className="font-bold text-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Gửi lại OTP
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-[540px]">
-      <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+    <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
+      <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
         <ShieldCheck size={13} /> Tài khoản DurianCare
       </span>
-      <h1 className="text-3xl font-extrabold tracking-tight text-[#203329]">
-        Tạo tài khoản mới
-      </h1>
+      <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">Tạo tài khoản mới</h1>
       <p className="mt-3 text-[12px] leading-relaxed text-neutral-500">
-        Đăng ký dành cho chủ vườn và kỹ sư. Admin không thể đăng ký công khai.
+        Đăng ký dành cho chủ vườn hoặc kỹ sư. Kỹ sư cần nộp thêm hồ sơ chuyên môn và chứng chỉ.
       </p>
 
       <form onSubmit={register} className="mt-6 space-y-4">
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-neutral-100 p-1">
-          {(["FARMER", "EXPERT"] as const).map((role) => (
+          {(["FARMER", "ENGINEER"] as const).map((role) => (
             <button
-              type="button"
               key={role}
+              type="button"
               onClick={() => updateField("role", role)}
               className={`rounded-lg px-3 py-2.5 text-[11px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
                 form.role === role
@@ -472,7 +559,7 @@ export function RegisterForm() {
             autoComplete="tel"
             maxLength={30}
             inputMode="tel"
-            pattern="^[0-9+() .-]{8,30}$"
+            pattern="^[0-9+() .\\-]{8,30}$"
             error={phoneError}
             touched={touched.phoneNumber}
           />
@@ -491,6 +578,53 @@ export function RegisterForm() {
           touched={touched.email}
         />
 
+        {form.role === "ENGINEER" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="Nơi công tác"
+              value={engineerFields.workplace}
+              onChange={(value) => updateEngineerField("workplace", value)}
+              onBlur={() => setTouched((current) => ({ ...current, workplace: true }))}
+              maxLength={255}
+              required
+              error={workplaceError}
+              touched={touched.workplace}
+            />
+            <TextField
+              label="Chuyên môn"
+              value={engineerFields.specialization}
+              onChange={(value) => updateEngineerField("specialization", value)}
+              onBlur={() => setTouched((current) => ({ ...current, specialization: true }))}
+              maxLength={255}
+              required
+              error={specializationError}
+              touched={touched.specialization}
+            />
+            <TextField
+              label="Số năm kinh nghiệm"
+              value={engineerFields.yearsExperience}
+              onChange={(value) => updateEngineerField("yearsExperience", value)}
+              onBlur={() => setTouched((current) => ({ ...current, yearsExperience: true }))}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={60}
+              required
+              error={yearsExperienceError}
+              touched={touched.yearsExperience}
+            />
+            <FileField
+              label="Chứng chỉ / bằng cấp"
+              files={qualificationFiles}
+              onChange={(files) => {
+                setQualificationFiles(files);
+                setError("");
+              }}
+              error={qualificationError}
+            />
+          </div>
+        ) : null}
+
         <PasswordField
           label="Mật khẩu"
           value={form.password}
@@ -505,9 +639,7 @@ export function RegisterForm() {
             <div className="space-y-3">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-semibold text-neutral-500">
-                    Độ mạnh mật khẩu
-                  </span>
+                  <span className="text-[11px] font-semibold text-neutral-500">Độ mạnh mật khẩu</span>
                   <span className="text-[11px] font-bold text-[#2E5A44]">{strength.label}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
@@ -553,6 +685,21 @@ export function RegisterForm() {
           error={confirmError}
           touched={touched.confirmPassword}
         />
+
+        {form.role === "ENGINEER" ? (
+          <TextareaField
+            label="Giới thiệu chuyên môn"
+            value={engineerFields.biography}
+            onChange={(value) => updateEngineerField("biography", value)}
+            onBlur={() => setTouched((current) => ({ ...current, biography: true }))}
+            maxLength={2000}
+            rows={5}
+            required
+            error={biographyError}
+            touched={touched.biography}
+            hint="Giới thiệu ngắn gọn về chuyên môn, kinh nghiệm thực tế và khu vực làm việc."
+          />
+        ) : null}
 
         {error ? (
           <p
@@ -621,6 +768,97 @@ function TextField({
       />
       {error && touched ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
     </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+  error,
+  touched,
+  onBlur,
+  hint,
+  ...props
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  touched?: boolean;
+  onBlur?: () => void;
+  hint?: string;
+} & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange" | "onBlur">) {
+  return (
+    <label className="block sm:col-span-2">
+      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <textarea
+        {...props}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className="min-h-28 w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-[12px] outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
+      />
+      {hint ? <p className="mt-2 text-[11px] text-neutral-500">{hint}</p> : null}
+      {error && touched ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+    </label>
+  );
+}
+
+function FileField({
+  label,
+  files,
+  onChange,
+  error,
+}: {
+  label: string;
+  files: File[];
+  onChange: (files: File[]) => void;
+  error?: string;
+}) {
+  const inputId = "engineer-qualification-files";
+  return (
+    <div className="sm:col-span-2">
+      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <label
+        htmlFor={inputId}
+        className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-[#cfd8d0] bg-[#f9fbf9] px-4 py-6 text-center transition hover:border-[#9fb2a4] hover:bg-white"
+      >
+        <FilePlus2 size={20} className="text-[#2E5A44]" />
+        <span className="mt-3 text-[12px] font-bold text-[#2E5A44]">
+          Chọn file PDF / JPG / PNG
+        </span>
+        <span className="mt-1 text-[11px] text-neutral-500">
+          Có thể tải lên nhiều chứng chỉ hoặc bằng cấp.
+        </span>
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        multiple
+        className="sr-only"
+        onChange={(event) => {
+          const nextFiles = Array.from(event.target.files ?? []);
+          onChange(nextFiles);
+        }}
+      />
+
+      {files.length > 0 ? (
+        <ul className="mt-3 space-y-2 rounded-2xl border border-[#e3e9e3] bg-white p-4 text-[12px] text-neutral-600">
+          {files.map((file) => (
+            <li key={`${file.name}-${file.lastModified}`} className="flex items-center justify-between gap-3">
+              <span className="truncate">{file.name}</span>
+              <span className="shrink-0 rounded-full bg-[#edf3ee] px-2 py-1 text-[11px] font-bold text-[#2E5A44]">
+                {(file.size / (1024 * 1024)).toFixed(1)} MB
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {error ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+    </div>
   );
 }
 

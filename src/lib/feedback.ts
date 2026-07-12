@@ -41,7 +41,7 @@ export function validateOtp(value: string) {
 export function validatePhoneNumber(value: string) {
   const phone = value.trim();
   if (!phone) return "";
-  if (!/^[0-9+() .-]{8,30}$/.test(phone)) {
+  if (!/^[0-9+() .\-]{8,30}$/.test(phone)) {
     return "Số điện thoại chưa đúng định dạng.";
   }
   return "";
