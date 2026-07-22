@@ -17,7 +17,7 @@ export default function ApprovalPage() {
           </span>
           <span>
             <b className="block text-xl">DurianCare</b>
-            <small className="text-[10px] font-bold tracking-[2.4px] text-[#c7d8cc]">
+            <small className="text-xs font-bold tracking-[2.4px] text-[#c7d8cc]">
               ACCOUNT APPROVAL
             </small>
           </span>

@@ -405,13 +405,13 @@ export function RegisterForm() {
   if (stage === "DONE") {
     return (
       <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
-        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-xs font-bold tracking-[1px] text-[#2E5A44]">
           <MailCheck size={13} /> Đã xác minh email
         </span>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">
           Tài khoản đã sẵn sàng
         </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-neutral-600">
+        <p className="mt-3 text-sm leading-relaxed text-neutral-600">
           {notice || "Email của bạn đã được xác minh thành công."}
         </p>
         <div className="mt-6 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-[13px] leading-relaxed text-neutral-600">
@@ -448,13 +448,13 @@ export function RegisterForm() {
   if (stage === "OTP") {
     return (
       <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
-        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-xs font-bold tracking-[1px] text-[#2E5A44]">
           <MailCheck size={13} /> Xác minh email
         </span>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">
           Nhập mã OTP
         </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-neutral-600">
+        <p className="mt-3 text-sm leading-relaxed text-neutral-600">
           {notice || "Mã OTP đã được gửi đến email của bạn."}
         </p>
 
@@ -478,7 +478,7 @@ export function RegisterForm() {
           </div>
 
           {error ? (
-            <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-700">
+            <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
               {error}
             </p>
           ) : null}
@@ -493,7 +493,7 @@ export function RegisterForm() {
           </button>
         </form>
 
-        <div className="mt-5 flex items-center justify-between gap-4 text-[12px] text-neutral-500">
+        <div className="mt-5 flex items-center justify-between gap-4 text-xs text-neutral-500">
           <span>
             OTP sẽ hết hạn trong 5 phút.{" "}
             {retryAfter > 0 ? `Gửi lại sau ${retryAfter}s` : "Bạn có thể gửi lại OTP nếu cần."}
@@ -513,11 +513,11 @@ export function RegisterForm() {
 
   return (
     <div className="w-full max-w-[560px] rounded-[28px] border border-[#dbe5dd] bg-white p-8 shadow-[0_12px_40px_rgba(40,64,48,0.08)]">
-      <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+      <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-xs font-bold tracking-[1px] text-[#2E5A44]">
         <ShieldCheck size={13} /> Tài khoản DurianCare
       </span>
       <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#203329]">Tạo tài khoản mới</h1>
-      <p className="mt-3 text-[12px] leading-relaxed text-neutral-500">
+      <p className="mt-3 text-xs leading-relaxed text-neutral-500">
         Đăng ký dành cho chủ vườn hoặc kỹ sư. Kỹ sư cần nộp thêm hồ sơ chuyên môn và chứng chỉ.
       </p>
 
@@ -528,7 +528,7 @@ export function RegisterForm() {
               key={role}
               type="button"
               onClick={() => updateField("role", role)}
-              className={`rounded-lg px-3 py-2.5 text-[11px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
+              className={`rounded-lg px-3 py-2.5 text-xs font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
                 form.role === role
                   ? "bg-white text-[#2E5A44] shadow-sm"
                   : "text-neutral-500 hover:text-neutral-800"
@@ -639,8 +639,8 @@ export function RegisterForm() {
             <div className="space-y-3">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-semibold text-neutral-500">Độ mạnh mật khẩu</span>
-                  <span className="text-[11px] font-bold text-[#2E5A44]">{strength.label}</span>
+                  <span className="text-xs font-semibold text-neutral-500">Độ mạnh mật khẩu</span>
+                  <span className="text-xs font-bold text-[#2E5A44]">{strength.label}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
                   <div
@@ -653,14 +653,14 @@ export function RegisterForm() {
                 {passwordRulesState.map((rule) => (
                   <li
                     key={rule.key}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold transition-colors ${
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
                       rule.passed
                         ? "border-[#d9e7dd] bg-[#f6faf6] text-[#2E5A44]"
                         : "border-neutral-200 bg-white text-neutral-500"
                     }`}
                   >
                     <span
-                      className={`grid size-4 place-items-center rounded-full text-[9px] ${
+                      className={`grid size-4 place-items-center rounded-full text-xs ${
                         rule.passed ? "bg-[#2E5A44] text-white" : "bg-neutral-200 text-neutral-500"
                       }`}
                     >
@@ -704,7 +704,7 @@ export function RegisterForm() {
         {error ? (
           <p
             role="alert"
-            className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[11px] leading-relaxed text-red-700"
+            className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-700"
           >
             {error}
           </p>
@@ -713,18 +713,18 @@ export function RegisterForm() {
         <button
           type="submit"
           disabled={loading || hasRegisterErrors}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-[12px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#254c39] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-xs font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#254c39] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60"
         >
           {loading && <LoaderCircle size={16} className="animate-spin" />}
           Đăng ký và nhận OTP
         </button>
       </form>
 
-      <div className="mt-5 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-[11px] leading-relaxed text-neutral-600">
+      <div className="mt-5 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-xs leading-relaxed text-neutral-600">
         Mã OTP sẽ được gửi qua email sau khi tạo tài khoản.
       </div>
 
-      <p className="mt-5 text-center text-[11px] text-neutral-500">
+      <p className="mt-5 text-center text-xs text-neutral-500">
         Đã có tài khoản?{" "}
         <Link
           href="/login"
@@ -757,16 +757,16 @@ function TextField({
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type" | "onBlur">) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <span className="mb-2 block text-xs font-bold text-neutral-700">{label}</span>
       <input
         {...props}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         type={type}
-        className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-[12px] outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
+        className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-xs outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
       />
-      {error && touched ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+      {error && touched ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
     </label>
   );
 }
@@ -791,16 +791,16 @@ function TextareaField({
 } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange" | "onBlur">) {
   return (
     <label className="block sm:col-span-2">
-      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <span className="mb-2 block text-xs font-bold text-neutral-700">{label}</span>
       <textarea
         {...props}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
-        className="min-h-28 w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-[12px] outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
+        className="min-h-28 w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-xs outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d856c] focus-visible:ring-4 focus-visible:ring-[#e9f0ea]"
       />
-      {hint ? <p className="mt-2 text-[11px] text-neutral-500">{hint}</p> : null}
-      {error && touched ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+      {hint ? <p className="mt-2 text-xs text-neutral-500">{hint}</p> : null}
+      {error && touched ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
     </label>
   );
 }
@@ -819,16 +819,16 @@ function FileField({
   const inputId = "engineer-qualification-files";
   return (
     <div className="sm:col-span-2">
-      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <span className="mb-2 block text-xs font-bold text-neutral-700">{label}</span>
       <label
         htmlFor={inputId}
         className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-[#cfd8d0] bg-[#f9fbf9] px-4 py-6 text-center transition hover:border-[#9fb2a4] hover:bg-white"
       >
         <FilePlus2 size={20} className="text-[#2E5A44]" />
-        <span className="mt-3 text-[12px] font-bold text-[#2E5A44]">
+        <span className="mt-3 text-xs font-bold text-[#2E5A44]">
           Chọn file PDF / JPG / PNG
         </span>
-        <span className="mt-1 text-[11px] text-neutral-500">
+        <span className="mt-1 text-xs text-neutral-500">
           Có thể tải lên nhiều chứng chỉ hoặc bằng cấp.
         </span>
       </label>
@@ -845,11 +845,11 @@ function FileField({
       />
 
       {files.length > 0 ? (
-        <ul className="mt-3 space-y-2 rounded-2xl border border-[#e3e9e3] bg-white p-4 text-[12px] text-neutral-600">
+        <ul className="mt-3 space-y-2 rounded-2xl border border-[#e3e9e3] bg-white p-4 text-xs text-neutral-600">
           {files.map((file) => (
             <li key={`${file.name}-${file.lastModified}`} className="flex items-center justify-between gap-3">
               <span className="truncate">{file.name}</span>
-              <span className="shrink-0 rounded-full bg-[#edf3ee] px-2 py-1 text-[11px] font-bold text-[#2E5A44]">
+              <span className="shrink-0 rounded-full bg-[#edf3ee] px-2 py-1 text-xs font-bold text-[#2E5A44]">
                 {(file.size / (1024 * 1024)).toFixed(1)} MB
               </span>
             </li>
@@ -857,7 +857,7 @@ function FileField({
         </ul>
       ) : null}
 
-      {error ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }
@@ -886,7 +886,7 @@ function PasswordField({
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type" | "onBlur">) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[11px] font-bold text-neutral-700">{label}</span>
+      <span className="mb-2 block text-xs font-bold text-neutral-700">{label}</span>
       <span className="flex items-center rounded-xl border border-neutral-200 bg-white px-3 transition-all duration-200 focus-within:border-[#5d856c] focus-within:ring-4 focus-within:ring-[#e9f0ea]">
         <input
           {...props}
@@ -894,7 +894,7 @@ function PasswordField({
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
           type={visible ? "text" : "password"}
-          className="h-11 flex-1 bg-transparent text-[12px] outline-none"
+          className="h-11 flex-1 bg-transparent text-xs outline-none"
         />
         <button
           type="button"
@@ -905,7 +905,7 @@ function PasswordField({
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </span>
-      {error && touched ? <p className="mt-2 text-[11px] text-red-600">{error}</p> : null}
+      {error && touched ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
       {helper ? <div className="mt-3">{helper}</div> : null}
     </label>
   );

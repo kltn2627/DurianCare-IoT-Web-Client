@@ -6,10 +6,24 @@
   --moss-soft: #e9f0ea;
   --durian: #eed56d;
   --durian-soft: #fbf4cf;
-  --ink: #203329;
-  --muted: #718078;
+  --text-strong: #17251d;
+  --text-body: #2f4036;
+  --text-muted: #66756c;
+  --text-subtle: #87928b;
+  --text-inverse: #f7fbf7;
+  --text-brand: #2e5a44;
+  --ink: var(--text-body);
+  --muted: var(--text-muted);
   --canvas: #f4f6f1;
   --line: #e1e7df;
+  --font-caption: .75rem;
+  --font-helper: .8125rem;
+  --font-body: .875rem;
+  --font-body-lg: .9375rem;
+  --font-title: 1rem;
+  --font-section: 1.125rem;
+  --font-page: 1.5rem;
+  --font-hero: 1.875rem;
 }
 
 * { box-sizing: border-box; }
@@ -19,10 +33,35 @@ body {
   background:
     radial-gradient(circle at 8% 5%, rgba(238, 213, 109, .16), transparent 23rem),
     var(--canvas);
-  color: var(--ink);
+  color: var(--text-body);
+  font-size: var(--font-body);
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
+
+h1, h2, h3, h4, h5, h6, b, strong {
+  color: var(--text-strong);
+}
+
+p, li, dd {
+  color: inherit;
+}
+
+small {
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.text-app-strong { color: var(--text-strong); }
+.text-app-body { color: var(--text-body); }
+.text-app-muted { color: var(--text-muted); }
+.text-app-subtle { color: var(--text-subtle); }
+.text-app-inverse { color: var(--text-inverse); }
+.text-app-brand { color: var(--text-brand); }
 
 .input-control {
   width: 100%;
@@ -31,9 +70,10 @@ button { cursor: pointer; }
   border-radius: .875rem;
   background: white;
   padding: 0 .75rem;
-  color: var(--ink);
-  font-size: .875rem;
-  font-weight: 700;
+  color: var(--text-strong);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.4;
   outline: none;
 }
 .input-control:focus {
@@ -46,6 +86,10 @@ button { cursor: pointer; }
   border-radius: 1.25rem;
   background: rgba(255,255,255,.94);
   box-shadow: 0 10px 35px rgba(39, 73, 54, .06);
+}
+
+.panel :where(p, span, small, td, th, label, input, select, textarea, button) {
+  line-height: 1.45;
 }
 
 .grid-pattern {

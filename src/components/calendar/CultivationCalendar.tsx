@@ -120,7 +120,7 @@ const DEFAULT_FORM: TaskFormState = {
 };
 
 const inputClass =
-  "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-[11px] text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414] disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400";
+  "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-xs text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414] disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("vi-VN", {
@@ -144,7 +144,7 @@ function FieldLabel({
   optional?: boolean;
 }) {
   return (
-    <span className="mb-2 flex items-center justify-between text-[9px] font-bold text-neutral-700">
+    <span className="mb-2 flex items-center justify-between text-xs font-bold text-neutral-700">
       {children}
       {optional && <small className="font-medium text-neutral-400">Không bắt buộc</small>}
     </span>
@@ -209,13 +209,13 @@ function TaskComposer({
       <div className="border-b border-neutral-100 bg-[#294f3b] px-5 py-5 text-white">
         <div className="flex items-start justify-between gap-4">
           <span>
-            <small className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#EED56D]">
+            <small className="text-xs font-bold uppercase tracking-[0.2em] text-[#EED56D]">
               Task composer
             </small>
             <h2 className="mt-2 text-lg font-bold tracking-tight">
               Tạo lịch canh tác
             </h2>
-            <p className="mt-1 text-[10px] leading-relaxed text-[#d0ddd4]">
+            <p className="mt-1 text-xs leading-relaxed text-[#d0ddd4]">
               Lập công việc, vật tư và dự toán trong một biểu mẫu.
             </p>
           </span>
@@ -227,7 +227,7 @@ function TaskComposer({
 
       <form onSubmit={submit} className="space-y-5 p-5">
         {submitted && (
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-bold text-emerald-700">
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-bold text-emerald-700">
             <Check size={14} />
             Đã thêm công việc vào lịch tuần.
           </div>
@@ -330,7 +330,7 @@ function TaskComposer({
                 }
                 className={`${inputClass} pr-12`}
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-neutral-400">
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">
                 phút
               </span>
             </div>
@@ -350,10 +350,10 @@ function TaskComposer({
           <div className="mb-4 flex items-center gap-2">
             <Banknote size={15} className="text-amber-700" />
             <span>
-              <b className="block text-[10px] text-neutral-900">
+              <b className="block text-xs text-neutral-900">
                 Chi phí vật tư tiêu hao
               </b>
-              <small className="mt-0.5 block text-[8px] text-neutral-500">
+              <small className="mt-0.5 block text-xs text-neutral-500">
                 Ghi nhận theo từng công việc
               </small>
             </span>
@@ -415,10 +415,10 @@ function TaskComposer({
           </div>
 
           <div className="mt-3 flex items-center justify-between border-t border-amber-200/70 pt-3">
-            <small className="text-[8px] font-semibold text-neutral-500">
+            <small className="text-xs font-semibold text-neutral-500">
               Dự toán công việc
             </small>
-            <b className="text-[12px] text-amber-800">
+            <b className="text-xs text-amber-800">
               {formatCurrency(projectedCost)}
             </b>
           </div>
@@ -431,14 +431,14 @@ function TaskComposer({
             value={form.notes}
             onChange={(event) => update("notes", event.target.value)}
             placeholder="Ngưỡng cảm biến, lưu ý an toàn, phạm vi cây..."
-            className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-[11px] leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+            className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-xs leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           />
         </label>
 
         <button
           type="submit"
           disabled={!form.title.trim()}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-[10px] font-bold text-white transition-all duration-200 ease-in-out hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] text-xs font-bold text-white transition-all duration-200 ease-in-out hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
         >
           <Plus size={15} />
           Thêm vào lịch canh tác
@@ -469,10 +469,10 @@ function WeekRail({
           <ChevronLeft size={15} />
         </button>
         <span className="text-center">
-          <small className="block text-[8px] font-bold uppercase tracking-[0.16em] text-neutral-400">
+          <small className="block text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">
             Tuần canh tác
           </small>
-          <b className="mt-1 block text-[11px] tracking-tight text-neutral-900">
+          <b className="mt-1 block text-xs tracking-tight text-neutral-900">
             09 - 15 tháng 06, 2026
           </b>
         </span>
@@ -504,14 +504,14 @@ function WeekRail({
               }`}
             >
               <small
-                className={`block text-[8px] font-bold ${
+                className={`block text-xs font-bold ${
                   selected ? "text-white/60" : "text-neutral-400"
                 }`}
               >
                 {day.weekday}
               </small>
               <b
-                className={`mx-auto mt-1 grid size-7 place-items-center rounded-full text-[11px] ${
+                className={`mx-auto mt-1 grid size-7 place-items-center rounded-full text-xs ${
                   today && !selected
                     ? "bg-[#fbf2cb] text-[#735b15]"
                     : selected
@@ -523,7 +523,7 @@ function WeekRail({
               </b>
               {count > 0 && (
                 <span
-                  className={`mt-1 inline-flex min-w-4 justify-center rounded-full px-1 py-0.5 text-[7px] font-bold ${
+                  className={`mt-1 inline-flex min-w-4 justify-center rounded-full px-1 py-0.5 text-xs font-bold ${
                     selected
                       ? "bg-[#EED56D] text-[#294f3b]"
                       : "bg-[#e9f0ea] text-[#2E5A44]"
@@ -544,36 +544,36 @@ function IotProof({ evidence }: { evidence: IotEvidence }) {
   return (
     <div className="mt-3 rounded-xl border border-[#cfe1d4] bg-[#f0f7f2] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[8px] font-bold text-[#2E5A44] ring-1 ring-[#c7ddcd]">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#2E5A44] ring-1 ring-[#c7ddcd]">
           <Sparkles size={11} />
           🤖 Đã xác nhận tự động qua IoT
         </span>
-        <small className="text-[7px] text-neutral-500">
+        <small className="text-xs text-neutral-500">
           {evidence.receivedAt}
         </small>
       </div>
       <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <span>
-          <small className="block text-[7px] uppercase tracking-[0.12em] text-neutral-400">
+          <small className="block text-xs uppercase tracking-[0.12em] text-neutral-400">
             Trước
           </small>
-          <b className="mt-1 block text-[10px] text-neutral-700">
+          <b className="mt-1 block text-xs text-neutral-700">
             {evidence.before}
           </b>
         </span>
-        <span className="rounded-lg bg-[#2E5A44] px-2 py-1 text-[8px] font-bold text-white">
+        <span className="rounded-lg bg-[#2E5A44] px-2 py-1 text-xs font-bold text-white">
           {evidence.delta}
         </span>
         <span className="text-right">
-          <small className="block text-[7px] uppercase tracking-[0.12em] text-neutral-400">
+          <small className="block text-xs uppercase tracking-[0.12em] text-neutral-400">
             Sau
           </small>
-          <b className="mt-1 block text-[10px] text-[#2E5A44]">
+          <b className="mt-1 block text-xs text-[#2E5A44]">
             {evidence.after}
           </b>
         </span>
       </div>
-      <p className="mt-2 text-[7px] leading-relaxed text-neutral-500">
+      <p className="mt-2 text-xs leading-relaxed text-neutral-500">
         {evidence.metric} • Nguồn {evidence.sensor}
       </p>
     </div>
@@ -619,17 +619,17 @@ function TaskCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[8px] font-bold ${meta.surfaceClass} ${meta.iconClass}`}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold ${meta.surfaceClass} ${meta.iconClass}`}
                 >
                   <Icon size={11} />
                   {meta.label}
                 </span>
-                <span className="text-[8px] font-medium text-neutral-400">
+                <span className="text-xs font-medium text-neutral-400">
                   {task.crop}
                 </span>
               </div>
               <h3
-                className={`mt-2 text-[12px] font-bold tracking-tight ${
+                className={`mt-2 text-xs font-bold tracking-tight ${
                   completed
                     ? "text-neutral-400 line-through"
                     : "text-neutral-900"
@@ -637,7 +637,7 @@ function TaskCard({
               >
                 {task.title}
               </h3>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[8px] text-neutral-500">
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
                 <span className="inline-flex items-center gap-1">
                   <Clock3 size={11} />
                   {task.startTime} • {task.durationMinutes} phút
@@ -653,10 +653,10 @@ function TaskCard({
               </div>
             </div>
             <span className="shrink-0 text-left sm:text-right">
-              <small className="block text-[7px] uppercase tracking-[0.12em] text-neutral-400">
+              <small className="block text-xs uppercase tracking-[0.12em] text-neutral-400">
                 Chi phí vật tư
               </small>
-              <b className="mt-1 block text-[11px] text-neutral-800">
+              <b className="mt-1 block text-xs text-neutral-800">
                 {formatCurrency(cost)}
               </b>
             </span>
@@ -664,20 +664,20 @@ function TaskCard({
 
           <div className="mt-3 grid gap-2 rounded-xl bg-neutral-50 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
             <span>
-              <small className="block text-[7px] text-neutral-400">
+              <small className="block text-xs text-neutral-400">
                 Vật tư tiêu hao
               </small>
-              <b className="mt-1 block text-[9px] font-semibold text-neutral-700">
+              <b className="mt-1 block text-xs font-semibold text-neutral-700">
                 {task.materialName} • {task.materialQuantity} {task.materialUnit}
               </b>
             </span>
-            <small className="text-[8px] font-semibold text-neutral-500">
+            <small className="text-xs font-semibold text-neutral-500">
               {formatCurrency(task.materialUnitCost)}/{task.materialUnit}
             </small>
           </div>
 
           {task.notes && (
-            <p className="mt-2 text-[8px] leading-relaxed text-neutral-500">
+            <p className="mt-2 text-xs leading-relaxed text-neutral-500">
               {task.notes}
             </p>
           )}
@@ -714,10 +714,10 @@ function CostSummary({ tasks }: { tasks: CultivationTask[] }) {
           key={String(label)}
           className="rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5"
         >
-          <small className="block text-[7px] font-medium text-neutral-400">
+          <small className="block text-xs font-medium text-neutral-400">
             {String(label)}
           </small>
-          <b className={`mt-1 block text-[10px] ${String(color)}`}>
+          <b className={`mt-1 block text-xs ${String(color)}`}>
             {formatCurrency(Number(value))}
           </b>
         </div>
@@ -780,13 +780,13 @@ function TaskLedger({
       <div className="border-b border-neutral-100 px-4 py-4 sm:px-5">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <span>
-            <small className="text-[8px] font-bold uppercase tracking-[0.18em] text-[#6a806f]">
+            <small className="text-xs font-bold uppercase tracking-[0.18em] text-[#6a806f]">
               Work ledger
             </small>
             <h2 className="mt-1 text-base font-bold tracking-tight text-neutral-900">
               Danh sách công việc
             </h2>
-            <p className="mt-1 text-[9px] leading-relaxed text-neutral-500">
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
               {selectedDate
                 ? `Đang lọc ngày ${formatDate(selectedDate)}`
                 : "Toàn bộ lịch tuần 09 - 15/06"}
@@ -798,7 +798,7 @@ function TaskLedger({
                 type="button"
                 key={item.id}
                 onClick={() => onFilter(item.id)}
-                className={`rounded-lg px-3 py-2 text-[8px] font-bold transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`rounded-lg px-3 py-2 text-xs font-bold transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-50 ${
                   filter === item.id
                     ? "bg-white text-[#2E5A44] shadow-sm"
                     : "text-neutral-500 hover:bg-white/60 hover:text-neutral-800"
@@ -824,10 +824,10 @@ function TaskLedger({
                     <CalendarDays size={15} />
                   </span>
                   <span>
-                    <b className="block text-[10px] capitalize text-neutral-800">
+                    <b className="block text-xs capitalize text-neutral-800">
                       {formatDate(date)}
                     </b>
-                    <small className="mt-0.5 block text-[7px] text-neutral-400">
+                    <small className="mt-0.5 block text-xs text-neutral-400">
                       {dateTasks.length} công việc
                     </small>
                   </span>
@@ -851,10 +851,10 @@ function TaskLedger({
               <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-neutral-100 text-neutral-400">
                 <Filter size={20} />
               </span>
-              <b className="mt-4 block text-[11px] text-neutral-700">
+              <b className="mt-4 block text-xs text-neutral-700">
                 Không có công việc phù hợp
               </b>
-              <p className="mt-1 text-[9px] leading-relaxed text-neutral-400">
+              <p className="mt-1 text-xs leading-relaxed text-neutral-400">
                 Chọn ngày khác hoặc thay đổi bộ lọc trạng thái.
               </p>
             </span>
@@ -906,14 +906,14 @@ export function CultivationCalendar() {
       <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-6 text-white sm:p-7">
         <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.2em] text-[#EED56D]">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#EED56D]">
               <Activity size={13} />
               Điều phối canh tác • Tuần 24
             </div>
             <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
               Lịch chăm sóc Dona & Ri6
             </h1>
-            <p className="mt-2 text-[10px] leading-relaxed text-[#d0ddd4] sm:text-[11px]">
+            <p className="mt-2 text-xs leading-relaxed text-[#d0ddd4] sm:text-xs">
               Điều phối công việc, kiểm soát vật tư và đối soát kết quả thực tế
               từ cụm cảm biến tại vườn.
             </p>
@@ -931,10 +931,10 @@ export function CultivationCalendar() {
                   className="min-w-24 rounded-xl border border-white/10 bg-white/[.08] px-3 py-3"
                 >
                   <MetricIcon size={14} className="text-[#EED56D]" />
-                  <b className="mt-3 block text-[12px] tracking-tight">
+                  <b className="mt-3 block text-xs tracking-tight">
                     {String(value)}
                   </b>
-                  <small className="mt-1 block text-[7px] text-white/55">
+                  <small className="mt-1 block text-xs text-white/55">
                     {String(label)}
                   </small>
                 </div>
@@ -976,10 +976,10 @@ export function CultivationCalendar() {
             <Settings2 size={17} />
           </span>
           <span>
-            <b className="block text-[10px] text-neutral-900">
+            <b className="block text-xs text-neutral-900">
               Quy tắc xác nhận IoT
             </b>
-            <p className="mt-1 text-[8px] leading-relaxed text-neutral-500">
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
               Chỉ công việc tưới hoặc bón phân được gắn xác nhận tự động khi
               gateway ghi nhận delta cảm biến đúng phân khu trong cửa sổ thời
               gian thực hiện.
@@ -991,10 +991,10 @@ export function CultivationCalendar() {
             <Banknote size={17} />
           </span>
           <span>
-            <b className="block text-[10px] text-neutral-900">
+            <b className="block text-xs text-neutral-900">
               Chi phí chưa gồm nhân công
             </b>
-            <p className="mt-1 text-[8px] leading-relaxed text-neutral-500">
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
               Dự toán hiện tính theo vật tư tiêu hao và có thể thay bằng dữ liệu
               kế toán khi kết nối backend.
             </p>

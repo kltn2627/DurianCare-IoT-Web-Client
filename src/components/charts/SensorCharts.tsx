@@ -17,7 +17,7 @@ export function SensorCharts() {
           <div><h2 className="text-[15px] font-bold">Giám sát cảm biến IoT thời gian thực</h2><p className="mt-1 text-[13px] text-[#7e8b83]">DHT22 và cảm biến độ ẩm đất theo mốc giờ</p></div>
         </div>
         <div className="flex items-center gap-7">
-          <span className="inline-flex items-center gap-4 rounded-full bg-[#eaf4ec] px-4 py-2 text-[14px] font-extrabold tracking-[1px] text-[#37704f]"><i className="live-dot size-1.5 rounded-full bg-[#4b9666]" /> LIVE MOCK</span>
+          <span className="inline-flex items-center gap-4 rounded-full bg-[#eaf4ec] px-4 py-2 text-sm font-extrabold tracking-[1px] text-[#37704f]"><i className="live-dot size-1.5 rounded-full bg-[#4b9666]" /> LIVE MOCK</span>
           <select value={zoneId} onChange={(event) => setZoneId(event.target.value)} className="h-9 rounded-xl border border-[#dfe5de] bg-white px-4 text-[13px] font-bold outline-none">
             {zoneSensorData.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>

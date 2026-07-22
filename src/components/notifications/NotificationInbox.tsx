@@ -106,16 +106,16 @@ function NotificationCard({
         </span>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[14px] font-bold tracking-tight text-neutral-900">
+            <h3 className="text-sm font-bold tracking-tight text-neutral-900">
               {item.title}
             </h3>
             {!item.isRead ? (
-              <span className="rounded-full bg-[#eed56d] px-2 py-1 text-[10px] font-bold text-[#2E5A44]">
+              <span className="rounded-full bg-[#eed56d] px-2 py-1 text-xs font-bold text-[#2E5A44]">
                 Chưa đọc
               </span>
             ) : null}
             <span
-              className={`rounded-full px-2 py-1 text-[10px] font-bold ${notificationTone(
+              className={`rounded-full px-2 py-1 text-xs font-bold ${notificationTone(
                 item.type,
               )}`}
             >
@@ -123,7 +123,7 @@ function NotificationCard({
             </span>
           </div>
           <p className="text-[13px] leading-relaxed text-neutral-600">{item.message}</p>
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
             <span className="inline-flex items-center gap-1">
               <Clock3 size={12} />
               {formatDate(item.createdAt)}
@@ -140,7 +140,7 @@ function NotificationCard({
           type="button"
           onClick={() => onMarkRead(item.id)}
           disabled={busy || item.isRead}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}
           Đánh dấu đã đọc
@@ -149,7 +149,7 @@ function NotificationCard({
           type="button"
           onClick={() => onDelete(item.id)}
           disabled={busy}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-100 px-4 text-[12px] font-semibold text-red-700 transition-all duration-200 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-100 px-4 text-xs font-semibold text-red-700 transition-all duration-200 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}
           Xoá
@@ -308,7 +308,7 @@ export function NotificationInbox() {
       <section className="grid-pattern overflow-hidden rounded-[26px] bg-[#284d3a] p-6 text-white shadow-sm sm:p-8">
         <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="max-w-3xl space-y-3">
-            <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#eed56d]">
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-[#eed56d]">
               <Bell size={12} />
               Notification inbox
             </p>
@@ -322,11 +322,11 @@ export function NotificationInbox() {
           </div>
           <div className="grid min-w-[220px] grid-cols-2 gap-3">
             <div className="rounded-2xl border border-white/10 bg-white/[.08] px-4 py-4">
-              <small className="text-[11px] text-[#c8d6cc]">Tổng thông báo</small>
+              <small className="text-xs text-[#c8d6cc]">Tổng thông báo</small>
               <b className="mt-1 block text-2xl">{totalLabel}</b>
             </div>
             <div className="rounded-2xl bg-[#eed56d] px-4 py-4 text-[#284d3a]">
-              <small className="text-[11px] font-semibold">Chưa đọc</small>
+              <small className="text-xs font-semibold">Chưa đọc</small>
               <b className="mt-1 block text-2xl">{unreadCount}</b>
             </div>
           </div>
@@ -343,7 +343,7 @@ export function NotificationInbox() {
                     key={item}
                     type="button"
                     onClick={() => changeMode(item)}
-                    className={`rounded-xl px-4 py-2 text-[12px] font-semibold transition-all duration-200 ${
+                    className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                       mode === item
                         ? "bg-white text-[#2E5A44] shadow-sm"
                         : "text-neutral-500 hover:text-neutral-800"
@@ -367,7 +367,7 @@ export function NotificationInbox() {
                       setSortBy(nextSortBy);
                       setSortDirection(nextSortDirection);
                     }}
-                    className="bg-transparent text-[12px] font-semibold text-neutral-700 outline-none"
+                    className="bg-transparent text-xs font-semibold text-neutral-700 outline-none"
                   >
                     {SORT_OPTIONS.map((option) => {
                       const key = `${option.sortBy}:${option.sortDirection}` as const;
@@ -388,7 +388,7 @@ export function NotificationInbox() {
                       setPage(0);
                       setSize(Number(event.target.value));
                     }}
-                    className="bg-transparent text-[12px] font-semibold text-neutral-700 outline-none"
+                    className="bg-transparent text-xs font-semibold text-neutral-700 outline-none"
                   >
                     {[10, 20, 50, 100].map((value) => (
                       <option key={value} value={value}>
@@ -401,13 +401,13 @@ export function NotificationInbox() {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4">
-              <p className="text-[12px] leading-relaxed text-neutral-500">
+              <p className="text-xs leading-relaxed text-neutral-500">
                 Hộp thư inbox được bảo vệ qua header người dùng do lớp proxy của Web tự đính kèm.
               </p>
               <button
                 type="button"
                 onClick={refresh}
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200"
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200"
               >
                 <RefreshCw size={14} />
                 Làm mới
@@ -418,7 +418,7 @@ export function NotificationInbox() {
           <section className="panel overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 px-5 py-4 sm:px-6">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6f7f74]">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#6f7f74]">
                   Danh sách thông báo
                 </p>
                 <h2 className="mt-1 text-lg font-extrabold tracking-tight text-neutral-900">
@@ -430,7 +430,7 @@ export function NotificationInbox() {
                   type="button"
                   onClick={markAllRead}
                   disabled={busyId === "__all__" || unreadCount === 0}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-[12px] font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-xs font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
                 >
                   {busyId === "__all__" ? (
                     <LoaderCircle size={14} className="animate-spin" />
@@ -479,7 +479,7 @@ export function NotificationInbox() {
                       ? "Không còn thông báo chưa đọc"
                       : "Chưa có thông báo nào"}
                   </b>
-                  <p className="mt-2 max-w-md text-[12px] leading-relaxed text-neutral-500">
+                  <p className="mt-2 max-w-md text-xs leading-relaxed text-neutral-500">
                     Thông báo hệ thống sẽ xuất hiện ở đây khi backend phát sinh OTP, cảnh báo,
                     hoặc nhắc việc vận hành.
                   </p>
@@ -489,7 +489,7 @@ export function NotificationInbox() {
 
             {data && data.totalPages > 0 ? (
               <div className="flex flex-col gap-3 border-t border-neutral-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                <p className="text-[11px] text-neutral-500">
+                <p className="text-xs text-neutral-500">
                   Trang {data.page + 1} / {data.totalPages} • {data.numberOfElements} mục
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
@@ -499,7 +499,7 @@ export function NotificationInbox() {
                     onClick={() => {
                       setPage((current) => Math.max(0, current - 1));
                     }}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ArrowLeft size={14} />
                     Trước
@@ -510,7 +510,7 @@ export function NotificationInbox() {
                       key={item}
                       type="button"
                       onClick={() => setPage(item)}
-                      className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-[12px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418] ${
+                      className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418] ${
                         item === data.page
                           ? "bg-[#2E5A44] text-white"
                           : "border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
@@ -526,7 +526,7 @@ export function NotificationInbox() {
                     onClick={() => {
                       setPage((current) => Math.min(data.totalPages - 1, current + 1));
                     }}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Sau
                     <ArrowRight size={14} />
@@ -547,7 +547,7 @@ export function NotificationInbox() {
                 <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
                   Trạng thái hộp thư
                 </h2>
-                <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                   Tổng hợp số lượng chưa đọc và trạng thái hiện tại.
                 </p>
               </div>
@@ -564,8 +564,8 @@ export function NotificationInbox() {
                   key={String(label)}
                   className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3"
                 >
-                  <dt className="text-[11px] font-semibold text-neutral-500">{label}</dt>
-                  <dd className="max-w-[160px] text-right text-[12px] font-semibold text-neutral-900">
+                  <dt className="text-xs font-semibold text-neutral-500">{label}</dt>
+                  <dd className="max-w-[160px] text-right text-xs font-semibold text-neutral-900">
                     {value}
                   </dd>
                 </div>
@@ -582,7 +582,7 @@ export function NotificationInbox() {
                 <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
                   Mẹo xử lý nhanh
                 </h2>
-                <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                   Đánh dấu đã đọc để giảm số đếm trên chuông, hoặc xoá thông báo không còn giá trị.
                 </p>
               </div>
@@ -592,7 +592,7 @@ export function NotificationInbox() {
               {["OTP vừa gửi", "Cảnh báo IoT", "Nhắc lịch canh tác"].map((label) => (
                 <div
                   key={label}
-                  className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-[12px] font-semibold text-neutral-700"
+                  className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-xs font-semibold text-neutral-700"
                 >
                   {label}
                 </div>
