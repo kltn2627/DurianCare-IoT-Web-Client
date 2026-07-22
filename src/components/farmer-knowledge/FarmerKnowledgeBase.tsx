@@ -46,18 +46,18 @@ function ArticleCard({ article }: { article: FarmerKnowledgeArticle }) {
           style={{ backgroundImage: `url(${article.coverImage})` }}
         />
         <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/45 to-transparent" />
-        <span className="absolute left-3 top-3 rounded-full border border-white/25 bg-white/90 px-2.5 py-1.5 text-[7px] font-bold text-[#2E5A44] backdrop-blur-sm">
+        <span className="absolute left-3 top-3 rounded-full border border-white/25 bg-white/90 px-2.5 py-1.5 text-xs font-bold text-[#2E5A44] backdrop-blur-sm">
           {article.category}
         </span>
         {article.featured && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#EED56D] px-2.5 py-1.5 text-[7px] font-extrabold text-[#2E5A44]">
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#EED56D] px-2.5 py-1.5 text-xs font-extrabold text-[#2E5A44]">
             <Sparkles size={10} />
             Nên đọc
           </span>
         )}
       </div>
       <div className="p-4 sm:p-5">
-        <div className="flex items-center gap-3 text-[7px] font-medium text-neutral-400">
+        <div className="flex items-center gap-3 text-xs font-medium text-neutral-400">
           <span className="inline-flex items-center gap-1">
             <Clock3 size={10} />
             {article.readingTime}
@@ -70,15 +70,15 @@ function ArticleCard({ article }: { article: FarmerKnowledgeArticle }) {
         <h2 className="mt-3 line-clamp-2 text-[15px] font-extrabold tracking-tight text-neutral-900 transition-colors duration-200 group-hover:text-[#2E5A44]">
           {article.title}
         </h2>
-        <p className="mt-2 line-clamp-3 text-[9px] leading-relaxed text-neutral-500">
+        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-neutral-500">
           {article.excerpt}
         </p>
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-neutral-100 pt-4">
           <span className="min-w-0">
-            <small className="block text-[7px] text-neutral-400">
+            <small className="block text-xs text-neutral-400">
               Biên soạn bởi
             </small>
-            <b className="mt-1 block truncate text-[8px] text-neutral-700">
+            <b className="mt-1 block truncate text-xs text-neutral-700">
               {article.author}
             </b>
           </span>
@@ -121,14 +121,14 @@ export function FarmerKnowledgeBase() {
       <section className="grid-pattern overflow-hidden rounded-[26px] bg-[#294f3b] p-6 text-white sm:p-8">
         <div className="grid gap-7 lg:grid-cols-[1fr_380px] lg:items-end">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.2em] text-[#EED56D]">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#EED56D]">
               <BookOpenText size={13} />
               VietGAP knowledge library
             </div>
             <h1 className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
               Cẩm nang canh tác dành cho chủ vườn
             </h1>
-            <p className="mt-2 text-[10px] leading-relaxed text-[#d0ddd4] sm:text-[11px]">
+            <p className="mt-2 text-xs leading-relaxed text-[#d0ddd4] sm:text-xs">
               Quy trình thực địa được kỹ sư DurianCare biên soạn theo từng giai
               đoạn sinh trưởng, giống cây và rủi ro tại vườn.
             </p>
@@ -142,7 +142,7 @@ export function FarmerKnowledgeBase() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Tìm Phytophthora, Kali, cắt tỉa..."
-              className="h-12 w-full rounded-2xl border border-white/15 bg-white px-11 text-[10px] text-neutral-900 shadow-sm outline-none transition-all duration-200 placeholder:text-neutral-400 hover:border-white/40 focus-visible:ring-4 focus-visible:ring-[#EED56D]/25"
+              className="h-12 w-full rounded-2xl border border-white/15 bg-white px-11 text-xs text-neutral-900 shadow-sm outline-none transition-all duration-200 placeholder:text-neutral-400 hover:border-white/40 focus-visible:ring-4 focus-visible:ring-[#EED56D]/25"
             />
           </label>
         </div>
@@ -153,8 +153,8 @@ export function FarmerKnowledgeBase() {
           <div className="flex items-center gap-2 border-b border-neutral-100 pb-4">
             <SlidersHorizontal size={15} className="text-[#2E5A44]" />
             <span>
-              <b className="block text-[10px] text-neutral-900">Danh mục</b>
-              <small className="mt-0.5 block text-[7px] text-neutral-400">
+              <b className="block text-xs text-neutral-900">Danh mục</b>
+              <small className="mt-0.5 block text-xs text-neutral-400">
                 Lọc theo nhu cầu tại vườn
               </small>
             </span>
@@ -176,7 +176,7 @@ export function FarmerKnowledgeBase() {
                   type="button"
                   key={item}
                   onClick={() => setCategory(item)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-[9px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
                     active
                       ? "bg-[#edf3ee] text-[#2E5A44]"
                       : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
@@ -184,7 +184,7 @@ export function FarmerKnowledgeBase() {
                 >
                   <span>{item}</span>
                   <span
-                    className={`grid min-w-5 place-items-center rounded-full px-1.5 py-0.5 text-[7px] ${
+                    className={`grid min-w-5 place-items-center rounded-full px-1.5 py-0.5 text-xs ${
                       active
                         ? "bg-white text-[#2E5A44]"
                         : "bg-neutral-100 text-neutral-400"
@@ -198,8 +198,8 @@ export function FarmerKnowledgeBase() {
           </div>
           <div className="mt-5 rounded-2xl bg-[#2E5A44] p-4 text-white">
             <Leaf size={18} className="text-[#EED56D]" />
-            <b className="mt-4 block text-[10px]">Nguyên tắc VietGAP</b>
-            <p className="mt-2 text-[8px] leading-relaxed text-[#d4dfd7]">
+            <b className="mt-4 block text-xs">Nguyên tắc VietGAP</b>
+            <p className="mt-2 text-xs leading-relaxed text-[#d4dfd7]">
               Ghi chép đúng vật tư, thời gian cách ly và người thực hiện sau mỗi
               công việc.
             </p>
@@ -213,17 +213,17 @@ export function FarmerKnowledgeBase() {
               className="group mb-5 grid overflow-hidden rounded-[24px] border border-[#d7e1d8] bg-[#f5f8f3] shadow-sm transition-all duration-200 hover:border-[#b7c8ba] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4420] md:grid-cols-[1.1fr_.9fr]"
             >
               <div className="p-5 sm:p-7">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EED56D] px-3 py-1.5 text-[7px] font-extrabold text-[#2E5A44]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EED56D] px-3 py-1.5 text-xs font-extrabold text-[#2E5A44]">
                   <Sparkles size={10} />
                   Chuyên đề nổi bật
                 </span>
                 <h2 className="mt-5 text-xl font-extrabold tracking-tight text-neutral-900 sm:text-2xl">
                   {featured.title}
                 </h2>
-                <p className="mt-3 text-[10px] leading-relaxed text-neutral-500">
+                <p className="mt-3 text-xs leading-relaxed text-neutral-500">
                   {featured.excerpt}
                 </p>
-                <span className="mt-6 inline-flex items-center gap-2 text-[9px] font-bold text-[#2E5A44]">
+                <span className="mt-6 inline-flex items-center gap-2 text-xs font-bold text-[#2E5A44]">
                   Đọc chuyên đề
                   <ArrowUpRight
                     size={14}
@@ -242,14 +242,14 @@ export function FarmerKnowledgeBase() {
 
           <div className="mb-4 flex items-end justify-between gap-3">
             <span>
-              <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#75867a]">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#75867a]">
                 Thư viện đã kiểm duyệt
               </p>
               <h2 className="mt-1 text-lg font-extrabold tracking-tight text-neutral-900">
                 {category === "Tất cả" ? "Tất cả bài viết" : category}
               </h2>
             </span>
-            <small className="text-[8px] text-neutral-400">
+            <small className="text-xs text-neutral-400">
               {visibleArticles.length} bài phù hợp
             </small>
           </div>
@@ -264,10 +264,10 @@ export function FarmerKnowledgeBase() {
             <div className="grid min-h-80 place-items-center rounded-[22px] border border-dashed border-neutral-200 bg-white text-center">
               <span>
                 <Sprout className="mx-auto text-neutral-300" size={32} />
-                <b className="mt-4 block text-[11px] text-neutral-700">
+                <b className="mt-4 block text-xs text-neutral-700">
                   Chưa tìm thấy bài viết
                 </b>
-                <p className="mt-1 text-[8px] text-neutral-400">
+                <p className="mt-1 text-xs text-neutral-400">
                   Thử từ khóa ngắn hơn hoặc chọn danh mục khác.
                 </p>
               </span>

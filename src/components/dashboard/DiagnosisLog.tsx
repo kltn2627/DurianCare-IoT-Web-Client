@@ -34,14 +34,14 @@ export function DiagnosisLog() {
                 </td>
                 <td className="px-5 py-5">{item.zone}</td>
                 <td className="px-5 py-5">
-                  <span className={`rounded-full px-2.5 py-1.5 text-[14px] font-bold ${item.disease === "Healthy_Leaf" ? "bg-[#e9f2ea] text-[#39704f]" : "bg-[#fbf1ca] text-[#7b6015]"}`}>
+                  <span className={`rounded-full px-2.5 py-1.5 text-sm font-bold ${item.disease === "Healthy_Leaf" ? "bg-[#e9f2ea] text-[#39704f]" : "bg-[#fbf1ca] text-[#7b6015]"}`}>
                     {diseaseLabels[item.disease]}
                   </span>
                   <small className="mt-1 block font-mono text-[13px] text-[#8b968f]">{item.disease}</small>
                 </td>
                 <td className="px-5 py-5">{item.detectedAt}</td>
                 <td className="px-5 py-5">
-                  <b className="text-[14px]">{item.confidence}%</b>
+                  <b className="text-sm">{item.confidence}%</b>
                   <span className="ml-2 inline-block h-1.5 w-14 overflow-hidden rounded-full bg-[#e7ebe6] align-middle">
                     <i className="block h-full rounded-full bg-[#4e8062]" style={{ width: `${item.confidence}%` }} />
                   </span>

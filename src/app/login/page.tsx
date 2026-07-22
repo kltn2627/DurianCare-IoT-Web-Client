@@ -14,7 +14,7 @@ export default function LoginPage() {
           </span>
           <span>
             <b className="block text-xl">DurianCare</b>
-            <small className="text-[14px] font-bold tracking-[2.4px] text-[#c7d8cc]">
+            <small className="text-sm font-bold tracking-[2.4px] text-[#c7d8cc]">
               SMART FARM OPERATING SYSTEM
             </small>
           </span>

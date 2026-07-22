@@ -125,7 +125,7 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-[460px]">
       <div className="mb-8 space-y-4">
-        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-[11px] font-bold tracking-[1px] text-[#2E5A44]">
+        <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-4 py-1.5 text-xs font-bold tracking-[1px] text-[#2E5A44]">
           <ShieldCheck size={13} /> Cổng quản trị an toàn
         </span>
         <div className="space-y-3">
@@ -162,7 +162,7 @@ export function LoginForm() {
             />
           </span>
           {emailError ? (
-            <p className="mt-2 text-[12px] leading-relaxed text-red-600">{emailError}</p>
+            <p className="mt-2 text-xs leading-relaxed text-red-600">{emailError}</p>
           ) : null}
         </label>
 
@@ -196,12 +196,12 @@ export function LoginForm() {
             </button>
           </span>
           {passwordError ? (
-            <p className="mt-2 text-[12px] leading-relaxed text-red-600">{passwordError}</p>
+            <p className="mt-2 text-xs leading-relaxed text-red-600">{passwordError}</p>
           ) : null}
         </label>
 
         <div className="flex items-center justify-between gap-3">
-          <label className="inline-flex items-center gap-2 text-[12px] font-semibold text-[#5e6b62]">
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-[#5e6b62]">
             <input
               type="checkbox"
               checked={rememberMe}
@@ -217,7 +217,7 @@ export function LoginForm() {
 
           <Link
             href="/register"
-            className="text-[12px] font-semibold text-[#2E5A44] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
+            className="text-xs font-semibold text-[#2E5A44] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
           >
             Tạo tài khoản
           </Link>
@@ -226,7 +226,7 @@ export function LoginForm() {
         {formError && (
           <p
             role="alert"
-            className="rounded-xl border border-[#edd7cb] bg-[#fff6f1] px-4 py-3 text-[12px] leading-relaxed text-[#9b543b]"
+            className="rounded-xl border border-[#edd7cb] bg-[#fff6f1] px-4 py-3 text-xs leading-relaxed text-[#9b543b]"
           >
             {formError}
           </p>
@@ -250,7 +250,7 @@ export function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-7 text-center text-[12px] text-[#728078]">
+      <p className="mt-7 text-center text-xs text-[#728078]">
         Chưa có tài khoản?{" "}
         <Link
           href="/register"
@@ -260,7 +260,7 @@ export function LoginForm() {
         </Link>
       </p>
 
-      <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-[12px] text-[#5f6d64]">
+      <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#dfe7df] bg-[#f7faf7] px-4 py-3 text-xs text-[#5f6d64]">
         <CheckCircle2 size={16} className="shrink-0 text-[#2E5A44]" />
         <span>Thông báo lỗi sẽ được rút gọn thành ngôn ngữ thân thiện, không lộ thông điệp kỹ thuật.</span>
       </div>

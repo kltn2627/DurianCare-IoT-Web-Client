@@ -366,7 +366,7 @@ function StatusPill({ status }: { status: FarmerConversationStatus }) {
   const meta = STATUS_META[status];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[7px] font-bold ring-1 ${meta.className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-bold ring-1 ${meta.className}`}
     >
       <i className={`size-1.5 rounded-full ${meta.dotClass}`} />
       {meta.label}
@@ -396,14 +396,14 @@ function ExpertConversationRail({
       <div className="space-y-3 border-b border-neutral-100 p-4">
         <div className="flex items-start justify-between gap-3">
           <span>
-            <small className="text-[8px] font-bold uppercase tracking-[0.16em] text-[#6a806f]">
+            <small className="text-xs font-bold uppercase tracking-[0.16em] text-[#6a806f]">
               Expert inbox
             </small>
             <h2 className="mt-1 text-base font-bold tracking-tight text-neutral-900">
               Ky su dang ho tro
             </h2>
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#edf3ee] px-2.5 py-1.5 text-[8px] font-bold text-[#2E5A44]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#edf3ee] px-2.5 py-1.5 text-xs font-bold text-[#2E5A44]">
             <Wifi size={11} />
             {items.filter((item) => item.online).length} online
           </span>
@@ -417,7 +417,7 @@ function ExpertConversationRail({
             value={query}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Tim ky su, phan khu..."
-            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-[10px] text-neutral-900 outline-none transition-all duration-200 placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-xs text-neutral-900 outline-none transition-all duration-200 placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           />
         </label>
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-neutral-100 p-1 scrollbar-thin">
@@ -426,7 +426,7 @@ function ExpertConversationRail({
               type="button"
               key={item.value}
               onClick={() => onFilter(item.value)}
-              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[7px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] ${
                 filter === item.value
                   ? "bg-white text-[#2E5A44] shadow-sm"
                   : "text-neutral-500 hover:bg-white/60 hover:text-neutral-800"
@@ -453,7 +453,7 @@ function ExpertConversationRail({
               {selected && (
                 <i className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-[#2E5A44]" />
               )}
-              <span className="relative grid size-10 place-items-center rounded-xl bg-[#EED56D] text-[10px] font-extrabold text-[#2E5A44]">
+              <span className="relative grid size-10 place-items-center rounded-xl bg-[#EED56D] text-xs font-extrabold text-[#2E5A44]">
                 {conversation.engineerInitials}
                 <i
                   className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white ${
@@ -463,20 +463,20 @@ function ExpertConversationRail({
               </span>
               <span className="min-w-0">
                 <span className="flex items-center gap-2">
-                  <b className="truncate text-[10px] text-neutral-900">
+                  <b className="truncate text-xs text-neutral-900">
                     {conversation.engineerName}
                   </b>
                   {conversation.unreadCount > 0 && (
-                    <span className="grid min-w-4 place-items-center rounded-full bg-[#b95639] px-1 py-0.5 text-[7px] font-bold text-white">
+                    <span className="grid min-w-4 place-items-center rounded-full bg-[#b95639] px-1 py-0.5 text-xs font-bold text-white">
                       {conversation.unreadCount}
                     </span>
                   )}
                 </span>
-                <small className="mt-1 block truncate text-[7px] font-medium text-neutral-400">
+                <small className="mt-1 block truncate text-xs font-medium text-neutral-400">
                   {conversation.zone} - {conversation.specialty}
                 </small>
                 <p
-                  className={`mt-1.5 truncate text-[8px] ${
+                  className={`mt-1.5 truncate text-xs ${
                     conversation.unreadCount > 0
                       ? "font-semibold text-neutral-700"
                       : "text-neutral-500"
@@ -488,7 +488,7 @@ function ExpertConversationRail({
                   <StatusPill status={conversation.status} />
                 </span>
               </span>
-              <small className="text-[7px] text-neutral-400">
+              <small className="text-xs text-neutral-400">
                 {conversation.lastMessageAt}
               </small>
             </button>
@@ -498,10 +498,10 @@ function ExpertConversationRail({
           <div className="grid min-h-56 place-items-center text-center">
             <span>
               <Search className="mx-auto text-neutral-300" size={25} />
-              <b className="mt-3 block text-[10px] text-neutral-700">
+              <b className="mt-3 block text-xs text-neutral-700">
                 Khong co cuoc tro chuyen phu hop
               </b>
-              <p className="mt-1 text-[8px] text-neutral-400">
+              <p className="mt-1 text-xs text-neutral-400">
                 Thu doi bo loc hoac tu khoa.
               </p>
             </span>
@@ -534,7 +534,7 @@ function ImageBubble({
         style={{ backgroundImage: `url(${message.image})` }}
       />
       <p
-        className={`px-3.5 py-3 text-[9px] leading-relaxed ${
+        className={`px-3.5 py-3 text-xs leading-relaxed ${
           fromOwner ? "text-white" : "text-neutral-600"
         }`}
       >
@@ -557,7 +557,7 @@ function MessageStream({
     <div className="flex-1 space-y-4 overflow-y-auto bg-[#f6f8f4] px-4 py-5 scrollbar-thin sm:px-6">
       <div className="mx-auto flex max-w-xl items-center gap-3 py-1">
         <i className="h-px flex-1 bg-neutral-200" />
-        <span className="text-[7px] font-bold uppercase tracking-[0.16em] text-neutral-400">
+        <span className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">
           Hôm nay • Bảo mật trong tài khoản chủ vườn
         </span>
         <i className="h-px flex-1 bg-neutral-200" />
@@ -573,7 +573,7 @@ function MessageStream({
           >
             <div className="max-w-[86%] sm:max-w-[78%]">
               {!fromOwner && (
-                <small className="mb-1.5 flex items-center gap-1.5 text-[7px] font-bold text-neutral-400">
+                <small className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-neutral-400">
                   {message.sender === "ASSISTANT" ? (
                     <Sparkles size={10} />
                   ) : (
@@ -592,7 +592,7 @@ function MessageStream({
                 />
               ) : (
                 <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-[9px] leading-relaxed shadow-sm ${
+                  className={`rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm ${
                     fromOwner
                       ? "rounded-br-md bg-[#2E5A44] text-white"
                       : "rounded-bl-md border border-neutral-100 bg-white text-neutral-700"
@@ -602,7 +602,7 @@ function MessageStream({
                 </div>
               )}
               <span
-                className={`mt-1 flex items-center gap-1 text-[7px] text-neutral-400 ${
+                className={`mt-1 flex items-center gap-1 text-xs text-neutral-400 ${
                   fromOwner ? "justify-end" : "justify-start"
                 }`}
               >
@@ -651,11 +651,11 @@ function RegimenBubble({
           <CalendarDays size={17} />
         </span>
         <span className="min-w-0 flex-1">
-          <small className="block text-[7px] font-bold uppercase tracking-[0.14em] text-[#EED56D]">
+          <small className="block text-xs font-bold uppercase tracking-[0.14em] text-[#EED56D]">
             Phac do tu ky su
           </small>
-          <b className="mt-1 block text-[11px] leading-snug">{regimen.title}</b>
-          <p className="mt-2 text-[8px] leading-relaxed text-white/70">
+          <b className="mt-1 block text-xs leading-snug">{regimen.title}</b>
+          <p className="mt-2 text-xs leading-relaxed text-white/70">
             {regimen.diagnosis}
           </p>
         </span>
@@ -666,7 +666,7 @@ function RegimenBubble({
           style={{ width: `${progress}%` }}
         />
       </div>
-      <div className="mt-2 flex items-center justify-between text-[7px] font-bold text-white/60">
+      <div className="mt-2 flex items-center justify-between text-xs font-bold text-white/60">
         <span>{completedCount}/{regimen.steps.length} buoc da lam</span>
         <span>Tai kham: {regimen.followUpDate}</span>
       </div>
@@ -681,14 +681,14 @@ function RegimenBubble({
             }`}
           >
             {step.completed ? <Check size={14} /> : <Circle size={14} />}
-            <b className="shrink-0 text-[8px]">Ngay {step.day}</b>
-            <span className="min-w-0 flex-1 text-[8px] leading-relaxed">
+            <b className="shrink-0 text-xs">Ngay {step.day}</b>
+            <span className="min-w-0 flex-1 text-xs leading-relaxed">
               {step.task}
             </span>
           </button>
         ))}
       </div>
-      <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-[8px] leading-relaxed text-white/72">
+      <p className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-xs leading-relaxed text-white/72">
         Muc tieu: {regimen.expectedOutcome}
       </p>
     </article>
@@ -744,10 +744,10 @@ function Composer({
             style={{ backgroundImage: `url(${attachment.preview})` }}
           />
           <span className="min-w-0 flex-1">
-            <b className="block truncate text-[9px] text-neutral-700">
+            <b className="block truncate text-xs text-neutral-700">
               {attachment.name}
             </b>
-            <small className="mt-1 block text-[7px] text-neutral-400">
+            <small className="mt-1 block text-xs text-neutral-400">
               {mode === "AI"
                 ? "Ảnh sẽ được đưa vào phiên phân tích mô phỏng"
                 : "Ảnh sẽ đi cùng hồ sơ cứu trợ"}
@@ -797,7 +797,7 @@ function Composer({
                 ? "Hỏi về lá bệnh, tưới nước, dinh dưỡng..."
                 : "Mô tả dấu hiệu bất thường cần kỹ sư hỗ trợ..."
             }
-            className="max-h-28 min-h-10 flex-1 resize-none bg-transparent py-3 text-[10px] leading-relaxed text-neutral-900 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed"
+            className="max-h-28 min-h-10 flex-1 resize-none bg-transparent py-3 text-xs leading-relaxed text-neutral-900 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed"
           />
           <Paperclip size={14} className="mb-3 text-neutral-300" />
         </div>
@@ -810,7 +810,7 @@ function Composer({
           <Send size={16} />
         </button>
       </form>
-      <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[7px] text-neutral-400">
+      <div className="mt-2 flex items-center justify-between gap-3 px-1 text-xs text-neutral-400">
         <span>Enter để gửi • Shift + Enter để xuống dòng</span>
         <span className="inline-flex items-center gap-1 text-emerald-600">
           <CircleDot size={10} />
@@ -841,7 +841,7 @@ function ZoneContext({
         <select
           value={selectedZoneId}
           onChange={(event) => onSelect(event.target.value)}
-          className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-white pl-9 pr-8 text-[9px] font-bold text-neutral-700 outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+          className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-white pl-9 pr-8 text-xs font-bold text-neutral-700 outline-none transition-all duration-200 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
         >
           {zones.map((zone) => (
             <option key={zone.id} value={zone.id}>
@@ -855,10 +855,10 @@ function ZoneContext({
         />
       </label>
       <div className="rounded-xl bg-[#f3f6f2] px-3 py-2">
-        <small className="block text-[7px] font-bold uppercase tracking-[0.12em] text-neutral-400">
+        <small className="block text-xs font-bold uppercase tracking-[0.12em] text-neutral-400">
           IoT snapshot • {selectedZone.crop}
         </small>
-        <b className="mt-1 block text-[8px] text-neutral-700">
+        <b className="mt-1 block text-xs text-neutral-700">
           {selectedZone.snapshot}
         </b>
       </div>
@@ -919,7 +919,8 @@ export function FarmerChatWorkspace() {
 
   const sendMessage = () => {
     const prompt = currentDraft.trim();
-    const hasAttachment = currentAttachment !== null;
+    const attachment = currentAttachment;
+    const hasAttachment = attachment !== null;
     if (!prompt && !hasAttachment) return;
 
     dispatch({ type: "SEND_OWNER_MESSAGE", mode: state.mode });
@@ -950,14 +951,14 @@ export function FarmerChatWorkspace() {
       <section className="grid-pattern overflow-hidden rounded-[26px] bg-[#294f3b] p-6 text-white sm:p-7">
         <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.2em] text-[#EED56D]">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#EED56D]">
               <MessageCircleMore size={13} />
               Farmer support workspace
             </div>
             <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
               Hỏi nhanh AI, kết nối đúng kỹ sư
             </h1>
-            <p className="mt-2 text-[10px] leading-relaxed text-[#d0ddd4] sm:text-[11px]">
+            <p className="mt-2 text-xs leading-relaxed text-[#d0ddd4] sm:text-xs">
               Một nơi duy nhất để sàng lọc tình trạng vườn 24/7 hoặc lập hồ sơ
               cứu trợ có ảnh, phân khu và snapshot IoT.
             </p>
@@ -969,8 +970,8 @@ export function FarmerChatWorkspace() {
                 className="min-w-24 rounded-xl border border-white/10 bg-white/[.08] px-3 py-3"
               >
                 <Icon size={14} className="text-[#EED56D]" />
-                <b className="mt-3 block text-[12px] tracking-tight">{value}</b>
-                <small className="mt-1 block text-[7px] text-white/55">
+                <b className="mt-3 block text-xs tracking-tight">{value}</b>
+                <small className="mt-1 block text-xs text-white/55">
                   {label}
                 </small>
               </div>
@@ -1009,10 +1010,10 @@ export function FarmerChatWorkspace() {
                   <Icon size={19} />
                 </span>
                 <span>
-                  <b className="block text-[11px] text-neutral-900">
+                  <b className="block text-xs text-neutral-900">
                     {meta.title}
                   </b>
-                  <small className="mt-1 block text-[8px] text-neutral-500">
+                  <small className="mt-1 block text-xs text-neutral-500">
                     {meta.description}
                   </small>
                 </span>
@@ -1035,12 +1036,12 @@ export function FarmerChatWorkspace() {
                   <i className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white bg-emerald-500" />
                 </span>
                 <span>
-                  <b className="block text-[11px] text-neutral-900">
+                  <b className="block text-xs text-neutral-900">
                     {state.mode === "AI"
                       ? "Durian AI Assistant"
                       : "Phòng cứu trợ Minh Phát"}
                   </b>
-                  <small className="mt-1 flex items-center gap-1 text-[7px] text-neutral-400">
+                  <small className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
                     <CircleDot size={9} />
                     {state.mode === "AI"
                       ? "Mô phỏng LLM • không gửi dữ liệu ra ngoài"
@@ -1049,7 +1050,7 @@ export function FarmerChatWorkspace() {
                 </span>
               </div>
               {false && (
-                <span className="rounded-full bg-amber-50 px-2.5 py-1.5 text-[7px] font-bold text-amber-700 ring-1 ring-amber-100">
+                <span className="rounded-full bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-amber-100">
                   Chờ phân công
                 </span>
               )}
@@ -1094,27 +1095,27 @@ export function FarmerChatWorkspace() {
           <aside className="bg-[#fbfcfa] p-4 sm:p-5">
             <div className="flex items-center gap-2">
               <Sprout size={15} className="text-[#2E5A44]" />
-              <b className="text-[10px] text-neutral-900">
+              <b className="text-xs text-neutral-900">
                 Ngữ cảnh đang chia sẻ
               </b>
             </div>
             <div className="mt-4 space-y-3">
               <article className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                <small className="text-[7px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                <small className="text-xs font-bold uppercase tracking-[0.14em] text-neutral-400">
                   Phân khu
                 </small>
-                <b className="mt-2 block text-[10px] text-neutral-900">
+                <b className="mt-2 block text-xs text-neutral-900">
                   {selectedZone.name}
                 </b>
-                <p className="mt-1 text-[8px] leading-relaxed text-neutral-500">
+                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                   {selectedZone.crop}
                 </p>
               </article>
               <article className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-                <small className="text-[7px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                <small className="text-xs font-bold uppercase tracking-[0.14em] text-neutral-400">
                   Chỉ số gần nhất
                 </small>
-                <p className="mt-2 text-[9px] font-semibold leading-relaxed text-[#2E5A44]">
+                <p className="mt-2 text-xs font-semibold leading-relaxed text-[#2E5A44]">
                   {selectedZone.snapshot}
                 </p>
               </article>
@@ -1122,9 +1123,9 @@ export function FarmerChatWorkspace() {
                 <article className="rounded-2xl border border-[#d8c067] bg-[#fff9dc] p-4 shadow-sm">
                   <div className="flex items-center gap-2 text-[#2E5A44]">
                     <CalendarDays size={15} />
-                    <b className="text-[10px]">Theo doi phac do</b>
+                    <b className="text-xs">Theo doi phac do</b>
                   </div>
-                  <p className="mt-2 text-[9px] font-semibold leading-relaxed text-neutral-800">
+                  <p className="mt-2 text-xs font-semibold leading-relaxed text-neutral-800">
                     {currentRegimen.title}
                   </p>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white">
@@ -1133,15 +1134,15 @@ export function FarmerChatWorkspace() {
                       style={{ width: `${regimenProgress}%` }}
                     />
                   </div>
-                  <small className="mt-2 block text-[7px] font-bold text-[#6a5a1d]">
+                  <small className="mt-2 block text-xs font-bold text-[#6a5a1d]">
                     {regimenProgress}% hoan thanh
                   </small>
                   {nextRegimenStep ? (
-                    <p className="mt-2 text-[8px] leading-relaxed text-neutral-600">
+                    <p className="mt-2 text-xs leading-relaxed text-neutral-600">
                       Tiep theo: ngay {nextRegimenStep.day} - {nextRegimenStep.task}
                     </p>
                   ) : (
-                    <p className="mt-2 text-[8px] leading-relaxed text-emerald-700">
+                    <p className="mt-2 text-xs leading-relaxed text-emerald-700">
                       Tat ca buoc trong phac do da duoc danh dau hoan thanh.
                     </p>
                   )}
@@ -1149,10 +1150,10 @@ export function FarmerChatWorkspace() {
               )}
               <article className="rounded-2xl bg-[#2E5A44] p-4 text-white">
                 <Leaf size={18} className="text-[#EED56D]" />
-                <b className="mt-4 block text-[10px]">
+                <b className="mt-4 block text-xs">
                   Ranh giới tư vấn an toàn
                 </b>
-                <p className="mt-2 text-[8px] leading-relaxed text-[#d4dfd7]">
+                <p className="mt-2 text-xs leading-relaxed text-[#d4dfd7]">
                   AI chỉ hỗ trợ sàng lọc. Phác đồ thuốc, liều lượng và can thiệp
                   thiết bị phải được kỹ sư có quyền xác nhận.
                 </p>
@@ -1181,7 +1182,7 @@ export function FarmerChatWorkspace() {
             <div className="flex min-h-[720px] min-w-0 flex-col bg-white">
               <header className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-[#EED56D] text-[10px] font-extrabold text-[#2E5A44]">
+                  <span className="relative grid size-10 shrink-0 place-items-center rounded-xl bg-[#EED56D] text-xs font-extrabold text-[#2E5A44]">
                     {activeExpertConversation.engineerInitials}
                     <i
                       className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white ${
@@ -1193,12 +1194,12 @@ export function FarmerChatWorkspace() {
                   </span>
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-2">
-                      <b className="truncate text-[11px] text-neutral-900">
+                      <b className="truncate text-xs text-neutral-900">
                         {activeExpertConversation.engineerName}
                       </b>
                       <StatusPill status={activeExpertConversation.status} />
                     </span>
-                    <small className="mt-1 flex items-center gap-1 truncate text-[7px] text-neutral-400">
+                    <small className="mt-1 flex items-center gap-1 truncate text-xs text-neutral-400">
                       <MapPin size={10} />
                       {activeExpertConversation.zone} - {activeExpertConversation.specialty}
                     </small>
@@ -1206,7 +1207,7 @@ export function FarmerChatWorkspace() {
                 </div>
                 <button
                   type="button"
-                  className="hidden items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-2 text-[8px] font-bold text-neutral-600 transition-all duration-200 hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] sm:inline-flex"
+                  className="hidden items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-2 text-xs font-bold text-neutral-600 transition-all duration-200 hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] sm:inline-flex"
                 >
                   <UserRoundCheck size={13} />
                   Ho so ky su
@@ -1223,14 +1224,14 @@ export function FarmerChatWorkspace() {
                 <div className="border-b border-neutral-100 bg-[#fff9dc] px-4 py-3 sm:px-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <small className="text-[7px] font-bold uppercase tracking-[0.14em] text-[#6a5a1d]">
+                      <small className="text-xs font-bold uppercase tracking-[0.14em] text-[#6a5a1d]">
                         Theo doi phac do
                       </small>
-                      <p className="mt-1 truncate text-[9px] font-bold text-neutral-900">
+                      <p className="mt-1 truncate text-xs font-bold text-neutral-900">
                         {currentRegimen.title}
                       </p>
                     </div>
-                    <span className="text-[8px] font-bold text-[#2E5A44]">
+                    <span className="text-xs font-bold text-[#2E5A44]">
                       {regimenProgress}% hoan thanh
                     </span>
                   </div>
@@ -1241,7 +1242,7 @@ export function FarmerChatWorkspace() {
                     />
                   </div>
                   {nextRegimenStep && (
-                    <p className="mt-2 text-[8px] leading-relaxed text-neutral-600">
+                    <p className="mt-2 text-xs leading-relaxed text-neutral-600">
                       Tiep theo: ngay {nextRegimenStep.day} - {nextRegimenStep.task}
                     </p>
                   )}

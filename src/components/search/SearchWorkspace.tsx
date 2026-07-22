@@ -225,7 +225,7 @@ export function SearchWorkspace({
         <div className="mx-auto max-w-[1500px] px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#eed56d]">
+              <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-[#eed56d]">
                 <Sparkles size={12} />
                 Search module
               </p>
@@ -239,7 +239,7 @@ export function SearchWorkspace({
             </div>
             <Link
               href="/dashboard/client"
-              className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[.07] px-4 py-3 text-[12px] font-bold text-white transition-all duration-200 hover:bg-white/[.12] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#eed56d33] lg:inline-flex"
+              className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[.07] px-4 py-3 text-xs font-bold text-white transition-all duration-200 hover:bg-white/[.12] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#eed56d33] lg:inline-flex"
             >
               <ArrowLeft size={15} />
               Quay lại dashboard
@@ -260,7 +260,7 @@ export function SearchWorkspace({
             >
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
                 <label className="relative block">
-                  <span className="mb-2 flex items-center gap-2 text-[11px] font-bold text-neutral-700">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-bold text-neutral-700">
                     <Search size={13} className="text-[#2E5A44]" />
                     Từ khóa
                   </span>
@@ -285,7 +285,7 @@ export function SearchWorkspace({
                     <button
                       type="button"
                       onClick={clearResults}
-                      className="absolute right-3 top-10 rounded-lg px-2 py-1 text-[11px] font-semibold text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
+                      className="absolute right-3 top-10 rounded-lg px-2 py-1 text-xs font-semibold text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
                     >
                       Xoá
                     </button>
@@ -293,7 +293,7 @@ export function SearchWorkspace({
                 </label>
 
                 <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-[11px] font-bold text-neutral-700">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-bold text-neutral-700">
                     <Filter size={13} className="text-[#2E5A44]" />
                     Loại tài liệu
                   </span>
@@ -319,7 +319,7 @@ export function SearchWorkspace({
                 </label>
 
                 <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-[11px] font-bold text-neutral-700">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-bold text-neutral-700">
                     <ArrowUpDown size={13} className="text-[#2E5A44]" />
                     Sắp xếp
                   </span>
@@ -352,7 +352,7 @@ export function SearchWorkspace({
                 </label>
 
                 <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-[11px] font-bold text-neutral-700">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-bold text-neutral-700">
                     <Table2 size={13} className="text-[#2E5A44]" />
                     Kích thước trang
                   </span>
@@ -379,7 +379,7 @@ export function SearchWorkspace({
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4">
-                <p className="text-[11px] leading-relaxed text-neutral-500">
+                <p className="text-xs leading-relaxed text-neutral-500">
                   Tìm kiếm tự động sau khi dừng gõ, nhưng vẫn hỗ trợ bấm Enter để tìm ngay.
                 </p>
                 <div className="flex items-center gap-2">
@@ -387,14 +387,14 @@ export function SearchWorkspace({
                     <button
                       type="button"
                       onClick={clearResults}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 text-[12px] font-bold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200"
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 text-xs font-bold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200"
                     >
                       Xoá bộ lọc
                     </button>
                   ) : null}
                   <button
                     type="submit"
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-5 text-[12px] font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430]"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-5 text-xs font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430]"
                   >
                     <Search size={15} />
                     Tìm kiếm
@@ -406,7 +406,7 @@ export function SearchWorkspace({
             <section className="panel overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 px-5 py-4 sm:px-6">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#6f7f74]">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#6f7f74]">
                     Kết quả tìm kiếm
                   </p>
                   <h2 className="mt-1 text-lg font-extrabold tracking-tight text-neutral-900">
@@ -414,7 +414,7 @@ export function SearchWorkspace({
                   </h2>
                 </div>
                 {data ? (
-                  <div className="flex items-center gap-2 rounded-full bg-[#f3f7f1] px-3 py-2 text-[11px] font-semibold text-[#4f6759]">
+                  <div className="flex items-center gap-2 rounded-full bg-[#f3f7f1] px-3 py-2 text-xs font-semibold text-[#4f6759]">
                     <Tag size={12} className="text-[#2E5A44]" />
                     {SORT_LABELS[`${data.sortBy}:${data.sortDirection}` as const]}
                   </div>
@@ -447,15 +447,15 @@ export function SearchWorkspace({
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#edf3ee] px-2.5 py-1 text-[10px] font-bold text-[#2E5A44]">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#edf3ee] px-2.5 py-1 text-xs font-bold text-[#2E5A44]">
                               <Sparkles size={11} />
                               {highlightType(result.type)}
                             </span>
-                            <span className="text-[11px] font-medium text-neutral-400">
+                            <span className="text-xs font-medium text-neutral-400">
                               Cập nhật {formatUpdatedAt(result.updatedAt)}
                             </span>
                           </div>
-                          <h3 className="text-[16px] font-extrabold tracking-tight text-neutral-900 group-hover:text-[#2E5A44]">
+                          <h3 className="text-base font-extrabold tracking-tight text-neutral-900 group-hover:text-[#2E5A44]">
                             {result.title}
                           </h3>
                           <p className="max-w-4xl text-[13px] leading-relaxed text-neutral-500">
@@ -463,7 +463,7 @@ export function SearchWorkspace({
                           </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-600">
+                          <span className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-600">
                             ID: {result.id}
                           </span>
                         </div>
@@ -478,7 +478,7 @@ export function SearchWorkspace({
                     <b className="mt-4 block text-[13px] text-neutral-800">
                       {searchTouched ? "Không tìm thấy kết quả" : "Bắt đầu tìm kiếm"}
                     </b>
-                    <p className="mt-2 max-w-md text-[12px] leading-relaxed text-neutral-500">
+                    <p className="mt-2 max-w-md text-xs leading-relaxed text-neutral-500">
                       {searchTouched
                         ? "Thử đổi từ khóa, bộ lọc hoặc kiểu sắp xếp để tìm được nội dung phù hợp hơn."
                         : "Nhập từ khóa để tìm trong kho tài liệu, sau đó lọc thêm theo loại và sắp xếp."}
@@ -487,7 +487,7 @@ export function SearchWorkspace({
                       <button
                         type="button"
                         onClick={clearResults}
-                        className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-[12px] font-semibold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430]"
+                        className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-xs font-semibold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430]"
                       >
                         <X size={14} />
                         Xoá tìm kiếm
@@ -499,7 +499,7 @@ export function SearchWorkspace({
 
               {data && data.totalPages > 0 ? (
                 <div className="flex flex-col gap-3 border-t border-neutral-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-xs text-neutral-500">
                     Trang {data.page + 1} / {data.totalPages} • {data.numberOfElements} mục trên
                     trang
                   </p>
@@ -515,7 +515,7 @@ export function SearchWorkspace({
                           page: Math.max(0, current.page - 1),
                         }));
                       }}
-                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <ArrowLeft size={14} />
                       Trước
@@ -530,7 +530,7 @@ export function SearchWorkspace({
                           setError(null);
                           setFilters((current) => ({ ...current, page }));
                         }}
-                        className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-[12px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418] ${
+                        className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4418] ${
                           page === data.page
                             ? "bg-[#2E5A44] text-white"
                             : "border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
@@ -551,7 +551,7 @@ export function SearchWorkspace({
                           page: Math.min(data.totalPages - 1, current.page + 1),
                         }));
                       }}
-                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Sau
                       <ArrowRight size={14} />
@@ -572,7 +572,7 @@ export function SearchWorkspace({
                   <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
                     Bộ lọc hiện tại
                   </h2>
-                  <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                     Mọi tham số đang được gửi đúng sang endpoint tìm kiếm.
                   </p>
                 </div>
@@ -592,8 +592,8 @@ export function SearchWorkspace({
                     key={String(label)}
                     className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3"
                   >
-                    <dt className="text-[11px] font-semibold text-neutral-500">{label}</dt>
-                    <dd className="max-w-[180px] text-right text-[12px] font-semibold text-neutral-900">
+                    <dt className="text-xs font-semibold text-neutral-500">{label}</dt>
+                    <dd className="max-w-[180px] text-right text-xs font-semibold text-neutral-900">
                       {value}
                     </dd>
                   </div>
@@ -610,7 +610,7 @@ export function SearchWorkspace({
                   <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
                     Gợi ý lọc nhanh
                   </h2>
-                  <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
                     Các kiểu truy vấn phổ biến cho kiến thức canh tác và bệnh hại.
                   </p>
                 </div>
@@ -630,7 +630,7 @@ export function SearchWorkspace({
                       setDraftQuery(keyword);
                       runSearch(keyword);
                     }}
-                    className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left text-[12px] font-semibold text-neutral-700 transition-all duration-200 hover:border-[#c7d7ca] hover:bg-[#f8faf7] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+                    className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left text-xs font-semibold text-neutral-700 transition-all duration-200 hover:border-[#c7d7ca] hover:bg-[#f8faf7] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
                   >
                     <span>{keyword}</span>
                     <Sparkles size={12} className="text-[#2E5A44]" />

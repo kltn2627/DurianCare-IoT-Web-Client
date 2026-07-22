@@ -22,7 +22,7 @@ export function DiseasePieChart() {
           <div key={item.name} className="grid grid-cols-[10px_1fr_auto] items-center gap-4">
             <i className="size-2 rounded-sm" style={{ background: item.color }} />
             <span><b className="block text-[13px]">{item.label}</b><small className="text-[13px] text-[#8a968e]">{item.name}</small></span>
-            <b className="text-[14px]">{item.value}%</b>
+            <b className="text-sm">{item.value}%</b>
           </div>
         ))}
       </div>

@@ -219,13 +219,13 @@ const COVER_TONES: Record<string, string> = {
 };
 
 const inputClass =
-  "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-[11px] text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414] disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400";
+  "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-xs text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414] disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400";
 
 function StatusBadge({ status }: { status: KnowledgeStatus }) {
   const meta = STATUS_META[status];
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-1 text-[7px] font-bold ring-1 ${meta.className}`}
+      className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ring-1 ${meta.className}`}
     >
       {meta.label}
     </span>
@@ -248,7 +248,7 @@ function CategoryRail({
           type="button"
           key={category}
           onClick={() => onSelect(category)}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-[9px] font-bold transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-50 ${
             selected === category
               ? "border-[#2E5A44] bg-[#2E5A44] text-white"
               : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
@@ -256,7 +256,7 @@ function CategoryRail({
         >
           {category}
           <span
-            className={`rounded-full px-1.5 py-0.5 text-[7px] ${
+            className={`rounded-full px-1.5 py-0.5 text-xs ${
               selected === category
                 ? "bg-white/15 text-white"
                 : "bg-neutral-100 text-neutral-500"
@@ -285,7 +285,7 @@ function ArticleTable({
     <div className="overflow-x-auto scrollbar-thin">
       <table className="w-full min-w-[760px] border-collapse text-left">
         <thead>
-          <tr className="border-y border-neutral-100 bg-neutral-50 text-[7px] uppercase tracking-[0.12em] text-neutral-400">
+          <tr className="border-y border-neutral-100 bg-neutral-50 text-xs uppercase tracking-[0.12em] text-neutral-400">
             <th className="px-4 py-3">Bài viết</th>
             <th className="px-3 py-3">Tác giả</th>
             <th className="px-3 py-3">Ngày đăng</th>
@@ -326,7 +326,7 @@ function ArticleTable({
                   </span>
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5">
-                      <b className="truncate text-[10px] tracking-tight text-neutral-900 group-hover:text-[#2E5A44]">
+                      <b className="truncate text-xs tracking-tight text-neutral-900 group-hover:text-[#2E5A44]">
                         {article.title}
                       </b>
                       {article.featured && (
@@ -336,19 +336,19 @@ function ArticleTable({
                         />
                       )}
                     </span>
-                    <small className="mt-1 block truncate text-[7px] text-neutral-400">
+                    <small className="mt-1 block truncate text-xs text-neutral-400">
                       {article.category} • {article.id}
                     </small>
                   </span>
                 </button>
               </td>
-              <td className="px-3 py-3.5 text-[8px] font-medium text-neutral-600">
+              <td className="px-3 py-3.5 text-xs font-medium text-neutral-600">
                 {article.author}
               </td>
-              <td className="px-3 py-3.5 text-[8px] text-neutral-500">
+              <td className="px-3 py-3.5 text-xs text-neutral-500">
                 {article.publishedAt}
               </td>
-              <td className="px-3 py-3.5 text-right text-[9px] font-bold tabular-nums text-neutral-700">
+              <td className="px-3 py-3.5 text-right text-xs font-bold tabular-nums text-neutral-700">
                 {article.views.toLocaleString("vi-VN")}
               </td>
               <td className="px-3 py-3.5">
@@ -384,10 +384,10 @@ function ArticleTable({
         <div className="grid min-h-64 place-items-center text-center">
           <span>
             <Search className="mx-auto text-neutral-300" size={28} />
-            <b className="mt-3 block text-[11px] text-neutral-700">
+            <b className="mt-3 block text-xs text-neutral-700">
               Không tìm thấy bài viết
             </b>
-            <p className="mt-1 text-[8px] text-neutral-400">
+            <p className="mt-1 text-xs text-neutral-400">
               Thử đổi danh mục hoặc từ khóa tìm kiếm.
             </p>
           </span>
@@ -405,7 +405,7 @@ function EditorFieldLabel({
   optional?: boolean;
 }) {
   return (
-    <span className="mb-2 flex items-center justify-between text-[9px] font-bold text-neutral-700">
+    <span className="mb-2 flex items-center justify-between text-xs font-bold text-neutral-700">
       {children}
       {optional && (
         <small className="font-medium text-neutral-400">Không bắt buộc</small>
@@ -461,13 +461,13 @@ function ArticleEditor({
     <section className="panel self-start overflow-hidden xl:sticky xl:top-24">
       <div className="flex items-start justify-between gap-4 border-b border-neutral-100 bg-[#294f3b] px-5 py-4 text-white">
         <span>
-          <small className="text-[8px] font-bold uppercase tracking-[0.18em] text-[#EED56D]">
+          <small className="text-xs font-bold uppercase tracking-[0.18em] text-[#EED56D]">
             Editorial desk
           </small>
           <h2 className="mt-1 text-base font-bold tracking-tight">
             {editor.id ? "Chỉnh sửa bài viết" : "Soạn bài kỹ thuật mới"}
           </h2>
-          <p className="mt-1 text-[8px] leading-relaxed text-white/60">
+          <p className="mt-1 text-xs leading-relaxed text-white/60">
             {editor.id ?? "Chưa cấp mã bài viết"}
           </p>
         </span>
@@ -483,7 +483,7 @@ function ArticleEditor({
         className="space-y-4 p-5"
       >
         {saveNotice && (
-          <div className="flex items-start justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[8px] font-bold leading-relaxed text-emerald-700">
+          <div className="flex items-start justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-bold leading-relaxed text-emerald-700">
             <span className="flex gap-2">
               <Check size={13} className="mt-0.5 shrink-0" />
               {saveNotice}
@@ -551,7 +551,7 @@ function ArticleEditor({
               style={{ backgroundImage: `url(${editor.coverPreview})` }}
             >
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/75 to-transparent px-3 pb-3 pt-8 text-white">
-                <small className="max-w-[220px] truncate text-[8px]">
+                <small className="max-w-[220px] truncate text-xs">
                   {editor.coverFileName ?? "Ảnh đại diện hiện tại"}
                 </small>
                 <button
@@ -575,10 +575,10 @@ function ArticleEditor({
                   size={22}
                   className="mx-auto text-[#5b7866]"
                 />
-                <b className="mt-2 block text-[9px] text-neutral-700">
+                <b className="mt-2 block text-xs text-neutral-700">
                   Tải ảnh bìa kỹ thuật
                 </b>
-                <small className="mt-1 block text-[7px] text-neutral-400">
+                <small className="mt-1 block text-xs text-neutral-400">
                   PNG, JPG hoặc WEBP • Preview cục bộ
                 </small>
               </span>
@@ -588,7 +588,7 @@ function ArticleEditor({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[8px] font-bold text-[#2E5A44] transition-colors hover:bg-[#edf3ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold text-[#2E5A44] transition-colors hover:bg-[#edf3ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
             >
               <UploadCloud size={12} />
               Thay ảnh
@@ -604,7 +604,7 @@ function ArticleEditor({
             value={editor.excerpt}
             onChange={(event) => update("excerpt", event.target.value)}
             placeholder="Tóm tắt giá trị kỹ thuật của bài viết..."
-            className="w-full resize-none rounded-xl border border-neutral-200 p-3 text-[10px] leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+            className="w-full resize-none rounded-xl border border-neutral-200 p-3 text-xs leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           />
         </label>
 
@@ -616,16 +616,16 @@ function ArticleEditor({
             value={editor.content}
             onChange={(event) => update("content", event.target.value)}
             placeholder="Trình bày quy trình, ngưỡng kỹ thuật và lưu ý an toàn..."
-            className="w-full resize-y rounded-xl border border-neutral-200 p-3 text-[10px] leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
+            className="w-full resize-y rounded-xl border border-neutral-200 p-3 text-xs leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           />
         </label>
 
         <label className="flex items-center justify-between rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5">
           <span>
-            <b className="block text-[9px] text-neutral-800">
+            <b className="block text-xs text-neutral-800">
               Ghim vào nội dung nổi bật
             </b>
-            <small className="mt-1 block text-[7px] text-neutral-400">
+            <small className="mt-1 block text-xs text-neutral-400">
               Ưu tiên trên trang kiến thức nông nghiệp
             </small>
           </span>
@@ -645,7 +645,7 @@ function ArticleEditor({
               event.preventDefault();
               dispatch({ type: "SAVE_ARTICLE", status: "DRAFT" });
             }}
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white text-[9px] font-bold text-neutral-700 transition-all duration-200 ease-in-out hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white text-xs font-bold text-neutral-700 transition-all duration-200 ease-in-out hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
           >
             <FilePenLine size={13} />
             Lưu nháp
@@ -653,7 +653,7 @@ function ArticleEditor({
           <button
             type="submit"
             disabled={!editor.title.trim() || !editor.content.trim()}
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#2E5A44] text-[9px] font-bold text-white transition-all duration-200 ease-in-out hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#2E5A44] text-xs font-bold text-white transition-all duration-200 ease-in-out hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
           >
             {role === "ADMIN" ? <Send size={13} /> : <Check size={13} />}
             {role === "ADMIN" ? "Duyệt & xuất bản" : "Gửi Admin duyệt"}
@@ -708,14 +708,14 @@ export function KnowledgeWorkspace({
       <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-6 text-white sm:p-7">
         <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.2em] text-[#EED56D]">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-[#EED56D]">
               <BookOpenText size={13} />
               DurianCare knowledge desk
             </div>
             <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
               Quản lý kiến thức nông nghiệp
             </h1>
-            <p className="mt-2 text-[10px] leading-relaxed text-[#d0ddd4] sm:text-[11px]">
+            <p className="mt-2 text-xs leading-relaxed text-[#d0ddd4] sm:text-xs">
               Biên tập hướng dẫn kỹ thuật sầu riêng, kiểm soát danh mục và theo
               dõi mức độ tiếp cận của cộng đồng nhà vườn.
             </p>
@@ -733,10 +733,10 @@ export function KnowledgeWorkspace({
                   className="min-w-24 rounded-xl border border-white/10 bg-white/[.08] px-3 py-3"
                 >
                   <MetricIcon size={14} className="text-[#EED56D]" />
-                  <b className="mt-3 block text-[12px] tracking-tight">
+                  <b className="mt-3 block text-xs tracking-tight">
                     {String(value)}
                   </b>
-                  <small className="mt-1 block text-[7px] text-white/55">
+                  <small className="mt-1 block text-xs text-white/55">
                     {String(label)}
                   </small>
                 </div>
@@ -751,7 +751,7 @@ export function KnowledgeWorkspace({
           <div className="space-y-4 border-b border-neutral-100 p-4 sm:p-5">
             <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
               <span>
-                <small className="text-[8px] font-bold uppercase tracking-[0.18em] text-[#6a806f]">
+                <small className="text-xs font-bold uppercase tracking-[0.18em] text-[#6a806f]">
                   Content inventory
                 </small>
                 <h2 className="mt-1 text-base font-bold tracking-tight text-neutral-900">
@@ -776,7 +776,7 @@ export function KnowledgeWorkspace({
                 <button
                   type="button"
                   onClick={() => dispatch({ type: "NEW_ARTICLE" })}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#EED56D] px-3 text-[9px] font-bold text-[#294f3b] transition-all duration-200 ease-in-out hover:bg-[#e5c95b] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#EED56D55]"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#EED56D] px-3 text-xs font-bold text-[#294f3b] transition-all duration-200 ease-in-out hover:bg-[#e5c95b] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#EED56D55]"
                 >
                   <Plus size={14} />
                   Bài mới
@@ -811,7 +811,7 @@ export function KnowledgeWorkspace({
                 : undefined
             }
           />
-          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 text-[8px] text-neutral-400">
+          <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 text-xs text-neutral-400">
             <span>{filteredArticles.length} bài viết phù hợp</span>
             <button
               type="button"
@@ -838,10 +838,10 @@ export function KnowledgeWorkspace({
             <Pencil size={16} />
           </span>
           <span>
-            <b className="block text-[10px] text-neutral-900">
+            <b className="block text-xs text-neutral-900">
               Quy trình biên tập
             </b>
-            <p className="mt-1 text-[8px] leading-relaxed text-neutral-500">
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
               Bản nháp và bài chờ duyệt được giữ trong workspace. Khi nối API,
               reducer hiện tại có thể ánh xạ trực tiếp sang mutation và cache
               invalidation.
@@ -853,10 +853,10 @@ export function KnowledgeWorkspace({
             <UploadCloud size={16} />
           </span>
           <span>
-            <b className="block text-[10px] text-neutral-900">
+            <b className="block text-xs text-neutral-900">
               Ảnh hiện chỉ preview cục bộ
             </b>
-            <p className="mt-1 text-[8px] leading-relaxed text-neutral-500">
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
               Không có request upload ra ngoài. FileReader tạo bản xem trước và
               sẵn sàng thay bằng file-service khi backend được tích hợp.
             </p>

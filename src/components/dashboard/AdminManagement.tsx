@@ -202,7 +202,7 @@ export function AdminManagement() {
             key={filter.value || "all"}
             type="button"
             onClick={() => setStatusFilter(filter.value)}
-            className={`rounded-full px-4 py-2 text-[12px] font-bold transition ${
+            className={`rounded-full px-4 py-2 text-xs font-bold transition ${
               statusFilter === filter.value
                 ? "bg-[#2E5A44] text-white"
                 : "border border-[#d8e1d8] bg-white text-neutral-700 hover:bg-[#f8fbf8]"
@@ -214,7 +214,7 @@ export function AdminManagement() {
       </div>
 
       {error ? (
-        <p role="alert" className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-700">
+        <p role="alert" className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
           {error}
         </p>
       ) : null}
@@ -222,8 +222,8 @@ export function AdminManagement() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[.95fr_1.05fr]">
         <div className="rounded-[24px] border border-[#e1e6df] bg-white p-4">
           <div className="flex items-center justify-between px-2 pb-4">
-            <b className="text-[14px] text-[#203329]">Danh sách hồ sơ</b>
-            <span className="text-[12px] text-neutral-500">{applications.length} hồ sơ</span>
+            <b className="text-sm text-[#203329]">Danh sách hồ sơ</b>
+            <span className="text-xs text-neutral-500">{applications.length} hồ sơ</span>
           </div>
 
           <div className="max-h-[720px] space-y-3 overflow-auto pr-1">
@@ -251,14 +251,14 @@ export function AdminManagement() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <b className="block text-[14px] text-[#203329]">{application.fullName}</b>
-                        <small className="mt-1 block text-[12px] text-neutral-500">
+                        <b className="block text-sm text-[#203329]">{application.fullName}</b>
+                        <small className="mt-1 block text-xs text-neutral-500">
                           {application.email}
                         </small>
                       </div>
                       <StatusBadge status={application.status} />
                     </div>
-                    <div className="mt-3 grid gap-2 text-[12px] text-neutral-600">
+                    <div className="mt-3 grid gap-2 text-xs text-neutral-600">
                       <span>Chuyên môn: {application.specialization}</span>
                       <span>Nơi công tác: {application.workplace}</span>
                       <span>Kinh nghiệm: {application.yearsExperience} năm</span>
@@ -277,7 +277,7 @@ export function AdminManagement() {
             <div className="space-y-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-[18px] font-extrabold text-[#203329]">{detail.fullName}</h3>
+                  <h3 className="text-lg font-extrabold text-[#203329]">{detail.fullName}</h3>
                   <p className="mt-1 text-[13px] text-neutral-500">{detail.email}</p>
                 </div>
                 <StatusBadge status={detail.status} />
@@ -291,14 +291,14 @@ export function AdminManagement() {
               </div>
 
               <div className="rounded-2xl border border-[#e7ece6] bg-[#fafcf9] p-5">
-                <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">
+                <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
                   Giới thiệu chuyên môn
                 </p>
-                <p className="mt-3 text-[14px] leading-7 text-neutral-700">{detail.biography}</p>
+                <p className="mt-3 text-sm leading-7 text-neutral-700">{detail.biography}</p>
               </div>
 
               <div className="rounded-2xl border border-[#e7ece6] bg-[#fafcf9] p-5">
-                <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">
+                <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
                   Tài liệu đính kèm
                 </p>
                 <div className="mt-4 space-y-3">
@@ -315,7 +315,7 @@ export function AdminManagement() {
                       >
                         <span className="min-w-0">
                           <b className="block truncate text-[13px] text-[#203329]">{document.fileName}</b>
-                          <small className="mt-1 block text-[11px] text-neutral-500">
+                          <small className="mt-1 block text-xs text-neutral-500">
                             {document.contentType} • {(document.fileSize / (1024 * 1024)).toFixed(1)} MB
                           </small>
                         </span>
@@ -328,10 +328,10 @@ export function AdminManagement() {
 
               {detail.status === "REJECTED" ? (
                 <div className="rounded-2xl border border-[#f2ddd6] bg-[#fff5f1] p-5">
-                  <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#9a5a46]">
+                  <p className="text-xs font-bold uppercase tracking-[1.2px] text-[#9a5a46]">
                     Lý do từ chối
                   </p>
-                  <p className="mt-3 text-[14px] leading-7 text-[#8d5140]">
+                  <p className="mt-3 text-sm leading-7 text-[#8d5140]">
                     {detail.rejectionReason ?? "Chưa ghi nhận lý do."}
                   </p>
                 </div>
@@ -340,7 +340,7 @@ export function AdminManagement() {
               {detail.status === "PENDING_REVIEW" ? (
                 <div className="space-y-4 rounded-2xl border border-[#e7ece6] bg-white p-5">
                   <label className="block">
-                    <span className="mb-2 block text-[11px] font-bold text-neutral-700">
+                    <span className="mb-2 block text-xs font-bold text-neutral-700">
                       Ghi chú từ chối (không bắt buộc)
                     </span>
                     <textarea
@@ -384,7 +384,7 @@ export function AdminManagement() {
                 </div>
               ) : null}
 
-              <div className="text-[12px] text-neutral-500">
+              <div className="text-xs text-neutral-500">
                 <Link href="/dashboard/admin" className="font-bold text-[#2E5A44] hover:underline">
                   Quay lại bảng điều khiển
                 </Link>
@@ -411,7 +411,7 @@ function StatusBadge({ status }: { status: string }) {
         ? "bg-[#f7e9e4] text-[#94523d]"
         : "bg-[#fbf1ca] text-[#7c6116]";
   return (
-    <span className={`rounded-full px-3 py-1.5 text-[12px] font-bold ${tone}`}>
+    <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${tone}`}>
       {status === "APPROVED"
         ? "Đã duyệt"
         : status === "REJECTED"
@@ -424,8 +424,8 @@ function StatusBadge({ status }: { status: string }) {
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[#e7ece6] bg-white px-4 py-4">
-      <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
-      <b className="mt-2 block text-[14px] text-[#203329]">{value}</b>
+      <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
+      <b className="mt-2 block text-sm text-[#203329]">{value}</b>
     </div>
   );
 }
@@ -453,7 +453,7 @@ function EmptyState({
       <span className="grid size-11 place-items-center rounded-full bg-[#edf3ee] text-[#2E5A44]">
         {icon}
       </span>
-      <b className="mt-4 text-[14px] text-[#203329]">{title}</b>
+      <b className="mt-4 text-sm text-[#203329]">{title}</b>
       <p className="mt-2 max-w-sm text-[13px] leading-6 text-neutral-500">{message}</p>
     </div>
   );

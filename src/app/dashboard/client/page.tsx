@@ -4,11 +4,13 @@ import {
   BookOpenText,
   Bot,
   CalendarDays,
+  MapPinned,
   MessageCircleMore,
   ScanSearch,
   ShieldCheck,
   Sprout,
   ThermometerSun,
+  UsersRound,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
@@ -24,8 +26,15 @@ const featureLinks = [
     icon: ThermometerSun,
   },
   {
+    href: "/dashboard/client/cultivation-zones",
+    title: "Khu canh tác",
+    subtitle:
+      "Tạo khu canh tác thuộc trang trại, lưu diện tích, giống cây, ngày trồng và lịch sử thu hoạch.",
+    icon: MapPinned,
+  },
+  {
     href: "/dashboard/client/diagnosis",
-    title: "Nhật ký AI",
+    title: "Phân tích AI",
     subtitle: "Xem lịch sử quét bệnh lá từ Mobile App theo từng gốc cây.",
     icon: ScanSearch,
   },
@@ -38,7 +47,8 @@ const featureLinks = [
   {
     href: "/dashboard/client/calendar",
     title: "Lịch canh tác",
-    subtitle: "Lên lịch rải phân, xịt thuốc, liều lượng, cách ly và ghi chú thực địa.",
+    subtitle:
+      "Lên lịch rải phân, xịt thuốc, liều lượng, cách ly và ghi chú thực địa.",
     icon: CalendarDays,
   },
   {
@@ -46,6 +56,13 @@ const featureLinks = [
     title: "Vụ mùa & QR",
     subtitle: "Quản lý lô thu hoạch và tạo mã truy xuất nguồn gốc công khai.",
     icon: Sprout,
+  },
+  {
+    href: "/dashboard/community",
+    title: "Cộng đồng",
+    subtitle:
+      "Đăng câu hỏi, chia sẻ kinh nghiệm trồng vườn và trao đổi với kỹ sư, nhà vườn khác.",
+    icon: UsersRound,
   },
   {
     href: "/dashboard/client/chat",
@@ -69,21 +86,27 @@ export default function ClientDashboardPage() {
       <div className="space-y-8">
         <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-8 text-white shadow-xl shadow-[#2e5a4418] lg:flex lg:items-center lg:justify-between lg:p-10">
           <div>
-            <p className="flex items-center gap-4 text-[14px] font-extrabold tracking-[1.5px] text-[#EED56D]">
-              <i className="live-dot size-1.5 rounded-full bg-[#EED56D]" /> TRANG TRẠI MINH PHÁT • 06/06/2026
+            <p className="flex items-center gap-4 text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">
+              <i className="live-dot size-1.5 rounded-full bg-[#EED56D]" />{" "}
+              TRANG TRẠI MINH PHÁT • 06/06/2026
             </p>
-            <h1 className="mt-4 text-2xl font-extrabold sm:text-3xl">Chào buổi sáng, anh Minh.</h1>
-            <p className="mt-2 max-w-xl text-[14px] leading-5 text-[#d2ded5]">
-              Hệ thống IoT vận hành ổn định. Có 3 cảnh báo và 2 yêu cầu hợp tác mới cần xem xét.
+            <h1 className="mt-4 text-2xl font-extrabold sm:text-3xl">
+              Chào buổi sáng, anh Minh.
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-5 text-[#d2ded5]">
+              Hệ thống IoT vận hành ổn định. Có 3 cảnh báo và 2 yêu cầu hợp tác
+              mới cần xem xét.
             </p>
           </div>
           <div className="mt-8 grid grid-cols-2 gap-7 lg:mt-0">
             <div className="rounded-2xl border border-white/10 bg-white/[.08] px-7 py-5">
-              <small className="text-[14px] text-[#c8d6cc]">Thời tiết tại vườn</small>
+              <small className="text-sm text-[#c8d6cc]">
+                Thời tiết tại vườn
+              </small>
               <b className="mt-1 block text-xl">29.3°C</b>
             </div>
             <div className="rounded-2xl bg-[#EED56D] px-7 py-5 text-[#294f3b]">
-              <small className="text-[14px] font-semibold">Sức khỏe vườn</small>
+              <small className="text-sm font-semibold">Sức khỏe vườn</small>
               <b className="mt-1 block text-xl">92%</b>
             </div>
           </div>
@@ -93,13 +116,19 @@ export default function ClientDashboardPage() {
 
         <section className="grid gap-8 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {featureLinks.map(({ href, title, subtitle, icon: Icon }) => (
-            <Link key={href} href={href} className="panel group flex min-h-[170px] flex-col justify-between p-7 transition hover:-translate-y-0.5 hover:border-[#cad9ce] hover:shadow-lg hover:shadow-[#2e5a4412]">
+            <Link
+              key={href}
+              href={href}
+              className="panel group flex min-h-[170px] flex-col justify-between p-7 transition hover:-translate-y-0.5 hover:border-[#cad9ce] hover:shadow-lg hover:shadow-[#2e5a4412]"
+            >
               <span className="grid size-11 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11] transition group-hover:bg-[#2E5A44] group-hover:text-[#EED56D]">
                 <Icon size={20} />
               </span>
               <span>
                 <b className="block text-[13px] text-[#253b2f]">{title}</b>
-                <small className="mt-2 block text-[15px] leading-4 text-[#7d8981]">{subtitle}</small>
+                <small className="mt-2 block text-[15px] leading-4 text-[#7d8981]">
+                  {subtitle}
+                </small>
               </span>
             </Link>
           ))}
@@ -111,8 +140,13 @@ export default function ClientDashboardPage() {
               <Bot size={20} />
             </span>
             <span>
-              <b className="block text-[13px]">Luồng nghiệp vụ đã được tách riêng</b>
-              <small className="mt-1 block text-[15px] text-[#7d8981]">Chọn từng chức năng phía trên hoặc trên thanh điều hướng để thao tác chi tiết.</small>
+              <b className="block text-[13px]">
+                Luồng nghiệp vụ đã được tách riêng
+              </b>
+              <small className="mt-1 block text-[15px] text-[#7d8981]">
+                Chọn từng chức năng phía trên hoặc trên thanh điều hướng để thao
+                tác chi tiết.
+              </small>
             </span>
           </div>
         </section>
@@ -120,5 +154,3 @@ export default function ClientDashboardPage() {
     </DashboardShell>
   );
 }
-
-

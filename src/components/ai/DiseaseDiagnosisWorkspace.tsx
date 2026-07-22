@@ -187,7 +187,7 @@ export function DiseaseDiagnosisWorkspace() {
                 Làm mới
               </button>
               {file ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-[11px] font-bold text-[#2E5A44]">
+                <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
                   <FileImage size={13} />
                   {file.name}
                 </span>
@@ -195,7 +195,7 @@ export function DiseaseDiagnosisWorkspace() {
             </div>
 
             {error ? (
-              <p role="alert" className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] text-red-700">
+              <p role="alert" className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
                 {error}
               </p>
             ) : null}
@@ -307,12 +307,12 @@ export function DiseaseDiagnosisWorkspace() {
               <div key={item.id} className="rounded-2xl border border-[#e3e9e3] bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <b className="block text-[14px] text-[#203329]">{item.fileName}</b>
-                    <small className="mt-1 block text-[12px] text-neutral-500">
+                    <b className="block text-sm text-[#203329]">{item.fileName}</b>
+                    <small className="mt-1 block text-xs text-neutral-500">
                       {new Date(item.createdAt).toLocaleString("vi-VN")}
                     </small>
                   </div>
-                  <span className="rounded-full bg-[#edf3ee] px-3 py-1.5 text-[12px] font-bold text-[#2E5A44]">
+                  <span className="rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
                     {diseaseLabels[item.result.predictedDisease] ??
                       diseaseLabels[normalizeDiseaseKey(item.result.predictedDisease)] ??
                       item.result.predictedDisease}
@@ -343,7 +343,7 @@ function SummaryCard({
       <div className="flex items-center gap-3">
         <span className={`grid size-10 place-items-center rounded-xl bg-[#f6f8f5] ${tone}`}>{icon}</span>
         <span>
-          <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
+          <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
           <b className={`mt-1 block text-[15px] ${tone}`}>{value}</b>
         </span>
       </div>
@@ -362,10 +362,10 @@ function DetailBlock({
 }) {
   return (
     <div className="rounded-[20px] border border-[#e3e9e3] bg-[#fafcf9] p-5">
-      <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">{title}</p>
-      {content ? <p className="mt-3 text-[14px] leading-7 text-neutral-700">{content}</p> : null}
+      <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">{title}</p>
+      {content ? <p className="mt-3 text-sm leading-7 text-neutral-700">{content}</p> : null}
       {items && items.length > 0 ? (
-        <ul className="mt-3 space-y-2 text-[14px] leading-6 text-neutral-700">
+        <ul className="mt-3 space-y-2 text-sm leading-6 text-neutral-700">
           {items.map((item, index) => (
             <li key={`${title}-${index}`} className="flex gap-2">
               <span className="mt-2 size-2 rounded-full bg-[#2E5A44]" />
