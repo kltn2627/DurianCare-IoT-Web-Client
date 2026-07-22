@@ -17,7 +17,7 @@ export default function RegisterPage() {
           </span>
           <span>
             <b className="block text-xl">DurianCare</b>
-            <small className="text-[10px] font-bold tracking-[2.4px] text-[#c7d8cc]">
+            <small className="text-xs font-bold tracking-[2.4px] text-[#c7d8cc]">
               IDENTITY & FARM ACCESS
             </small>
           </span>
@@ -36,7 +36,7 @@ export default function RegisterPage() {
           </p>
           <div className="mt-8 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.07] p-4">
             <Sprout size={20} className="text-[#EED56D]" />
-            <p className="text-[11px] leading-relaxed text-[#d2dfd6]">
+            <p className="text-xs leading-relaxed text-[#d2dfd6]">
               Không hỗ trợ đăng ký công khai vai trò Admin hoặc Guest.
             </p>
           </div>

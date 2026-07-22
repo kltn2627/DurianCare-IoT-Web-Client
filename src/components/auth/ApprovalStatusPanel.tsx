@@ -71,8 +71,8 @@ export function ApprovalStatusPanel() {
   if (!user) {
     return (
       <div className="w-full max-w-2xl rounded-[28px] border border-[#e0e7e0] bg-white p-8 shadow-[0_18px_60px_rgba(35,61,46,0.08)]">
-        <p className="text-[18px] font-extrabold text-[#203329]">Phiên đăng nhập không hợp lệ</p>
-        <p className="mt-3 text-[14px] leading-7 text-neutral-600">
+        <p className="text-lg font-extrabold text-[#203329]">Phiên đăng nhập không hợp lệ</p>
+        <p className="mt-3 text-sm leading-7 text-neutral-600">
           Vui lòng đăng nhập lại để tiếp tục xem trạng thái phê duyệt.
         </p>
         <Link
@@ -91,7 +91,7 @@ export function ApprovalStatusPanel() {
         <div className={`inline-flex items-center gap-3 rounded-2xl border px-4 py-3 ${content.bg} ${content.border}`}>
           <span className={content.tone}>{content.icon}</span>
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[1.6px] text-neutral-500">
+            <p className="text-xs font-bold uppercase tracking-[1.6px] text-neutral-500">
               Trạng thái tài khoản
             </p>
             <h1 className={`mt-1 text-xl font-extrabold ${content.tone}`}>{content.title}</h1>
@@ -144,8 +144,8 @@ export function ApprovalStatusPanel() {
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[#e5ebe5] bg-white px-4 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
-      <p className="mt-1 text-[14px] font-semibold text-neutral-800">{value}</p>
+      <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-neutral-800">{value}</p>
     </div>
   );
 }

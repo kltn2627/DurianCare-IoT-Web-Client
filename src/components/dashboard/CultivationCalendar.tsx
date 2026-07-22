@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import {
@@ -249,7 +249,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-4">
-                <b className="text-[18px] leading-6">
+                <b className="text-lg leading-6">
                   {type.label} • {task.materialName}
                 </b>
                 <span className="rounded-full bg-[#eef3ee] px-2 py-1 text-[13px] font-bold text-[#587161]">
@@ -284,14 +284,14 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
             <button
               onClick={() => updateStatus(task.id, "in-progress")}
               disabled={task.status === "done"}
-              className="rounded-lg border border-[#dfe6df] px-4 py-2 text-[14px] font-bold text-[#607067] disabled:opacity-40"
+              className="rounded-lg border border-[#dfe6df] px-4 py-2 text-sm font-bold text-[#607067] disabled:opacity-40"
             >
               Đang làm
             </button>
             <button
               onClick={() => updateStatus(task.id, "done")}
               disabled={task.status === "done"}
-              className="flex items-center justify-center gap-1 rounded-lg bg-[#2E5A44] px-4 py-2 text-[14px] font-bold text-white disabled:bg-[#aeb8b1]"
+              className="flex items-center justify-center gap-1 rounded-lg bg-[#2E5A44] px-4 py-2 text-sm font-bold text-white disabled:bg-[#aeb8b1]"
             >
               <Check size={13} /> Xong
             </button>
@@ -305,13 +305,13 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
     <div className="space-y-8">
       <section className="grid-pattern rounded-[24px] bg-[#294f3b] p-8 text-white lg:flex lg:items-center lg:justify-between lg:p-10">
         <div>
-          <p className="text-[14px] font-extrabold tracking-[1.5px] text-[#EED56D]">
+          <p className="text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">
             LỊCH CANH TÁC • {actor.toUpperCase()}
           </p>
           <h1 className="mt-4 text-2xl font-extrabold sm:text-3xl">
             Điều phối rải phân, xịt thuốc và chăm sóc vườn
           </h1>
-          <p className="mt-2 max-w-2xl text-[14px] leading-5 text-[#d2ded5]">
+          <p className="mt-2 max-w-2xl text-sm leading-5 text-[#d2ded5]">
             Chủ vườn và kỹ sư đã hợp tác có thể cùng lên lịch vật tư, liều
             lượng, thời gian cách ly và ghi chú thực địa cho từng phân khu.
           </p>
@@ -353,7 +353,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               <Plus size={20} />
             </span>
             <div>
-              <h2 className="text-[20px] font-bold">Tạo lịch canh tác</h2>
+              <h2 className="text-xl font-bold">Tạo lịch canh tác</h2>
               <p className="mt-1 text-[13px] text-[#7e8b83]">
                 Ghi rõ loại việc, tên vật tư, liều lượng, người phụ trách và lưu
                 ý an toàn.
@@ -501,7 +501,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               <CalendarCheck size={20} />
             </span>
             <div>
-              <h2 className="text-[20px] font-bold">Danh sách lịch canh tác</h2>
+              <h2 className="text-xl font-bold">Danh sách lịch canh tác</h2>
               <p className="mt-1 text-[13px] text-[#7e8b83]">
                 Theo dõi tiến độ từng lịch và xác nhận sau khi hoàn tất.
               </p>
@@ -541,7 +541,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
         <div className="mt-7 space-y-10">
           <div>
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-[19px] font-extrabold text-[#2E5A44]">
+              <h3 className="text-xl font-extrabold text-[#2E5A44]">
                 Công việc sắp tới
               </h3>
               <span className="rounded-full bg-[#eef3ee] px-4 py-2 text-[15px] font-bold text-[#587161]">

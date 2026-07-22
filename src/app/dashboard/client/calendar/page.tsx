@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { CultivationCalendar } from "@/components/calendar/CultivationCalendar";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { CultivationCalendarWorkspace } from "@/features/cultivation-calendar/CultivationCalendarWorkspace";
 
 export const metadata: Metadata = {
   title: "Lịch canh tác",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function CultivationCalendarPage() {
   return (
     <DashboardShell role="OWNER">
-      <CultivationCalendar />
+      <CultivationCalendarWorkspace initialView="calendar" />
     </DashboardShell>
   );
 }
