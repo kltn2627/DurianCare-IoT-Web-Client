@@ -112,6 +112,7 @@ export interface PredictionData {
   predictedDisease: string;
   confidence: number;
   confidenceLabel: string;
+  confidenceText: string;
   source: PredictionSource;
   deviceId?: string | null;
   usedDetectionCrop: boolean;
@@ -131,4 +132,5 @@ export interface PredictionErrorBody {
   status: number;
   error: string;
   message: string;
+  detail?: unknown;
 }

@@ -1,5 +1,9 @@
 import { apiFetch } from "@/lib/auth/client";
-import type { PredictionErrorBody, PredictionResponse, PredictionSource } from "./types";
+import type {
+  PredictionErrorBody,
+  PredictionResponse,
+  PredictionSource,
+} from "./types";
 
 export class AiApiError extends Error {
   constructor(
@@ -15,10 +19,22 @@ export class AiApiError extends Error {
 export async function predictLeafDisease(
   image: File,
   source: PredictionSource = "WEB",
+  deviceId?: string | null,
 ): Promise<PredictionResponse> {
+  if (source === "IOT_CAMERA" && !deviceId?.trim()) {
+    throw new AiApiError("Vui lòng nhập mã thiết bị IoT.", 422, {
+      status: 422,
+      error: "Unprocessable Entity",
+      message: "device_id is required when source is IOT_CAMERA",
+    });
+  }
+
   const formData = new FormData();
-  formData.append("image", image);
+  formData.append("image", image, image.name);
   formData.append("source", source);
+  if (source === "IOT_CAMERA" && deviceId?.trim()) {
+    formData.append("device_id", deviceId.trim());
+  }
 
   const response = await apiFetch("/api/v1/predict", {
     method: "POST",
@@ -29,13 +45,7 @@ export async function predictLeafDisease(
   const payload = text ? safeJson(text) : null;
 
   if (!response.ok) {
-    const body = isPredictionError(payload)
-      ? payload
-      : {
-          status: response.status,
-          error: response.statusText || "Request Failed",
-          message: "Không thể thực hiện chẩn đoán hình ảnh.",
-        };
+    const body = normalizePredictionError(payload, response.status, response.statusText);
     throw new AiApiError(body.message, response.status, body);
   }
 
@@ -43,49 +53,71 @@ export async function predictLeafDisease(
 }
 
 function normalizePredictionResponse(payload: unknown): PredictionResponse {
-  const root = payload as Record<string, unknown> | null;
-  const data = (root?.data as Record<string, unknown> | null) ?? null;
-  const recommendation = (data?.recommendation as Record<string, unknown> | null) ?? null;
-  const decisionSupport = (data?.decision_support ??
-    data?.decisionSupport) as Record<string, unknown> | null;
+  const root = isRecord(payload) ? payload : null;
+  const data = isRecord(root?.data) ? root.data : null;
+  const confidenceText = normalizeConfidenceText(data?.confidence);
 
   return {
     status: "success",
     data: {
-      predictedDisease: String(data?.predictedDisease ?? data?.predicted_disease ?? ""),
-      confidence: parseConfidence(data?.confidence),
-      confidenceLabel:
-        typeof data?.confidence === "string"
-          ? data.confidence
-          : `${parseConfidence(data?.confidence).toFixed(2)}%`,
+      predictedDisease: readString(data?.predictedDisease ?? data?.predicted_disease) ?? "",
+      confidence: parseConfidence(confidenceText),
+      confidenceLabel: confidenceText,
+      confidenceText,
       source: (data?.source as PredictionSource) ?? "WEB",
-      deviceId: (data?.deviceId ?? data?.device_id ?? null) as string | null,
+      deviceId: readString(data?.deviceId ?? data?.device_id),
       usedDetectionCrop: Boolean(data?.usedDetectionCrop ?? data?.used_detection_crop),
       boundingBox: parseBoundingBox(data?.boundingBox ?? data?.bounding_box),
       image: parseStoredImage(data?.image),
-      recommendation: recommendation as PredictionResponse["data"]["recommendation"],
-      decisionSupport: decisionSupport as PredictionResponse["data"]["decisionSupport"],
+      recommendation: isRecord(data?.recommendation)
+        ? (data.recommendation as unknown as PredictionResponse["data"]["recommendation"])
+        : null,
+      decisionSupport: isRecord(data?.decision_support)
+        ? (data.decision_support as unknown as PredictionResponse["data"]["decisionSupport"])
+        : isRecord(data?.decisionSupport)
+          ? (data.decisionSupport as unknown as PredictionResponse["data"]["decisionSupport"])
+          : null,
     },
   };
 }
 
+function normalizePredictionError(
+  payload: unknown,
+  status: number,
+  statusText: string,
+): PredictionErrorBody {
+  const root = isRecord(payload) ? payload : null;
+  const detail = root?.detail;
+  const error = readString(root?.error) ?? defaultErrorLabel(status);
+  const message =
+    readString(root?.message) ??
+    extractFastApiDetail(detail) ??
+    readString(root?.error_description) ??
+    (statusText || "Không thể thực hiện chẩn đoán hình ảnh.");
+
+  return {
+    status,
+    error,
+    message,
+    detail,
+  };
+}
+
 function parseBoundingBox(value: unknown) {
-  if (!value || typeof value !== "object") return null;
-  const box = value as Record<string, unknown>;
-  const left = Number(box.left);
-  const top = Number(box.top);
-  const right = Number(box.right);
-  const bottom = Number(box.bottom);
+  if (!isRecord(value)) return null;
+  const left = Number(value.left);
+  const top = Number(value.top);
+  const right = Number(value.right);
+  const bottom = Number(value.bottom);
   if ([left, top, right, bottom].some((entry) => Number.isNaN(entry))) return null;
   return { left, top, right, bottom };
 }
 
 function parseStoredImage(value: unknown) {
-  if (!value || typeof value !== "object") return null;
-  const image = value as Record<string, unknown>;
-  const objectKey = image.objectKey ?? image.object_key;
-  const url = image.url;
-  if (typeof objectKey !== "string" || typeof url !== "string") return null;
+  if (!isRecord(value)) return null;
+  const objectKey = readString(value.objectKey ?? value.object_key);
+  const url = readString(value.url);
+  if (!objectKey || !url) return null;
   return { objectKey, url };
 }
 
@@ -98,6 +130,12 @@ function parseConfidence(value: unknown) {
   return 0;
 }
 
+function normalizeConfidenceText(value: unknown) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return `${value.toFixed(2)}%`;
+  return "0.00%";
+}
+
 function safeJson(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -106,11 +144,43 @@ function safeJson(value: string): unknown {
   }
 }
 
-function isPredictionError(value: unknown): value is PredictionErrorBody {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "message" in value &&
-      typeof value.message === "string",
-  );
+function extractFastApiDetail(detail: unknown) {
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (!isRecord(item)) return "";
+        const message = readString(item.msg ?? item.message ?? item.detail);
+        if (!message) return "";
+        const location = Array.isArray(item.loc) ? item.loc.at(-1) : null;
+        const field = readString(location);
+        return field ? `${field}: ${message}` : message;
+      })
+      .filter(Boolean);
+
+    return messages.length > 0 ? messages.join("; ") : null;
+  }
+
+  if (isRecord(detail)) {
+    return readString(detail.message ?? detail.detail ?? detail.error);
+  }
+
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function defaultErrorLabel(status: number) {
+  if (status === 422) return "Unprocessable Entity";
+  if (status === 429) return "Too Many Requests";
+  if (status === 502) return "Bad Gateway";
+  if (status === 503) return "Service Unavailable";
+  return "Request Failed";
 }
