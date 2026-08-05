@@ -27,7 +27,7 @@ async function chatRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.message || "Khong the thuc hien yeu cau chat.");
+    throw new Error(payload?.message || "Không thể thực hiện yêu cầu chat.");
   }
   return payload as T;
 }

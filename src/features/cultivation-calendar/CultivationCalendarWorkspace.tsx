@@ -1403,9 +1403,9 @@ function getActivityStatusActions(activity: CultivationActivity) {
   if (["COMPLETED", "CANCELLED", "SKIPPED", "PENDING_APPROVAL"].includes(activity.status)) return [];
   const actions: Array<{ value: "start" | "complete" | "skip" | "cancel"; label: string }> = [];
   if (activity.status !== "IN_PROGRESS") {
-    actions.push({ value: "start", label: "Chuyển sang �ang l�m" });
+    actions.push({ value: "start", label: "Chuyển sang đang làm" });
   }
-  actions.push({ value: "complete", label: "Ho�n th�nh" });
+  actions.push({ value: "complete", label: "Hoàn thành" });
   actions.push({ value: "skip", label: "Hoãn" });
   actions.push({ value: "cancel", label: "Hủy" });
   return actions;
@@ -2024,7 +2024,7 @@ function InputView({ inputs, canManage, onCreate }: { inputs: AgriculturalInput[
         }
       >
         <DataTable
-          headers={["S?n ph?m", "M?c ?? s?n ph?m", "Th?i gian c?ch ly an to?n", "Tr?ng th?i"]}
+          headers={["Sản phẩm", "Mức độ sản phẩm", "Thời gian cách ly an toàn", "Trạng thái"]}
           rows={inputs.map((input) => [input.productName, biologicalLevelLabels[input.biologicalLevel], formatSafetyInterval(input.preHarvestIntervalDays), input.status])}
           empty="Chưa có vật tư nông nghiệp."
         />
