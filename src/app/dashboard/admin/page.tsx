@@ -1,38 +1,48 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import {
   Activity,
   ArrowUpRight,
   BookOpenText,
+  FileSearch,
   MapPinned,
   MessageCircleMore,
 } from "lucide-react";
 import { DiseasePieChart } from "@/components/charts/DiseasePieChart";
 import { AdminManagement } from "@/components/dashboard/AdminManagement";
-import {
-  DashboardShell,
-  type DashboardRole,
-} from "@/components/dashboard/DashboardShell";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { dashboardStats, systemFarms } from "@/constants/durianMockData";
 
 export const metadata: Metadata = { title: "Trung tâm quản trị" };
 
 export default async function AdminDashboardPage() {
-  const cookieStore = await cookies();
-  const cookieRole = cookieStore.get("durian-role")?.value;
-  const role: DashboardRole =
-    cookieRole === "ENGINEER" ? "ENGINEER" : "ADMIN";
-
   return (
-    <DashboardShell role={role}>
+    <DashboardShell role="ADMIN">
       <div className="space-y-8">
         <section id="overview" className="grid-pattern scroll-mt-24 overflow-hidden rounded-[24px] bg-[#213f30] p-8 text-white lg:flex lg:items-center lg:justify-between lg:p-10">
           <div><p className="text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">DURIANCARE CONTROL CENTER • 06/06/2026</p><h1 className="mt-4 text-2xl font-extrabold tracking-[-1px] sm:text-3xl">Trung tâm điều hành hệ sinh thái</h1><p className="mt-2 max-w-2xl text-sm leading-5 text-[#cbd9cf]">Theo dõi sức khỏe toàn hệ thống, chuẩn hóa phác đồ và kiểm soát chất lượng đội ngũ kỹ sư.</p></div>
           <span className="mt-7 inline-flex items-center gap-4 rounded-xl border border-white/10 bg-white/[.08] px-5 py-4 text-[15px] font-bold lg:mt-0"><Activity size={16} className="text-[#EED56D]" /> Hệ thống hoạt động bình thường</span>
         </section>
         <StatCards items={dashboardStats.admin} />
+
+        <Link
+          href="/dashboard/admin#engineer-approvals"
+          className="group flex flex-col gap-4 rounded-[24px] border border-[#dce4dc] bg-white p-5 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:border-[#b7c8ba] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]/40 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex min-w-0 items-center gap-4">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#2E5A44] text-[#EED56D]">
+              <FileSearch size={21} />
+            </span>
+            <span className="min-w-0">
+              <b className="block text-base font-extrabold text-neutral-950">Phê duyệt hồ sơ kỹ sư</b>
+              <span className="mt-1 block text-sm text-neutral-500">
+                Xem hồ sơ đang chờ duyệt, chứng chỉ đính kèm và quyết định phê duyệt hoặc từ chối.
+              </span>
+            </span>
+          </span>
+          <ArrowUpRight className="shrink-0 text-[#829087] transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#2E5A44]" size={20} />
+        </Link>
 
         <section className="grid gap-9 xl:grid-cols-[1fr_.85fr]">
           <article id="diseases" className="panel scroll-mt-24 p-7 lg:p-8">
@@ -79,12 +89,10 @@ export default async function AdminDashboardPage() {
             <div className="mt-8">
               <p className="text-xs font-extrabold uppercase tracking-[1.6px] text-[#EED56D]">Expert response desk</p>
               <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-                {role === "ENGINEER" ? "Phòng tư vấn kỹ sư" : "Bảng điều phối tư vấn"}
+                Bảng điều phối tư vấn
               </h2>
               <p className="mt-2 text-xs leading-relaxed text-[#c8d6ce]">
-                {role === "ENGINEER"
-                  ? "Tiếp nhận ảnh lá bệnh và phản hồi yêu cầu cứu trợ theo ngữ cảnh từng phân khu."
-                  : "Phân loại yêu cầu cứu trợ và chỉ định kỹ sư phù hợp, không tham gia trả lời trực tiếp."}
+                Phân loại yêu cầu cứu trợ và chỉ định kỹ sư phù hợp, không tham gia trả lời trực tiếp.
               </p>
             </div>
           </Link>

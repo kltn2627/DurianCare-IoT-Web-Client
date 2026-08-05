@@ -1,21 +1,9 @@
-export type KnowledgeStatus = "DRAFT" | "REVIEW" | "PUBLISHED";
+import type {
+  KnowledgeArticle,
+  KnowledgeStatus,
+} from "@/lib/knowledge/types";
 
-export interface KnowledgeArticle {
-  id: string;
-  title: string;
-  slug: string;
-  category: string;
-  author: string;
-  publishedAt: string;
-  updatedAt: string;
-  views: number;
-  status: KnowledgeStatus;
-  featured: boolean;
-  coverTone: string;
-  excerpt: string;
-  content: string;
-  coverPreview?: string | null;
-}
+export type { KnowledgeArticle, KnowledgeStatus };
 
 export interface KnowledgeEditorState {
   id: string | null;
@@ -28,6 +16,7 @@ export interface KnowledgeEditorState {
   featured: boolean;
   coverPreview: string | null;
   coverFileName: string | null;
+  coverFile: File | null;
 }
 
 export interface KnowledgeState {
@@ -40,6 +29,8 @@ export interface KnowledgeState {
 
 export type KnowledgeAction =
   | { type: "FILTER_CATEGORY"; value: string }
+  | { type: "SET_ARTICLES"; articles: KnowledgeArticle[] }
+  | { type: "SET_NOTICE"; value: string | null }
   | { type: "SEARCH"; value: string }
   | { type: "EDIT_ARTICLE"; article: KnowledgeArticle }
   | { type: "NEW_ARTICLE" }
@@ -48,8 +39,7 @@ export type KnowledgeAction =
       field: keyof KnowledgeEditorState;
       value: KnowledgeEditorState[keyof KnowledgeEditorState];
     }
-  | { type: "SET_COVER"; preview: string; fileName: string }
+  | { type: "SET_COVER"; preview: string; fileName: string; file: File }
   | { type: "REMOVE_COVER" }
-  | { type: "SAVE_ARTICLE"; status: KnowledgeStatus }
   | { type: "DELETE_ARTICLE"; id: string }
   | { type: "CLEAR_NOTICE" };

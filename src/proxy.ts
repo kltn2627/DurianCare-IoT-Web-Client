@@ -13,7 +13,11 @@ export function proxy(request: NextRequest) {
     accountStatus === "REJECTED";
 
   const dashboardTarget =
-    role === "OWNER" ? "/dashboard/client" : "/dashboard/admin";
+    role === "OWNER"
+      ? "/dashboard/client"
+      : role === "ENGINEER" || role === "EXPERT"
+        ? "/dashboard/engineer"
+        : "/dashboard/admin";
 
   if (["/login", "/register"].includes(pathname)) {
     if (!authenticated) return NextResponse.next();
@@ -39,14 +43,18 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/dashboard/client") && role !== "OWNER") {
-    return NextResponse.redirect(new URL("/dashboard/admin", request.url));
+    return NextResponse.redirect(new URL(dashboardTarget, request.url));
+  }
+
+  if (pathname.startsWith("/dashboard/admin") && role !== "ADMIN") {
+    return NextResponse.redirect(new URL(dashboardTarget, request.url));
   }
 
   if (
-    pathname.startsWith("/dashboard/admin") &&
-    !["ADMIN", "ENGINEER"].includes(role ?? "")
+    pathname.startsWith("/dashboard/engineer") &&
+    !["ENGINEER", "EXPERT"].includes(role ?? "")
   ) {
-    return NextResponse.redirect(new URL("/dashboard/client", request.url));
+    return NextResponse.redirect(new URL(dashboardTarget, request.url));
   }
 
   return NextResponse.next();
@@ -58,6 +66,8 @@ export const config = {
     "/register",
     "/dashboard/client/:path*",
     "/dashboard/admin/:path*",
+    "/dashboard/engineer/:path*",
+    "/dashboard/community/:path*",
     "/approval",
     "/profile/:path*",
   ],

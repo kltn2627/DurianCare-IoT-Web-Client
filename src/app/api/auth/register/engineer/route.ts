@@ -7,7 +7,7 @@ import {
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
+    const formData = normalizeFormData(await request.formData());
     const result = await backendFormRequest<MessageResponse>(
       "/api/auth/register/engineer",
       formData,
@@ -16,4 +16,16 @@ export async function POST(request: Request) {
   } catch (error) {
     return authErrorResponse(error);
   }
+}
+
+function normalizeFormData(source: FormData) {
+  const formData = new FormData();
+  source.forEach((value, key) => {
+    if (value instanceof File) {
+      formData.append(key, value, value.name);
+      return;
+    }
+    formData.append(key, value);
+  });
+  return formData;
 }

@@ -53,7 +53,11 @@ export async function backendRequest<T>(
       headers,
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    console.error("DurianCare Gateway request failed", {
+      path,
+      error,
+    });
     throw new AuthApiError(503, {
       status: 503,
       error: "Service Unavailable",
@@ -94,11 +98,16 @@ export async function backendFormRequest<T>(
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
+      method: init.method ?? "POST",
       body: formData,
       headers,
       cache: "no-store",
     });
-  } catch {
+  } catch (error) {
+    console.error("DurianCare Gateway form request failed", {
+      path,
+      error,
+    });
     throw new AuthApiError(503, {
       status: 503,
       error: "Service Unavailable",

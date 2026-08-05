@@ -173,7 +173,7 @@ export function AdminManagement() {
   };
 
   return (
-    <section className="panel p-7 lg:p-8">
+    <section id="engineer-approvals" className="panel scroll-mt-24 p-7 lg:p-8">
       <div className="flex items-center justify-between gap-5">
         <div className="flex items-center gap-6">
           <span className="grid size-10 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]">

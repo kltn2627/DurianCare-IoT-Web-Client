@@ -136,7 +136,8 @@ export function toDashboardRole(role: AuthRole): DashboardRole | null {
 export function dashboardPathFor(role: AuthRole, accountStatus?: AccountStatus | null) {
   if (isPendingApproval(accountStatus) || isRejected(accountStatus)) return "/approval";
   if (role === "FARMER") return "/dashboard/client";
-  if (role === "ENGINEER" || role === "EXPERT" || role === "ADMIN") return "/dashboard/admin";
+  if (role === "ENGINEER" || role === "EXPERT") return "/dashboard/engineer";
+  if (role === "ADMIN") return "/dashboard/admin";
   return "/login";
 }
 

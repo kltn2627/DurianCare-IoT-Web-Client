@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  FileSearch,
   LayoutDashboard,
   Leaf,
   LogOut,
@@ -80,13 +81,18 @@ void ownerNav;
 
 const adminNav: NavItem[] = [
   { href: "/dashboard/admin", label: "Tổng quan", icon: LayoutDashboard },
+  {
+    href: "/dashboard/admin#engineer-approvals",
+    label: "Duyệt kỹ sư",
+    icon: FileSearch,
+  },
   { href: "/dashboard/community", label: "Cộng đồng", icon: UsersRound },
   {
     href: "/dashboard/admin/expert-chat",
     label: "Điều phối chat",
     icon: MessageCircle,
   },
-  { href: "/dashboard/admin/knowledge", label: "Bài viết", icon: BookOpen },
+  { href: "/dashboard/admin/knowledge", label: "Kiến thức", icon: BookOpen },
   {
     href: "/dashboard/admin/calendar",
     label: "Lịch điều trị",
@@ -96,16 +102,16 @@ const adminNav: NavItem[] = [
 ];
 
 const engineerNav: NavItem[] = [
-  { href: "/dashboard/admin", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/dashboard/community", label: "Cộng đồng", icon: UsersRound },
+  { href: "/dashboard/engineer", label: "Tổng quan", icon: LayoutDashboard },
+  { href: "/dashboard/community", label: "Kết nối nông hộ", icon: UsersRound },
   {
-    href: "/dashboard/admin/expert-chat",
+    href: "/dashboard/engineer/chat",
     label: "Phòng chat",
     icon: MessageCircle,
   },
-  { href: "/dashboard/admin/knowledge", label: "Tri thức", icon: BookOpen },
+  { href: "/dashboard/engineer/knowledge", label: "Tri thức", icon: BookOpen },
   {
-    href: "/dashboard/admin/calendar",
+    href: "/dashboard/engineer/calendar",
     label: "Lịch điều trị",
     icon: CalendarDays,
   },
@@ -203,7 +209,12 @@ export function DashboardShell({
   const currentName = user?.profile.fullName ?? userName ?? "Người dùng";
   const currentAvatar = user?.profile.avatarUrl ?? null;
   const currentInitials = getInitials(currentName);
-  const homeHref = role === "OWNER" ? "/dashboard/client" : "/dashboard/admin";
+  const homeHref =
+    role === "OWNER"
+      ? "/dashboard/client"
+      : role === "ENGINEER"
+        ? "/dashboard/engineer"
+        : "/dashboard/admin";
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true");

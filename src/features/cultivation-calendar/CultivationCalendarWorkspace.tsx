@@ -733,26 +733,30 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
 }
 
 function buildContextOptions(data: CultivationDashboardData) {
+  const plans = Array.isArray(data.plans) ? data.plans : [];
+  const activities = Array.isArray(data.activities) ? data.activities : [];
+  const harvestBatches = Array.isArray(data.harvestBatches) ? data.harvestBatches : [];
+  const labSamples = Array.isArray(data.labSamples) ? data.labSamples : [];
   const farms = unique([
-    ...data.plans.map((item) => item.farmId),
-    ...data.activities.map((item) => item.farmId),
-    ...data.harvestBatches.map((item) => item.farmId),
+    ...plans.map((item) => item.farmId),
+    ...activities.map((item) => item.farmId),
+    ...harvestBatches.map((item) => item.farmId),
   ]);
   const plots = unique([
-    ...data.plans.map((item) => item.plotId),
-    ...data.activities.map((item) => item.plotId),
-    ...data.harvestBatches.map((item) => item.plotId),
+    ...plans.map((item) => item.plotId),
+    ...activities.map((item) => item.plotId),
+    ...harvestBatches.map((item) => item.plotId),
   ]);
   const seasons = unique([
-    ...data.plans.map((item) => item.cultivationSeasonId),
-    ...data.activities.map((item) => item.cultivationSeasonId),
-    ...data.harvestBatches.map((item) => item.cultivationSeasonId),
-    ...data.labSamples.map((item) => item.cultivationSeasonId),
+    ...plans.map((item) => item.cultivationSeasonId),
+    ...activities.map((item) => item.cultivationSeasonId),
+    ...harvestBatches.map((item) => item.cultivationSeasonId),
+    ...labSamples.map((item) => item.cultivationSeasonId),
   ]);
   const farmLabels = createLabelMap(farms, "Trang trại");
   const plotLabels = createLabelMap(plots, "Khu canh tác");
   const seasonLabels = new Map<string, string>();
-  data.plans.forEach((plan) => {
+  plans.forEach((plan) => {
     if (!seasonLabels.has(plan.cultivationSeasonId)) seasonLabels.set(plan.cultivationSeasonId, seasonLabel(plan));
   });
   seasons.forEach((season, index) => {

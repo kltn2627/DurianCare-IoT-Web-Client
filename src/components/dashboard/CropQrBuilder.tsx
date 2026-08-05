@@ -144,20 +144,22 @@ export function CropQrBuilder() {
   const canReviewExport =
     hasCultivationPermission(user?.role, "EXPORT_RELEASE_REVIEW") ||
     canApproveExport;
-  const selectedRelease = releases[0];
+  const safeBatches = Array.isArray(batches) ? batches : [];
+  const safeReleases = Array.isArray(releases) ? releases : [];
+  const selectedRelease = safeReleases[0] ?? null;
 
   const metrics = useMemo(() => {
-    const ready = releases.filter((release) =>
+    const ready = safeReleases.filter((release) =>
       ["APPROVED", "RELEASED"].includes(release.status),
     ).length;
-    const blocked = releases.filter(
+    const blocked = safeReleases.filter(
       (release) => release.status === "BLOCKED",
     ).length;
-    const risky = batches.filter((batch) =>
+    const risky = safeBatches.filter((batch) =>
       ["HIGH", "CRITICAL"].includes(batch.chemicalRiskLevel),
     ).length;
     return { ready, blocked, risky };
-  }, [batches, releases]);
+  }, [safeBatches, safeReleases]);
 
   const refresh = async () => {
     setLoading(true);
@@ -167,9 +169,11 @@ export function CropQrBuilder() {
         cultivationClient.listHarvestBatches().catch(() => []),
         cultivationClient.listExportReleases().catch(() => []),
       ]);
-      setBatches(nextBatches);
-      setReleases(nextReleases);
-      const firstBatch = nextBatches[0];
+      const normalizedBatches = Array.isArray(nextBatches) ? nextBatches : [];
+      const normalizedReleases = Array.isArray(nextReleases) ? nextReleases : [];
+      setBatches(normalizedBatches);
+      setReleases(normalizedReleases);
+      const firstBatch = normalizedBatches[0];
       if (firstBatch && !releaseForm.harvestBatchId) {
         setReleaseForm((current) => ({
           ...current,
@@ -329,7 +333,7 @@ export function CropQrBuilder() {
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <article className="rounded-2xl bg-neutral-50 p-4">
               <small className="text-xs text-neutral-500">Lô thu hoạch</small>
-              <b className="mt-1 block text-2xl">{batches.length}</b>
+              <b className="mt-1 block text-2xl">{safeBatches.length}</b>
             </article>
             <article className="rounded-2xl bg-neutral-50 p-4">
               <small className="text-xs text-neutral-500">Lô rủi ro</small>
@@ -350,7 +354,7 @@ export function CropQrBuilder() {
               "Risk",
               "Trạng thái",
             ]}
-            rows={batches.map((batch) => [
+            rows={safeBatches.map((batch) => [
               batch.batchCode,
               batch.cultivationSeasonId,
               formatDateTime(batch.harvestedAt),
@@ -444,7 +448,7 @@ export function CropQrBuilder() {
                 "Trạng thái",
                 "Thao tác",
               ]}
-              rows={releases.map((release) => [
+              rows={safeReleases.map((release) => [
                 release.releaseCode,
                 release.harvestBatchId,
                 release.targetMarketCode,

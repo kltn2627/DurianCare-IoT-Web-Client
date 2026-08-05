@@ -16,6 +16,8 @@ import type {
   KnowledgeSection,
 } from "./types";
 
+const FALLBACK_COVER_IMAGE = "/mock/knowledge-nutrition.svg";
+
 export function KnowledgeArticleReader({
   article,
   sections,
@@ -23,6 +25,8 @@ export function KnowledgeArticleReader({
   article: FarmerKnowledgeArticle;
   sections: KnowledgeSection[];
 }) {
+  const coverImage = article.coverImage || FALLBACK_COVER_IMAGE;
+
   return (
     <div className="mx-auto max-w-[1180px]">
       <Link
@@ -66,7 +70,7 @@ export function KnowledgeArticleReader({
             role="img"
             aria-label={`Ảnh bìa ${article.title}`}
             className="min-h-72 bg-cover bg-center lg:min-h-full"
-            style={{ backgroundImage: `url(${article.coverImage})` }}
+            style={{ backgroundImage: `url(${coverImage})` }}
           />
         </div>
 
