@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { cultivationClient, CultivationApiError } from "@/lib/cultivation/client";
+import { formatSafetyInterval } from "@/lib/treatment-terms";
 import type {
   ActivityStatus,
   ActivityType,
@@ -1459,7 +1460,7 @@ function getDaysUntilText(value: string) {
   const days = getDaysUntil(value);
   const target = new Date(value);
   const now = new Date();
-  if (Number.isNaN(target.getTime())) return "ChÆ°a cĂ³ thá»i gian";
+  if (Number.isNaN(target.getTime())) return "Chưa có thời gian";
 
   if (days < 0) return `Quá hạn ${Math.abs(days)} ngày`;
   if (days === 0) {
@@ -2023,8 +2024,8 @@ function InputView({ inputs, canManage, onCreate }: { inputs: AgriculturalInput[
         }
       >
         <DataTable
-          headers={["Sản phẩm", "Mức độ sản phẩm", "PHI", "Trạng thái"]}
-          rows={inputs.map((input) => [input.productName, biologicalLevelLabels[input.biologicalLevel], `${input.preHarvestIntervalDays ?? 0} ngày`, input.status])}
+          headers={["S?n ph?m", "M?c ?? s?n ph?m", "Th?i gian c?ch ly an to?n", "Tr?ng th?i"]}
+          rows={inputs.map((input) => [input.productName, biologicalLevelLabels[input.biologicalLevel], formatSafetyInterval(input.preHarvestIntervalDays), input.status])}
           empty="Chưa có vật tư nông nghiệp."
         />
       </Section>
