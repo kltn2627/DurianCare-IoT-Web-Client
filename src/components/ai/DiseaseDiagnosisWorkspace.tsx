@@ -265,7 +265,7 @@ export function DiseaseDiagnosisWorkspace() {
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="space-y-2">
                   <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Ngu?n ?nh
+                    Nguồn ảnh
                   </span>
                   <select
                     value={source}
@@ -287,7 +287,7 @@ export function DiseaseDiagnosisWorkspace() {
 
                 <label className="space-y-2 md:col-span-2">
                   <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    M? thi?t b? IoT
+                    Mã thiết bị IoT
                   </span>
                   <input
                     value={deviceId}
@@ -300,7 +300,7 @@ export function DiseaseDiagnosisWorkspace() {
                     placeholder={
                       source === "IOT_CAMERA"
                         ? "VD: ESP32-CAM-DEMO-001"
-                        : "Ch? c?n khi ch?n IoT Camera"
+                        : "Chỉ cần khi chọn IoT Camera"
                     }
                     className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
                   />
@@ -315,7 +315,7 @@ export function DiseaseDiagnosisWorkspace() {
                   className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
-                  {loading ? "?ang ph?n t?ch..." : "Ch?n ?o?n ngay"}
+                  {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
                 </button>
                 <button
                   type="button"
@@ -323,7 +323,7 @@ export function DiseaseDiagnosisWorkspace() {
                   className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
                 >
                   <RefreshCw size={16} />
-                  L?m m?i
+                  Làm mới
                 </button>
               </div>
             </div>
@@ -1288,6 +1288,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
 }
-
 
 

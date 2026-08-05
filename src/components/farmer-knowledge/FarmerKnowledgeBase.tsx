@@ -64,7 +64,7 @@ function SubmissionPanel({
 }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(
-    farmerCategories.find((item) => item !== "Táº¥t cáº£") ?? "Dinh dưỡng",
+    farmerCategories.find((item) => item !== "Tất cả") ?? "Dinh dưỡng",
   );
   const [author, setAuthor] = useState("Nông hộ DurianCare");
   const [excerpt, setExcerpt] = useState("");
@@ -142,7 +142,7 @@ function SubmissionPanel({
             className="h-11 rounded-xl border border-neutral-200 px-3 text-xs outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           >
             {farmerCategories
-              .filter((item) => item !== "Táº¥t cáº£")
+              .filter((item) => item !== "Tất cả")
               .map((item) => (
                 <option key={item}>{item}</option>
               ))}
