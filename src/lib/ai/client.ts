@@ -49,7 +49,25 @@ export async function predictLeafDisease(
     throw new AiApiError(body.message, response.status, body);
   }
 
+  if (!hasPredictionData(payload)) {
+    throw new AiApiError(
+      "AI Service chưa trả dữ liệu chẩn đoán. Vui lòng kiểm tra service AI ở port 8000 và Gateway route /api/v1/predict.",
+      503,
+      {
+        status: 503,
+        error: "Service Unavailable",
+        message:
+          "AI Service chưa trả dữ liệu chẩn đoán. Vui lòng kiểm tra service AI ở port 8000 và Gateway route /api/v1/predict.",
+      },
+    );
+  }
+
   return normalizePredictionResponse(payload);
+}
+
+function hasPredictionData(payload: unknown) {
+  const root = isRecord(payload) ? payload : null;
+  return isRecord(root?.data);
 }
 
 function normalizePredictionResponse(payload: unknown): PredictionResponse {

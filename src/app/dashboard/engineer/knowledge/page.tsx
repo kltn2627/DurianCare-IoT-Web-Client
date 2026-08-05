@@ -3,14 +3,14 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { KnowledgeWorkspace } from "@/components/knowledge/KnowledgeWorkspace";
 
 export const metadata: Metadata = {
-  title: "Quản lý kiến thức",
-  description: "Biên tập thư viện kiến thức kỹ thuật sầu riêng DurianCare.",
+  title: "Tri thức kỹ sư",
+  description: "Kỹ sư biên soạn và tham khảo thư viện kỹ thuật sầu riêng.",
 };
 
-export default async function KnowledgeManagementPage() {
+export default function EngineerKnowledgePage() {
   return (
-    <DashboardShell role="ADMIN">
-      <KnowledgeWorkspace role="ADMIN" />
+    <DashboardShell role="ENGINEER">
+      <KnowledgeWorkspace role="ENGINEER" />
     </DashboardShell>
   );
 }

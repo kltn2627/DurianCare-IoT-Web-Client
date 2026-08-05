@@ -237,71 +237,67 @@ export function DiseaseDiagnosisWorkspace() {
               onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="space-y-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Nguồn ảnh
-                  </span>
-                  <select
-                    value={source}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setResult(null);
-                      setSource(event.target.value as PredictionSource);
-                    }}
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
-                  >
-                    {sourceOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-2 sm:col-span-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Mã thiết bị IoT
-                  </span>
-                  <input
-                    value={deviceId}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setDeviceId(event.target.value);
-                    }}
-                    disabled={source !== "IOT_CAMERA"}
-                    placeholder={
-                      source === "IOT_CAMERA"
-                        ? "VD: ESP32-CAM-DEMO-001"
-                        : "Chỉ cần khi chọn IoT Camera"
-                    }
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
-                  />
-                </label>
-              </div>
-
-              <div className="flex flex-wrap gap-3 sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => void upload()}
-                  disabled={!canUpload}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(120px,0.75fr)_minmax(230px,1.35fr)_minmax(180px,1fr)_minmax(150px,0.85fr)]">
+              <label className="min-w-0 space-y-2">
+                <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                  Nguồn ảnh
+                </span>
+                <select
+                  value={source}
+                  onChange={(event) => {
+                    setError("");
+                    setErrorKind(null);
+                    setResult(null);
+                    setSource(event.target.value as PredictionSource);
+                  }}
+                  className="h-[54px] w-full rounded-2xl border border-[#d8e1d8] bg-white px-4 text-base font-semibold text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
                 >
-                  {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
-                  {loading ? "Đang xử lý..." : "Chẩn đoán ngay"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                >
-                  <RotateCw size={16} />
-                  Làm mới
-                </button>
-              </div>
+                  {sourceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="min-w-0 space-y-2">
+                <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                  Mã thiết bị IoT
+                </span>
+                <input
+                  value={deviceId}
+                  onChange={(event) => {
+                    setError("");
+                    setErrorKind(null);
+                    setDeviceId(event.target.value);
+                  }}
+                  disabled={source !== "IOT_CAMERA"}
+                  placeholder={
+                    source === "IOT_CAMERA"
+                      ? "VD: ESP32-CAM-DEMO-001"
+                      : "Chỉ cần khi chọn IoT Camera"
+                  }
+                  className="h-[54px] w-full min-w-0 rounded-2xl border border-[#d8e1d8] bg-white px-4 text-base font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void upload()}
+                disabled={!canUpload}
+                className="mt-6 inline-flex h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl bg-[#2E5A44] px-5 text-base font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60 lg:mt-[26px]"
+              >
+                {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
+                <span className="truncate">{loading ? "Đang xử lý..." : "Chẩn đoán ngay"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="mt-6 inline-flex h-[54px] min-w-0 items-center justify-center gap-2 rounded-2xl border border-[#d8e1d8] bg-white px-5 text-base font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8] lg:mt-[26px]"
+              >
+                <RotateCw size={16} />
+                <span className="truncate">Làm mới</span>
+              </button>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">

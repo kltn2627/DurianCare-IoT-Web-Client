@@ -4,15 +4,23 @@ import {
   AUTH_COOKIES,
   AuthApiError,
   clearAuthenticationCookies,
+  readSession,
   rotateRefreshToken,
   setRefreshedTokenCookies,
   tokenNeedsRefresh,
 } from "@/lib/auth/server";
 
-type RouteContext = { params: Promise<{ path: string[] }> };
+type RouteContext = { params: Promise<{ path?: string[] }> };
+
+const CHAT_SERVICE_URL = (
+  process.env.CHAT_SERVICE_URL ??
+  process.env.DURIANCARE_CHAT_SERVICE_URL ??
+  "http://localhost:3002"
+).replace(/\/$/, "");
 
 async function proxy(request: Request, context: RouteContext) {
   const cookieStore = await cookies();
+  const session = readSession(cookieStore);
   let accessToken = cookieStore.get(AUTH_COOKIES.accessToken)?.value;
   const refreshToken = cookieStore.get(AUTH_COOKIES.refreshToken)?.value;
   let rotatedTokens: Awaited<ReturnType<typeof rotateRefreshToken>> | null = null;
@@ -22,34 +30,39 @@ async function proxy(request: Request, context: RouteContext) {
     : await request.arrayBuffer();
 
   try {
+    if (!session?.userId) throw new AuthApiError(401, unauthorizedBody());
     if (tokenNeedsRefresh(accessToken)) {
       if (!refreshToken) throw new AuthApiError(401, unauthorizedBody());
       rotatedTokens = await rotateRefreshToken(refreshToken);
       accessToken = rotatedTokens.accessToken;
     }
 
-    let backendResponse = await forward(
+    let chatResponse = await forward(
       request,
       context,
       accessToken!,
+      session.userId,
+      chatRole(session.role),
       requestBody,
     );
-    if (backendResponse.status === 401 && refreshToken && !rotatedTokens) {
+    if (chatResponse.status === 401 && refreshToken && !rotatedTokens) {
       rotatedTokens = await rotateRefreshToken(refreshToken);
-      backendResponse = await forward(
+      chatResponse = await forward(
         request,
         context,
         rotatedTokens.accessToken,
+        session.userId,
+        chatRole(session.role),
         requestBody,
       );
     }
 
-    const response = new NextResponse(await backendResponse.arrayBuffer(), {
-      status: backendResponse.status,
-      headers: responseHeaders(backendResponse.headers),
+    const response = new NextResponse(await chatResponse.arrayBuffer(), {
+      status: chatResponse.status,
+      headers: responseHeaders(chatResponse.headers),
     });
     if (rotatedTokens) setRefreshedTokenCookies(response, rotatedTokens);
-    if (backendResponse.status === 401) clearAuthenticationCookies(response);
+    if (chatResponse.status === 401) clearAuthenticationCookies(response);
     return response;
   } catch (error) {
     const status = error instanceof AuthApiError ? error.status : 503;
@@ -59,7 +72,7 @@ async function proxy(request: Request, context: RouteContext) {
         : {
             status,
             error: "Service Unavailable",
-            message: "Không thể kết nối đến DurianCare Gateway.",
+            message: "Không thể kết nối đến DurianCare Chat Service.",
           };
     const response = NextResponse.json(body, { status });
     if (status === 401) clearAuthenticationCookies(response);
@@ -71,28 +84,36 @@ async function forward(
   request: Request,
   context: RouteContext,
   accessToken: string,
+  userId: string,
+  role: "FARMER" | "ENGINEER",
   body: ArrayBuffer | undefined,
 ) {
-  const { path } = await context.params;
+  const { path = [] } = await context.params;
   const sourceUrl = new URL(request.url);
-  const backendBase = (
-    process.env.DURIANCARE_API_URL ?? "http://localhost:8080"
-  ).replace(/\/$/, "");
-  const target = `${backendBase}/api/${path.join("/")}${sourceUrl.search}`;
+  const target = `${CHAT_SERVICE_URL}/api/chat/${path.join("/")}${sourceUrl.search}`;
   const headers = new Headers(request.headers);
-  [
-    "host",
-    "cookie",
-    "content-length",
-    "connection",
-    "origin",
-    "referer",
-  ].forEach((name) =>
+  ["host", "cookie", "content-length", "connection"].forEach((name) =>
     headers.delete(name),
   );
   headers.set("authorization", `Bearer ${accessToken}`);
-  const method = request.method.toUpperCase();
-  return fetch(target, { method, headers, body, cache: "no-store" });
+  headers.set("x-auth-user-id", userId);
+  headers.set("x-auth-role", role);
+  return fetch(target, {
+    method: request.method,
+    headers,
+    body,
+    cache: "no-store",
+  });
+}
+
+function chatRole(role: string): "FARMER" | "ENGINEER" {
+  if (role === "FARMER") return "FARMER";
+  if (role === "ENGINEER" || role === "EXPERT") return "ENGINEER";
+  throw new AuthApiError(403, {
+    status: 403,
+    error: "Forbidden",
+    message: "Chat chỉ dành cho nông hộ và kỹ sư.",
+  });
 }
 
 function responseHeaders(source: Headers) {

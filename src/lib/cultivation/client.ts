@@ -370,7 +370,15 @@ export const cultivationClient = {
         cultivationClient.listHarvestBatches(),
         cultivationClient.listExportReleases(),
       ]);
-      return { plans, activities, inputs, residueStandards, labSamples, harvestBatches, exportReleases };
+      return {
+        plans: Array.isArray(plans) ? plans : [],
+        activities: Array.isArray(activities) ? activities : [],
+        inputs: Array.isArray(inputs) ? inputs : [],
+        residueStandards: Array.isArray(residueStandards) ? residueStandards : [],
+        labSamples: Array.isArray(labSamples) ? labSamples : [],
+        harvestBatches: Array.isArray(harvestBatches) ? harvestBatches : [],
+        exportReleases: Array.isArray(exportReleases) ? exportReleases : [],
+      };
     } catch (caught) {
       if (shouldUseMock(caught)) return cultivationMockClient.dashboard();
       throw caught;

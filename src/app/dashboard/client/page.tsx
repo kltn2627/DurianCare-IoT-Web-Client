@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import {
   BookOpenText,
@@ -15,6 +16,7 @@ import {
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { dashboardStats } from "@/constants/durianMockData";
+import { readSession } from "@/lib/auth/server";
 
 export const metadata: Metadata = { title: "Dashboard chủ trang trại" };
 
@@ -80,9 +82,13 @@ const featureLinks = [
   },
 ];
 
-export default function ClientDashboardPage() {
+export default async function ClientDashboardPage() {
+  const cookieStore = await cookies();
+  const session = readSession(cookieStore);
+  const userName = session?.profile.fullName?.trim() || "nhà vườn";
+
   return (
-    <DashboardShell role="OWNER">
+    <DashboardShell role="OWNER" userName={userName}>
       <div className="space-y-8">
         <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-8 text-white shadow-xl shadow-[#2e5a4418] lg:flex lg:items-center lg:justify-between lg:p-10">
           <div>
@@ -90,8 +96,8 @@ export default function ClientDashboardPage() {
               <i className="live-dot size-1.5 rounded-full bg-[#EED56D]" />{" "}
               TRANG TRẠI MINH PHÁT • 06/06/2026
             </p>
-            <h1 className="mt-4 text-2xl font-extrabold sm:text-3xl">
-              Chào buổi sáng, anh Minh.
+            <h1 className="mt-4 text-2xl font-extrabold !text-white sm:text-3xl">
+              Chào buổi sáng, {userName}.
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-5 text-[#d2ded5]">
               Hệ thống IoT vận hành ổn định. Có 3 cảnh báo và 2 yêu cầu hợp tác

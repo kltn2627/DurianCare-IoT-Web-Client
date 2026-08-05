@@ -3,9 +3,11 @@
 import {
   ChangeEvent,
   FormEvent,
+  useEffect,
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import {
   BookOpenText,
@@ -27,10 +29,8 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
-import {
-  knowledgeArticles,
-  knowledgeCategories,
-} from "@/constants/durianMockData";
+import { knowledgeClient } from "@/lib/knowledge/client";
+import { knowledgeCategories } from "@/lib/knowledge/categories";
 import type {
   KnowledgeAction,
   KnowledgeArticle,
@@ -38,8 +38,6 @@ import type {
   KnowledgeState,
   KnowledgeStatus,
 } from "./types";
-
-const articles = knowledgeArticles as KnowledgeArticle[];
 
 const EMPTY_EDITOR: KnowledgeEditorState = {
   id: null,
@@ -52,35 +50,26 @@ const EMPTY_EDITOR: KnowledgeEditorState = {
   featured: false,
   coverPreview: null,
   coverFileName: null,
+  coverFile: null,
 };
 
 const initialState: KnowledgeState = {
-  articles,
+  articles: [],
   selectedCategory: "Tất cả",
   query: "",
   editor: EMPTY_EDITOR,
   saveNotice: null,
 };
 
-function createSlug(title: string) {
-  return title
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function formatToday() {
-  return "10/06/2026";
-}
-
 function knowledgeReducer(
   state: KnowledgeState,
   action: KnowledgeAction,
 ): KnowledgeState {
   switch (action.type) {
+    case "SET_ARTICLES":
+      return { ...state, articles: action.articles };
+    case "SET_NOTICE":
+      return { ...state, saveNotice: action.value };
     case "FILTER_CATEGORY":
       return { ...state, selectedCategory: action.value };
     case "SEARCH":
@@ -103,8 +92,9 @@ function knowledgeReducer(
           content: action.article.content,
           status: action.article.status,
           featured: action.article.featured,
-          coverPreview: action.article.coverPreview ?? null,
+          coverPreview: action.article.coverPreview ?? action.article.coverImage ?? null,
           coverFileName: null,
+          coverFile: null,
         },
         saveNotice: null,
       };
@@ -123,6 +113,7 @@ function knowledgeReducer(
           ...state.editor,
           coverPreview: action.preview,
           coverFileName: action.fileName,
+          coverFile: action.file,
         },
       };
     case "REMOVE_COVER":
@@ -132,49 +123,9 @@ function knowledgeReducer(
           ...state.editor,
           coverPreview: null,
           coverFileName: null,
+          coverFile: null,
         },
       };
-    case "SAVE_ARTICLE": {
-      const id = state.editor.id ?? `KB-${Date.now()}`;
-      const savedArticle: KnowledgeArticle = {
-        id,
-        title: state.editor.title.trim(),
-        slug: createSlug(state.editor.title),
-        category: state.editor.category,
-        author: state.editor.author.trim(),
-        publishedAt: formatToday(),
-        updatedAt: formatToday(),
-        views:
-          state.articles.find((article) => article.id === state.editor.id)
-            ?.views ?? 0,
-        status: action.status,
-        featured: state.editor.featured,
-        coverTone: "green",
-        excerpt: state.editor.excerpt.trim(),
-        content: state.editor.content.trim(),
-        coverPreview: state.editor.coverPreview,
-      };
-      const exists = state.articles.some((article) => article.id === id);
-      return {
-        ...state,
-        articles: exists
-          ? state.articles.map((article) =>
-              article.id === id ? savedArticle : article,
-            )
-          : [savedArticle, ...state.articles],
-        editor: {
-          ...state.editor,
-          id,
-          status: action.status,
-        },
-        saveNotice:
-          action.status === "PUBLISHED"
-            ? "Bài viết đã được xuất bản trên thư viện DurianCare."
-            : action.status === "REVIEW"
-              ? "Bài viết đã được chuyển sang hàng chờ Admin duyệt."
-              : "Bản nháp đã được lưu vào kho kiến thức.",
-      };
-    }
     case "DELETE_ARTICLE":
       return {
         ...state,
@@ -183,7 +134,7 @@ function knowledgeReducer(
         ),
         editor:
           state.editor.id === action.id ? EMPTY_EDITOR : state.editor,
-        saveNotice: "Bài viết đã được xóa khỏi kho kiến thức.",
+        saveNotice: "Kiến thức đã được xóa khỏi kho.",
       };
     case "CLEAR_NOTICE":
       return { ...state, saveNotice: null };
@@ -207,6 +158,10 @@ const STATUS_META: Record<
   DRAFT: {
     label: "Bản nháp",
     className: "bg-neutral-100 text-neutral-600 ring-neutral-200",
+  },
+  REJECTED: {
+    label: "Bị từ chối",
+    className: "bg-red-50 text-red-700 ring-red-100",
   },
 };
 
@@ -286,7 +241,7 @@ function ArticleTable({
       <table className="w-full min-w-[760px] border-collapse text-left">
         <thead>
           <tr className="border-y border-neutral-100 bg-neutral-50 text-xs uppercase tracking-[0.12em] text-neutral-400">
-            <th className="px-4 py-3">Bài viết</th>
+            <th className="px-4 py-3">Kiến thức</th>
             <th className="px-3 py-3">Tác giả</th>
             <th className="px-3 py-3">Ngày đăng</th>
             <th className="px-3 py-3 text-right">Lượt xem</th>
@@ -313,11 +268,11 @@ function ArticleTable({
                   <span
                     className={`relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br ${COVER_TONES[article.coverTone] ?? COVER_TONES.green}`}
                   >
-                    {article.coverPreview ? (
+                    {article.coverPreview || article.coverImage ? (
                       <i
                         className="absolute inset-0 bg-cover bg-center"
                         style={{
-                          backgroundImage: `url(${article.coverPreview})`,
+                          backgroundImage: `url(${article.coverPreview || article.coverImage})`,
                         }}
                       />
                     ) : (
@@ -385,7 +340,7 @@ function ArticleTable({
           <span>
             <Search className="mx-auto text-neutral-300" size={28} />
             <b className="mt-3 block text-xs text-neutral-700">
-              Không tìm thấy bài viết
+              Không tìm thấy kiến thức
             </b>
             <p className="mt-1 text-xs text-neutral-400">
               Thử đổi danh mục hoặc từ khóa tìm kiếm.
@@ -418,12 +373,16 @@ function ArticleEditor({
   editor,
   saveNotice,
   role,
+  saving,
   dispatch,
+  onSave,
 }: {
   editor: KnowledgeEditorState;
   saveNotice: string | null;
   role: "ADMIN" | "ENGINEER";
+  saving: boolean;
   dispatch: React.Dispatch<KnowledgeAction>;
+  onSave: (status: KnowledgeStatus) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -442,6 +401,7 @@ function ArticleEditor({
         type: "SET_COVER",
         preview: reader.result,
         fileName: file.name,
+        file,
       });
     };
     reader.readAsDataURL(file);
@@ -454,7 +414,7 @@ function ArticleEditor({
   ) => {
     event.preventDefault();
     if (!editor.title.trim() || !editor.content.trim()) return;
-    dispatch({ type: "SAVE_ARTICLE", status });
+    void onSave(status);
   };
 
   return (
@@ -465,10 +425,10 @@ function ArticleEditor({
             Editorial desk
           </small>
           <h2 className="mt-1 text-base font-bold tracking-tight">
-            {editor.id ? "Chỉnh sửa bài viết" : "Soạn bài kỹ thuật mới"}
+            {editor.id ? "Chỉnh sửa kiến thức" : "Soạn kiến thức kỹ thuật mới"}
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-white/60">
-            {editor.id ?? "Chưa cấp mã bài viết"}
+            {editor.id ?? "Chưa cấp mã kiến thức"}
           </p>
         </span>
         <span className="grid size-9 place-items-center rounded-xl bg-white/10 text-[#EED56D]">
@@ -500,7 +460,7 @@ function ArticleEditor({
         )}
 
         <label className="block">
-          <EditorFieldLabel>Tiêu đề bài viết</EditorFieldLabel>
+          <EditorFieldLabel>Tiêu đề kiến thức</EditorFieldLabel>
           <input
             required
             value={editor.title}
@@ -603,7 +563,7 @@ function ArticleEditor({
             rows={2}
             value={editor.excerpt}
             onChange={(event) => update("excerpt", event.target.value)}
-            placeholder="Tóm tắt giá trị kỹ thuật của bài viết..."
+            placeholder="Tóm tắt giá trị kỹ thuật của kiến thức..."
             className="w-full resize-none rounded-xl border border-neutral-200 p-3 text-xs leading-relaxed text-neutral-900 outline-none transition-all duration-200 ease-in-out placeholder:text-neutral-400 hover:border-neutral-300 focus-visible:border-[#5d806b] focus-visible:ring-4 focus-visible:ring-[#2E5A4414]"
           />
         </label>
@@ -640,10 +600,10 @@ function ArticleEditor({
         <div className="grid grid-cols-[.8fr_1.2fr] gap-2 border-t border-neutral-100 pt-4">
           <button
             type="button"
-            disabled={!editor.title.trim() || !editor.content.trim()}
+            disabled={saving || !editor.title.trim() || !editor.content.trim()}
             onClick={(event) => {
               event.preventDefault();
-              dispatch({ type: "SAVE_ARTICLE", status: "DRAFT" });
+              void onSave("DRAFT");
             }}
             className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white text-xs font-bold text-neutral-700 transition-all duration-200 ease-in-out hover:border-neutral-300 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
           >
@@ -652,7 +612,7 @@ function ArticleEditor({
           </button>
           <button
             type="submit"
-            disabled={!editor.title.trim() || !editor.content.trim()}
+            disabled={saving || !editor.title.trim() || !editor.content.trim()}
             className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#2E5A44] text-xs font-bold text-white transition-all duration-200 ease-in-out hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
           >
             {role === "ADMIN" ? <Send size={13} /> : <Check size={13} />}
@@ -670,6 +630,82 @@ export function KnowledgeWorkspace({
   role: "ADMIN" | "ENGINEER";
 }) {
   const [state, dispatch] = useReducer(knowledgeReducer, initialState);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const reloadArticles = async () => {
+    const result = await knowledgeClient.list();
+    dispatch({ type: "SET_ARTICLES", articles: result.articles });
+  };
+
+  useEffect(() => {
+    let active = true;
+    knowledgeClient
+      .list()
+      .then((result) => {
+        if (active) {
+          dispatch({ type: "SET_ARTICLES", articles: result.articles });
+        }
+      })
+      .catch((error: Error) => {
+        if (active) {
+          dispatch({
+            type: "SET_NOTICE",
+            value: error.message || "Không thể tải kho kiến thức.",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveArticle = async (status: KnowledgeStatus) => {
+    if (!state.editor.title.trim() || !state.editor.content.trim()) return;
+    setSaving(true);
+    try {
+      const finalStatus =
+        role === "ADMIN" && status === "PUBLISHED" && state.editor.id
+          ? "PUBLISHED"
+          : status;
+      const result = await knowledgeClient.save({
+        id: state.editor.id,
+        title: state.editor.title.trim(),
+        category: state.editor.category,
+        author: state.editor.author.trim(),
+        excerpt: state.editor.excerpt.trim(),
+        content: state.editor.content.trim(),
+        status: finalStatus,
+        featured: state.editor.featured,
+        coverPreview: state.editor.coverPreview,
+        coverFile: state.editor.coverFile,
+      });
+      await reloadArticles();
+      dispatch({ type: "EDIT_ARTICLE", article: result.article });
+      dispatch({
+        type: "SET_NOTICE",
+        value:
+          result.article.status === "PUBLISHED"
+            ? "Kiến thức đã được duyệt và đăng lên trang kiến thức."
+            : result.article.status === "REVIEW"
+              ? "Kiến thức đã được gửi tới Admin chờ duyệt."
+              : "Bản nháp đã được lưu.",
+      });
+    } catch (error) {
+      dispatch({
+        type: "SET_NOTICE",
+        value:
+          error instanceof Error
+            ? error.message
+            : "Không thể lưu bài kiến thức.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const filteredArticles = useMemo(() => {
     const query = state.query.trim().toLocaleLowerCase("vi");
@@ -722,7 +758,7 @@ export function KnowledgeWorkspace({
           </div>
           <div className="grid grid-cols-3 gap-2">
             {[
-              ["Bài viết", state.articles.length, LayoutList],
+              ["Kiến thức", state.articles.length, LayoutList],
               ["Đã xuất bản", publishedCount, Sparkles],
               ["Lượt đọc", totalViews.toLocaleString("vi-VN"), Eye],
             ].map(([label, value, Icon]) => {
@@ -755,7 +791,7 @@ export function KnowledgeWorkspace({
                   Content inventory
                 </small>
                 <h2 className="mt-1 text-base font-bold tracking-tight text-neutral-900">
-                  Thư viện bài viết
+                  Thư viện kiến thức
                 </h2>
               </span>
               <div className="flex gap-2">
@@ -802,17 +838,18 @@ export function KnowledgeWorkspace({
                 ? (article) => {
                     if (
                       window.confirm(
-                        `Xóa bài viết "${article.title}" khỏi kho kiến thức?`,
+                        `Xóa kiến thức "${article.title}" khỏi kho?`,
                       )
                     ) {
                       dispatch({ type: "DELETE_ARTICLE", id: article.id });
+                      void knowledgeClient.delete(article.id).then(reloadArticles);
                     }
                   }
                 : undefined
             }
           />
           <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 text-xs text-neutral-400">
-            <span>{filteredArticles.length} bài viết phù hợp</span>
+            <span>{filteredArticles.length} kiến thức phù hợp</span>
             <button
               type="button"
               disabled
@@ -828,7 +865,9 @@ export function KnowledgeWorkspace({
           editor={state.editor}
           saveNotice={state.saveNotice}
           role={role}
+          saving={saving}
           dispatch={dispatch}
+          onSave={saveArticle}
         />
       </div>
 
@@ -842,9 +881,8 @@ export function KnowledgeWorkspace({
               Quy trình biên tập
             </b>
             <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-              Bản nháp và bài chờ duyệt được giữ trong workspace. Khi nối API,
-              reducer hiện tại có thể ánh xạ trực tiếp sang mutation và cache
-              invalidation.
+              Bản nháp và bài chờ duyệt được lưu trên backend. Admin duyệt bài
+              để xuất bản lên trang kiến thức của nông hộ.
             </p>
           </span>
         </article>
@@ -854,11 +892,11 @@ export function KnowledgeWorkspace({
           </span>
           <span>
             <b className="block text-xs text-neutral-900">
-              Ảnh hiện chỉ preview cục bộ
+              Ảnh bìa kiến thức
             </b>
             <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-              Không có request upload ra ngoài. FileReader tạo bản xem trước và
-              sẵn sàng thay bằng file-service khi backend được tích hợp.
+              FileReader tạo bản xem trước, sau đó ảnh được upload qua API và
+              hiển thị lại từ kho ảnh kiến thức.
             </p>
           </span>
         </article>
