@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { cropLots, farmZones } from "@/constants/durianMockData";
+import { formatDosageLabel, formatSafetyInterval } from "@/lib/treatment-terms";
 import type { DashboardRole } from "./DashboardShell";
 
 type TaskType =
@@ -207,7 +208,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
         materialName: draft.materialName.trim(),
         dosage: draft.dosage.trim(),
         notes: draft.notes.trim() || "Chưa có ghi chú bổ sung.",
-        safetyInterval: draft.safetyInterval.trim() || "Không áp dụng",
+        safetyInterval: draft.safetyInterval.trim() || "Không yêu cầu cách ly",
         status: "planned",
       },
       ...current,
@@ -268,9 +269,12 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               {task.date} lúc {task.time} • {zone?.name} • {task.cropId}
             </p>
             <div className="mt-5 grid gap-4 text-[15px] sm:grid-cols-3">
-              <Info label="Liều lượng" value={task.dosage} />
+              <Info label="Liều lượng phun" value={formatDosageLabel(task.dosage)} />
               <Info label="Phụ trách" value={task.assignee} />
-              <Info label="Cách ly" value={task.safetyInterval} />
+              <Info
+                label="Thời gian cách ly an toàn"
+                value={formatSafetyInterval(task.safetyInterval)}
+              />
             </div>
             <p className="mt-4 flex gap-4 rounded-xl bg-[#f7f8f5] px-4 py-2 text-[15px] leading-4 text-[#6f7d74]">
               <StickyNote
@@ -437,7 +441,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
                 className="input-control"
               />
             </Field>
-            <Field label="Liều lượng">
+            <Field label="Liều lượng phun">
               <input
                 value={draft.dosage}
                 onChange={(event) =>
@@ -456,13 +460,13 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
                 className="input-control"
               />
             </Field>
-            <Field label="Thời gian cách ly">
+            <Field label="Thời gian cách ly an toàn">
               <input
                 value={draft.safetyInterval}
                 onChange={(event) =>
                   setDraft({ ...draft, safetyInterval: event.target.value })
                 }
-                placeholder="VD: 7 ngày, không áp dụng"
+                placeholder="VD: 7 ngày, không yêu cầu cách ly"
                 className="input-control"
               />
             </Field>

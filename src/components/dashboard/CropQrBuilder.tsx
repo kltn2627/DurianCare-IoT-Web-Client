@@ -290,7 +290,7 @@ export function CropQrBuilder() {
                 <div className="flex items-start justify-between gap-7">
                   <span>
                     <small className="text-xs font-bold tracking-[1px] text-[#849087]">
-                      MÃ VỤ MÙA
+                      Mã vụ mùa
                     </small>
                     <b className="mt-1 block text-sm">{crop.id}</b>
                   </span>
