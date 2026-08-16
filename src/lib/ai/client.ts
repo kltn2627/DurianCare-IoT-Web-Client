@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/auth/client";
 import type {
   PredictionErrorBody,
+  PredictionHistoryResponse,
   PredictionResponse,
   PredictionSource,
 } from "./types";
@@ -65,6 +66,42 @@ export async function predictLeafDisease(
   return normalizePredictionResponse(payload);
 }
 
+export async function listPredictionHistory(params: {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+  status?: string;
+} = {}): Promise<PredictionHistoryResponse> {
+  const search = new URLSearchParams();
+  search.set("page", String(params.page ?? 1));
+  search.set("pageSize", String(params.pageSize ?? 5));
+  if (params.query?.trim()) search.set("q", params.query.trim());
+  if (params.status && params.status !== "ALL") search.set("status", params.status);
+
+  const response = await apiFetch(`/api/v1/predict/history?${search.toString()}`);
+  const text = await response.text();
+  const payload = text ? safeJson(text) : null;
+
+  if (!response.ok) {
+    const body = normalizePredictionError(payload, response.status, response.statusText);
+    throw new AiApiError(body.message, response.status, body);
+  }
+
+  return normalizePredictionHistoryResponse(payload);
+}
+
+export async function deletePredictionHistory(historyId: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/predict/history/${encodeURIComponent(historyId)}`, {
+    method: "DELETE",
+  });
+  if (response.ok) return;
+
+  const text = await response.text();
+  const payload = text ? safeJson(text) : null;
+  const body = normalizePredictionError(payload, response.status, response.statusText);
+  throw new AiApiError(body.message, response.status, body);
+}
+
 function hasPredictionData(payload: unknown) {
   const root = isRecord(payload) ? payload : null;
   return isRecord(root?.data);
@@ -73,28 +110,68 @@ function hasPredictionData(payload: unknown) {
 function normalizePredictionResponse(payload: unknown): PredictionResponse {
   const root = isRecord(payload) ? payload : null;
   const data = isRecord(root?.data) ? root.data : null;
-  const confidenceText = normalizeConfidenceText(data?.confidence);
 
   return {
     status: "success",
-    data: {
-      predictedDisease: readString(data?.predictedDisease ?? data?.predicted_disease) ?? "",
-      confidence: parseConfidence(confidenceText),
-      confidenceLabel: confidenceText,
-      confidenceText,
-      source: (data?.source as PredictionSource) ?? "WEB",
-      deviceId: readString(data?.deviceId ?? data?.device_id),
-      usedDetectionCrop: Boolean(data?.usedDetectionCrop ?? data?.used_detection_crop),
-      boundingBox: parseBoundingBox(data?.boundingBox ?? data?.bounding_box),
-      image: parseStoredImage(data?.image),
-      recommendation: isRecord(data?.recommendation)
-        ? (data.recommendation as unknown as PredictionResponse["data"]["recommendation"])
+    data: normalizePredictionData(data),
+  };
+}
+
+function normalizePredictionData(data: Record<string, unknown> | null): PredictionResponse["data"] {
+  const confidenceText = normalizeConfidenceText(data?.confidence);
+
+  return {
+    predictedDisease: readString(data?.predictedDisease ?? data?.predicted_disease) ?? "",
+    confidence: parseConfidence(confidenceText),
+    confidenceLabel: confidenceText,
+    confidenceText,
+    source: (data?.source as PredictionSource) ?? "WEB",
+    deviceId: readString(data?.deviceId ?? data?.device_id),
+    usedDetectionCrop: Boolean(data?.usedDetectionCrop ?? data?.used_detection_crop),
+    boundingBox: parseBoundingBox(data?.boundingBox ?? data?.bounding_box),
+    image: parseStoredImage(data?.image),
+    recommendation: isRecord(data?.recommendation)
+      ? (data.recommendation as unknown as PredictionResponse["data"]["recommendation"])
+      : null,
+    decisionSupport: isRecord(data?.decision_support)
+      ? (data.decision_support as unknown as PredictionResponse["data"]["decisionSupport"])
+      : isRecord(data?.decisionSupport)
+        ? (data.decisionSupport as unknown as PredictionResponse["data"]["decisionSupport"])
         : null,
-      decisionSupport: isRecord(data?.decision_support)
-        ? (data.decision_support as unknown as PredictionResponse["data"]["decisionSupport"])
-        : isRecord(data?.decisionSupport)
-          ? (data.decisionSupport as unknown as PredictionResponse["data"]["decisionSupport"])
-          : null,
+    historyId: readString(data?.historyId ?? data?.history_id),
+  };
+}
+
+function normalizePredictionHistoryResponse(payload: unknown): PredictionHistoryResponse {
+  const root = isRecord(payload) ? payload : null;
+  const items = Array.isArray(root?.items) ? root.items : [];
+  return {
+    items: items.map(normalizePredictionHistoryItem),
+    total: Number(root?.total ?? 0),
+    page: Number(root?.page ?? 1),
+    pageSize: Number(root?.pageSize ?? root?.page_size ?? 5),
+  };
+}
+
+function normalizePredictionHistoryItem(value: unknown): PredictionHistoryResponse["items"][number] {
+  const item = isRecord(value) ? value : {};
+  const data = isRecord(item.data) ? normalizePredictionData(item.data) : normalizePredictionData(null);
+  const confidenceText = normalizeConfidenceText(item.confidenceText ?? item.confidence_text);
+  return {
+    id: readString(item.id) ?? "",
+    createdAt: readString(item.createdAt ?? item.created_at) ?? "",
+    predictedDisease: readString(item.predictedDisease ?? item.predicted_disease) ?? data.predictedDisease,
+    confidence: Number(item.confidence ?? data.confidence ?? 0),
+    confidenceText,
+    severity: readString(item.severity),
+    status: readString(item.status) ?? "PENDING",
+    source: (item.source as PredictionSource) ?? data.source,
+    deviceId: readString(item.deviceId ?? item.device_id),
+    image: parseStoredImage(item.image) ?? data.image,
+    originalFilename: readString(item.originalFilename ?? item.original_filename),
+    data: {
+      ...data,
+      historyId: readString(item.id) ?? data.historyId,
     },
   };
 }
@@ -135,8 +212,9 @@ function parseStoredImage(value: unknown) {
   if (!isRecord(value)) return null;
   const objectKey = readString(value.objectKey ?? value.object_key);
   const url = readString(value.url);
-  if (!objectKey || !url) return null;
-  return { objectKey, url };
+  const path = readString(value.path);
+  if (!objectKey && !url && !path) return null;
+  return { objectKey, url, path };
 }
 
 function parseConfidence(value: unknown) {

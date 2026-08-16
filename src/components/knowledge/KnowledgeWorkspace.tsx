@@ -148,7 +148,7 @@ const STATUS_META: Record<
   { label: string; className: string }
 > = {
   PUBLISHED: {
-    label: "Đã xuất bản",
+    label: "Đã duyệt",
     className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
   },
   REVIEW: {
@@ -160,7 +160,7 @@ const STATUS_META: Record<
     className: "bg-neutral-100 text-neutral-600 ring-neutral-200",
   },
   REJECTED: {
-    label: "Bị từ chối",
+    label: "Từ chối",
     className: "bg-red-50 text-red-700 ring-red-100",
   },
 };
@@ -266,7 +266,7 @@ function ArticleTable({
                   className="group flex max-w-[340px] items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E5A44]"
                 >
                   <span
-                    className={`relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br ${COVER_TONES[article.coverTone] ?? COVER_TONES.green}`}
+                    className={`relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br ${COVER_TONES[article.coverTone ?? "green"] ?? COVER_TONES.green}`}
                   >
                     {article.coverPreview || article.coverImage ? (
                       <i
@@ -630,18 +630,18 @@ export function KnowledgeWorkspace({
   role: "ADMIN" | "ENGINEER";
 }) {
   const [state, dispatch] = useReducer(knowledgeReducer, initialState);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const reloadArticles = async () => {
-    const result = await knowledgeClient.list();
+    const result = role === "ADMIN"
+      ? await knowledgeClient.listAdmin()
+      : await knowledgeClient.listMine();
     dispatch({ type: "SET_ARTICLES", articles: result.articles });
   };
 
   useEffect(() => {
     let active = true;
-    knowledgeClient
-      .list()
+    (role === "ADMIN" ? knowledgeClient.listAdmin() : knowledgeClient.listMine())
       .then((result) => {
         if (active) {
           dispatch({ type: "SET_ARTICLES", articles: result.articles });
@@ -655,13 +655,10 @@ export function KnowledgeWorkspace({
           });
         }
       })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
     return () => {
       active = false;
     };
-  }, []);
+  }, [role]);
 
   const saveArticle = async (status: KnowledgeStatus) => {
     if (!state.editor.title.trim() || !state.editor.content.trim()) return;
@@ -759,7 +756,7 @@ export function KnowledgeWorkspace({
           <div className="grid grid-cols-3 gap-2">
             {[
               ["Kiến thức", state.articles.length, LayoutList],
-              ["Đã xuất bản", publishedCount, Sparkles],
+              ["Đã duyệt", publishedCount, Sparkles],
               ["Lượt đọc", totalViews.toLocaleString("vi-VN"), Eye],
             ].map(([label, value, Icon]) => {
               const MetricIcon = Icon as typeof LayoutList;

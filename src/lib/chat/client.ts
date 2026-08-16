@@ -5,6 +5,7 @@ import type {
   CreateConversationRequest,
   PublishRegimenRequest,
   SendChatMessageRequest,
+  UpdateRegimenStepRequest,
 } from "./types";
 
 interface ListConversationsResponse {
@@ -98,6 +99,20 @@ export const chatClient = {
       `/api/chat/conversations/${conversationId}/regimens`,
       {
         method: "POST",
+        body: JSON.stringify(body),
+      },
+    ).then(normalizeConversationResponse);
+  },
+  updateRegimenStep(
+    conversationId: string,
+    messageId: string,
+    day: number,
+    body: UpdateRegimenStepRequest,
+  ) {
+    return chatRequest<{ conversation?: ChatConversation | null } | null>(
+      `/api/chat/conversations/${conversationId}/regimens/${messageId}/steps/${day}`,
+      {
+        method: "PATCH",
         body: JSON.stringify(body),
       },
     ).then(normalizeConversationResponse);

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { KnowledgeWorkspace } from "@/components/knowledge/KnowledgeWorkspace";
+import { KnowledgeReviewWorkspace } from "@/components/knowledge-admin/KnowledgeReviewWorkspace";
 
 export const metadata: Metadata = {
   title: "Quản lý kiến thức",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default async function KnowledgeManagementPage() {
   return (
     <DashboardShell role="ADMIN">
-      <KnowledgeWorkspace role="ADMIN" />
+      <KnowledgeReviewWorkspace />
     </DashboardShell>
   );
 }

@@ -8,6 +8,7 @@ export interface NotificationItem {
   type: string;
   isRead: boolean;
   createdAt: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface NotificationPageResponse {
