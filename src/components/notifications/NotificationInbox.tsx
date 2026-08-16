@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,6 +12,7 @@ import {
   Filter,
   Inbox,
   LoaderCircle,
+  ExternalLink,
   RefreshCw,
   Search,
   Trash2,
@@ -57,6 +59,11 @@ function notificationTone(type: string) {
   return "bg-neutral-100 text-neutral-600";
 }
 
+function notificationTargetUrl(item: NotificationItem) {
+  const value = item.metadata?.targetUrl;
+  return typeof value === "string" && value.startsWith("/") ? value : null;
+}
+
 function NotificationSkeleton() {
   return (
     <article className="animate-pulse rounded-[22px] border border-neutral-100 bg-white p-4">
@@ -82,14 +89,18 @@ function NotificationSkeleton() {
 function NotificationCard({
   item,
   onMarkRead,
+  onOpen,
   onDelete,
   busy,
 }: {
   item: NotificationItem;
   onMarkRead: (id: string) => void;
+  onOpen: (item: NotificationItem) => void;
   onDelete: (id: string) => void;
   busy: boolean;
 }) {
+  const targetUrl = notificationTargetUrl(item);
+
   return (
     <article
       className={`rounded-[22px] border p-4 transition-all duration-200 ${
@@ -136,6 +147,17 @@ function NotificationCard({
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-neutral-100 pt-4">
+        {targetUrl ? (
+          <button
+            type="button"
+            onClick={() => onOpen(item)}
+            disabled={busy}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-xs font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? <LoaderCircle size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+            Mở
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onMarkRead(item.id)}
@@ -160,6 +182,7 @@ function NotificationCard({
 }
 
 export function NotificationInbox() {
+  const router = useRouter();
   const [mode, setMode] = useState<ViewMode>("UNREAD");
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(10);
@@ -253,6 +276,29 @@ export function NotificationInbox() {
         ),
       );
     } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openNotification = async (item: NotificationItem) => {
+    const targetUrl = notificationTargetUrl(item);
+    if (!targetUrl) return;
+    setBusyId(item.id);
+    try {
+      if (!item.isRead) {
+        await notificationClient.markRead(item.id);
+      }
+      router.push(targetUrl);
+    } catch (cause) {
+      setError(
+        friendlyApiMessage(
+          cause instanceof NotificationApiError
+            ? { status: cause.status, message: cause.message }
+            : null,
+          "notification",
+          "Không thể mở thông báo.",
+        ),
+      );
       setBusyId(null);
     }
   };
@@ -466,6 +512,7 @@ export function NotificationInbox() {
                     item={item}
                     busy={busyId === item.id}
                     onMarkRead={markRead}
+                    onOpen={openNotification}
                     onDelete={removeNotification}
                   />
                 ))}

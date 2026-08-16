@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
@@ -9,26 +10,40 @@ import {
   BookOpen,
   Camera,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
+  Eye,
   ExternalLink,
   FileImage,
   LoaderCircle,
   Maximize2,
+  MessageCircleMore,
   RefreshCw,
   ScanSearch,
+  Search,
   ShieldCheck,
+  Share2,
   Sprout,
+  Trash2,
   ZoomIn,
   FlaskConical,
   Sparkles,
 } from "lucide-react";
-import { AiApiError, predictLeafDisease } from "@/lib/ai/client";
+import {
+  AiApiError,
+  deletePredictionHistory,
+  listPredictionHistory,
+  predictLeafDisease,
+} from "@/lib/ai/client";
 import type {
   KnowledgeLineItem,
   PredictionData,
+  PredictionHistoryItem,
   PredictionSource,
   ReferenceSourceSummary,
 } from "@/lib/ai/types";
+import { chatClient } from "@/lib/chat/client";
 import { diseaseLabels } from "@/lib/labels";
 import { translateRecommendation } from "@/lib/treatment-terms";
 
@@ -45,10 +60,29 @@ type ReportSnapshot = {
 
 type PredictionErrorKind = "invalid-image" | "service-unavailable" | "general";
 type ViewerMode = "fullscreen" | null;
+type HistoryStatus = "PENDING" | "CONSULTING" | "RESOLVED";
+
+type ShareEngineer = {
+  name: string;
+  phoneNumber: string;
+  specialty: string;
+  initials: string;
+};
 
 type SourceOption = {
   value: PredictionSource;
   label: string;
+};
+
+type DiagnosisHistoryRow = {
+  id: string;
+  createdAt: string;
+  imageUrl?: string;
+  resultLabel: string;
+  severity: string;
+  confidence: string;
+  status: HistoryStatus;
+  report?: ReportSnapshot;
 };
 
 const sourceOptions: SourceOption[] = [
@@ -58,6 +92,7 @@ const sourceOptions: SourceOption[] = [
 ];
 
 export function DiseaseDiagnosisWorkspace() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [source, setSource] = useState<PredictionSource>("WEB");
@@ -66,9 +101,21 @@ export function DiseaseDiagnosisWorkspace() {
   const [error, setError] = useState("");
   const [errorKind, setErrorKind] = useState<PredictionErrorKind | null>(null);
   const [activeReport, setActiveReport] = useState<ReportSnapshot | null>(null);
-  const [history, setHistory] = useState<ReportSnapshot[]>([]);
+  const [historyRows, setHistoryRows] = useState<DiagnosisHistoryRow[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatus | "ALL">("ALL");
+  const [historyPage, setHistoryPage] = useState(1);
   const [zoom, setZoom] = useState(100);
   const [viewerMode, setViewerMode] = useState<ViewerMode>(null);
+  const [sharePanelOpen, setSharePanelOpen] = useState(false);
+  const [shareEngineers, setShareEngineers] = useState<ShareEngineer[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareSendingPhone, setShareSendingPhone] = useState("");
+  const [shareError, setShareError] = useState("");
+  const [shareSuccess, setShareSuccess] = useState("");
 
   useEffect(() => {
     if (!file) {
@@ -98,11 +145,19 @@ export function DiseaseDiagnosisWorkspace() {
   const report = activeReport!;
   const canUpload = Boolean(file) && !loading && (source !== "IOT_CAMERA" || deviceId.trim().length > 0);
 
+  const clearShareState = () => {
+    setSharePanelOpen(false);
+    setShareError("");
+    setShareSuccess("");
+    setShareSendingPhone("");
+  };
+
   const handleFileChange = (selectedFile: File | null) => {
     setError("");
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
+    clearShareState();
 
     if (!selectedFile) {
       setFile(null);
@@ -135,6 +190,7 @@ export function DiseaseDiagnosisWorkspace() {
     setActiveReport(null);
     setZoom(100);
     setViewerMode(null);
+    clearShareState();
   };
 
   const upload = async () => {
@@ -155,6 +211,7 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
+    clearShareState();
 
     try {
       const response = await predictLeafDisease(
@@ -172,7 +229,8 @@ export function DiseaseDiagnosisWorkspace() {
       };
 
       setActiveReport(snapshot);
-      setHistory((current) => [snapshot, ...current].slice(0, 5));
+      setHistoryPage(1);
+      await loadDiagnosisHistory(1);
     } catch (cause) {
       const failure = classifyPredictionFailure(cause);
       setErrorKind(failure.kind);
@@ -188,11 +246,137 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setViewerMode(null);
     setZoom(100);
+    clearShareState();
   };
 
   const diagnosisImageUrl = report?.result.image?.url ?? null;
   const originalImageUrl = report?.previewUrl ?? previewUrl ?? null;
   const hasDecisionSupport = Boolean(report?.result.decisionSupport);
+  const historyPageSize = 5;
+  const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / historyPageSize));
+  const visibleHistoryRows = historyRows;
+
+  const loadDiagnosisHistory = useCallback(
+    async (page = historyPage) => {
+      setHistoryLoading(true);
+      setHistoryError("");
+      try {
+        const response = await listPredictionHistory({
+          page,
+          pageSize: historyPageSize,
+          query: historyQuery,
+          status: historyStatusFilter,
+        });
+        setHistoryRows(response.items.map(toDiagnosisHistoryRow));
+        setHistoryTotal(response.total);
+        setHistoryPage(response.page);
+      } catch (historyLoadError) {
+        setHistoryError(
+          historyLoadError instanceof Error
+            ? historyLoadError.message
+            : "Không thể tải lịch sử chẩn đoán.",
+        );
+        setHistoryRows([]);
+        setHistoryTotal(0);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [historyPage, historyQuery, historyStatusFilter],
+  );
+
+  useEffect(() => {
+    void loadDiagnosisHistory();
+  }, [loadDiagnosisHistory]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyQuery, historyStatusFilter]);
+
+  useEffect(() => {
+    if (historyPage > totalHistoryPages) {
+      setHistoryPage(totalHistoryPages);
+    }
+  }, [historyPage, totalHistoryPages]);
+
+  const openSharePanel = async (targetReport = activeReport) => {
+    if (!targetReport) return;
+
+    if (targetReport.id !== activeReport?.id) {
+      setActiveReport(targetReport);
+    }
+    setSharePanelOpen(true);
+    setShareError("");
+    setShareSuccess("");
+
+    if (shareEngineers.length > 0) return;
+
+    setShareLoading(true);
+    try {
+      const result = await chatClient.listConversations({ role: "FARMER" });
+      const engineers = result.engineers.filter((engineer) => engineer.phoneNumber);
+      setShareEngineers(engineers);
+      if (engineers.length === 0) {
+        setShareError("Bạn chưa có kỹ sư đã kết nối để chia sẻ báo cáo.");
+      }
+    } catch (shareLoadError) {
+      setShareError(
+        shareLoadError instanceof Error
+          ? shareLoadError.message
+          : "Không thể tải danh sách kỹ sư đã kết nối.",
+      );
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const shareReportToEngineer = async (engineer: ShareEngineer) => {
+    if (!activeReport) return;
+
+    setShareSendingPhone(engineer.phoneNumber);
+    setShareError("");
+    setShareSuccess("");
+    try {
+      const message = buildDiagnosisShareMessage(
+        activeReport,
+        diagnosisLabel,
+        confidenceLabel,
+        sourceLabel,
+      );
+      await chatClient.createConversation({
+        peerPhoneNumber: engineer.phoneNumber,
+        cropContext: `Chia sẻ báo cáo AI: ${diagnosisLabel || "Chẩn đoán lá sầu riêng"}`,
+        sensorContext: "Báo cáo được gửi từ màn hình Phân tích AI.",
+        initialMessage: message,
+      });
+      setShareSuccess(`Đã gửi báo cáo cho ${engineer.name}. Đang mở phòng chat...`);
+      window.setTimeout(() => {
+        router.push("/dashboard/client/chat");
+      }, 600);
+    } catch (shareSendError) {
+      setShareError(
+        shareSendError instanceof Error
+          ? shareSendError.message
+          : "Không thể chia sẻ báo cáo cho kỹ sư.",
+      );
+    } finally {
+      setShareSendingPhone("");
+    }
+  };
+
+  const deleteHistoryRow = async (row: DiagnosisHistoryRow) => {
+    setHistoryError("");
+    try {
+      await deletePredictionHistory(row.id);
+      await loadDiagnosisHistory(historyPage);
+    } catch (historyDeleteError) {
+      setHistoryError(
+        historyDeleteError instanceof Error
+          ? historyDeleteError.message
+          : "Không thể xóa lịch sử chẩn đoán.",
+      );
+    }
+  };
 
   return (
     <section className="space-y-8">
@@ -261,8 +445,8 @@ export function DiseaseDiagnosisWorkspace() {
               onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
 
-<div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
-              <div className="grid gap-4 md:grid-cols-3">
+            <div className="mt-4 rounded-[22px] border border-[#e3e9e3] bg-white p-4 shadow-sm">
+              <div className="grid gap-3 md:grid-cols-[140px_minmax(0,1fr)]">
                 <label className="space-y-2">
                   <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
                     Nguồn ảnh
@@ -275,7 +459,7 @@ export function DiseaseDiagnosisWorkspace() {
                       setActiveReport(null);
                       setSource(event.target.value as PredictionSource);
                     }}
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+                    className="h-14 w-full rounded-2xl border border-[#d8e1d8] bg-[#fbfcfa] px-4 text-sm font-semibold text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:bg-white focus:ring-4 focus:ring-[#2E5A4415]"
                   >
                     {sourceOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -285,7 +469,7 @@ export function DiseaseDiagnosisWorkspace() {
                   </select>
                 </label>
 
-                <label className="space-y-2 md:col-span-2">
+                <label className="space-y-2">
                   <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
                     Mã thiết bị IoT
                   </span>
@@ -302,17 +486,17 @@ export function DiseaseDiagnosisWorkspace() {
                         ? "VD: ESP32-CAM-DEMO-001"
                         : "Chỉ cần khi chọn IoT Camera"
                     }
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+                    className="h-14 w-full rounded-2xl border border-[#d8e1d8] bg-[#fbfcfa] px-4 text-sm font-medium text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:bg-white focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
                   />
                 </label>
               </div>
 
-              <div className="flex flex-wrap gap-3 sm:justify-end">
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:flex sm:justify-end">
                 <button
                   type="button"
                   onClick={() => void upload()}
                   disabled={!canUpload}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#2E5A44] px-5 text-[13px] font-bold text-white shadow-sm shadow-[#2E5A4420] transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[170px]"
                 >
                   {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
                   {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
@@ -320,7 +504,7 @@ export function DiseaseDiagnosisWorkspace() {
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border border-[#d8e1d8] bg-white px-5 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8] sm:min-w-[124px]"
                 >
                   <RefreshCw size={16} />
                   Làm mới
@@ -412,6 +596,104 @@ export function DiseaseDiagnosisWorkspace() {
               label="Mức độ"
               value={report ? formatSeverity(report.result.recommendation?.severity) : "Đang cập nhật"}
             />
+            <div className="rounded-[20px] border border-[#e3e9e3] bg-white p-5 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-500">
+                Chia sẻ & trao đổi với kỹ sư
+              </p>
+              <p className="mt-3 text-[13px] leading-6 text-neutral-500">
+                Gửi kết quả phân tích này cho kỹ sư để được tư vấn chi tiết.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => void openSharePanel()}
+                  disabled={!activeReport}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-[13px] font-bold text-white shadow-sm shadow-[#2E5A4420] transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Share2 size={16} />
+                  Chia sẻ qua tin nhắn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/client/chat")}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                >
+                  <MessageCircleMore size={16} />
+                  Trò chuyện với kỹ sư
+                </button>
+              </div>
+
+              {sharePanelOpen ? (
+                <div className="mt-4 rounded-2xl border border-[#dfe8df] bg-[#fafcf9] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                        Gửi qua tin nhắn
+                      </p>
+                      <p className="mt-1 text-[13px] font-bold text-neutral-900">
+                        Chọn kỹ sư đang kết nối
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearShareState}
+                      className="rounded-lg border border-[#d8e1d8] bg-white px-2 py-1 text-[12px] font-bold text-neutral-600 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+
+                  {shareLoading ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#e3e9e3] bg-white px-3 py-2 text-[12px] font-semibold text-neutral-500">
+                      <LoaderCircle size={14} className="animate-spin" />
+                      Đang tải kỹ sư...
+                    </div>
+                  ) : null}
+
+                  {shareError ? (
+                    <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700">
+                      {shareError}
+                    </p>
+                  ) : null}
+
+                  {shareSuccess ? (
+                    <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-700">
+                      {shareSuccess}
+                    </p>
+                  ) : null}
+
+                  {shareEngineers.length > 0 ? (
+                    <div className="mt-3 grid gap-2">
+                      {shareEngineers.map((engineer) => {
+                        const sending = shareSendingPhone === engineer.phoneNumber;
+                        return (
+                          <button
+                            key={engineer.phoneNumber}
+                            type="button"
+                            onClick={() => void shareReportToEngineer(engineer)}
+                            disabled={Boolean(shareSendingPhone)}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-[#e3e9e3] bg-white p-3 text-left transition hover:border-[#b8c7b9] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <span className="min-w-0">
+                              <b className="block truncate text-[13px] text-neutral-900">
+                                {engineer.name}
+                              </b>
+                              <span className="mt-1 block truncate text-[12px] font-semibold text-neutral-500">
+                                {engineer.phoneNumber}
+                              </span>
+                            </span>
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#2E5A44] px-2.5 py-1.5 text-[12px] font-bold text-white">
+                              {sending ? <LoaderCircle size={13} className="animate-spin" /> : <Share2 size={13} />}
+                              {sending ? "Gửi" : "Gửi"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </article>
@@ -461,23 +743,25 @@ export function DiseaseDiagnosisWorkspace() {
 
             {report?.result.image?.url ? (
               <div className="flex flex-wrap gap-3">
-                <a
-                  href={report.result.image.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                >
-                  <ExternalLink size={16} />
-                  Mở tab mới
-                </a>
-                <a
-                  href={report.result.image.url}
-                  download
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                >
-                  <Download size={16} />
-                  Tải xuống
-                </a>
+                <>
+                  <a
+                    href={report.result.image.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                  >
+                    <ExternalLink size={16} />
+                    Mở tab mới
+                  </a>
+                  <a
+                    href={report.result.image.url}
+                    download
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                  >
+                    <Download size={16} />
+                    Tải xuống
+                  </a>
+                </>
               </div>
             ) : null}
           </div>
@@ -589,75 +873,213 @@ export function DiseaseDiagnosisWorkspace() {
         </article>
       ) : null}
 
-      {showSuccessView ? (
-        <article className="panel p-7 lg:p-8">
-          <div className="flex items-center gap-4">
-            <span className="grid size-11 place-items-center rounded-xl bg-[#e9f0ea] text-[#2E5A44]">
-              <FileImage size={22} />
-            </span>
+      <article className="panel p-7 lg:p-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-[15px] font-bold text-neutral-900">Lịch sử chẩn đoán</h2>
+              <h2 className="text-[16px] font-extrabold uppercase tracking-[1.2px] text-neutral-900">
+                Lịch sử chẩn đoán
+              </h2>
               <p className="mt-1 text-[13px] leading-6 text-neutral-500">
-                Mỗi bản ghi lưu lại ảnh, ngày chẩn đoán, tên bệnh và độ tin cậy để mở lại nhanh.
+                Các lần phân tích trước đây của bạn
               </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_180px]">
+              <label className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-neutral-400" />
+                <input
+                  value={historyQuery}
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                  placeholder="Tìm kiếm kết quả..."
+                  className="h-12 w-full rounded-2xl border border-[#e3e9e3] bg-white pl-12 pr-4 text-[13px] font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+                />
+              </label>
+              <select
+                value={historyStatusFilter}
+                onChange={(event) =>
+                  setHistoryStatusFilter(event.target.value as HistoryStatus | "ALL")
+                }
+                className="h-12 rounded-2xl border border-[#e3e9e3] bg-white px-4 text-[13px] font-bold text-neutral-700 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+              >
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="PENDING">Chưa xử lý</option>
+                <option value="CONSULTING">Đang tư vấn</option>
+                <option value="RESOLVED">Đã xử lý</option>
+              </select>
             </div>
           </div>
 
-          <div className="mt-6 space-y-3">
-            {history.length === 0 ? (
-              <p className="rounded-2xl border border-[#e3e9e3] bg-[#fafcf9] px-4 py-5 text-[13px] text-neutral-500">
-                Chưa có lượt chẩn đoán nào.
-              </p>
-            ) : (
-              history.map((item) => {
-                const thumbnail = item.result.image?.url ?? item.previewUrl;
-                const title = formatDiseaseLabel(item.result.predictedDisease);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => reopenReport(item)}
-                    className="flex w-full items-center gap-4 rounded-2xl border border-[#e3e9e3] bg-white p-4 text-left transition hover:border-[#b8c7b9] hover:shadow-sm"
-                  >
-                    <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl border border-[#e8eee8] bg-[#f5f8f5]">
-                      {thumbnail ? (
-                        <Image
-                          src={thumbnail}
-                          alt={`Ảnh chẩn đoán ${title}`}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="grid h-full w-full place-items-center text-[#2E5A44]">
-                          <FileImage size={20} />
-                        </div>
-                      )}
-                    </div>
+          {historyError ? (
+            <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-700">
+              {historyError}
+            </p>
+          ) : null}
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <b className="block truncate text-sm text-neutral-900">{item.fileName}</b>
-                          <small className="mt-1 block text-xs text-neutral-500">
-                            {formatDateTime(item.createdAt)}
-                          </small>
-                        </div>
-                        <span className="rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
-                          {title}
+          <div className="mt-5 overflow-hidden rounded-2xl border border-[#e3e9e3] bg-white">
+            <div className="overflow-x-auto">
+              <table className="min-w-[880px] w-full border-collapse text-left">
+                <thead className="bg-[#fbfcfa] text-[12px] font-bold text-neutral-700">
+                  <tr className="border-b border-[#edf1ec]">
+                    <th className="px-4 py-3">Ngày chẩn đoán</th>
+                    <th className="px-4 py-3">Ảnh lá</th>
+                    <th className="px-4 py-3">Kết quả</th>
+                    <th className="px-4 py-3">Mức độ</th>
+                    <th className="px-4 py-3">Độ tin cậy</th>
+                    <th className="px-4 py-3">Trạng thái</th>
+                    <th className="px-4 py-3 text-center">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#edf1ec] text-[13px] text-neutral-700">
+                  {historyLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                        <span className="inline-flex items-center gap-2 font-semibold">
+                          <LoaderCircle size={16} className="animate-spin" />
+                          Đang tải lịch sử chẩn đoán...
                         </span>
-                      </div>
-                      <p className="mt-2 text-[13px] text-neutral-500">
-                        Độ tin cậy: {formatConfidence(item.result.confidenceText || item.result.confidenceLabel)}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                      </td>
+                    </tr>
+                  ) : visibleHistoryRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                        Chưa có lịch sử chẩn đoán thật trong database.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleHistoryRows.map((row) => (
+                      <tr key={row.id} className="transition hover:bg-[#fbfcfa]">
+                        <td className="whitespace-nowrap px-4 py-3 font-medium">
+                          {formatHistoryDateTime(row.createdAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="relative size-11 overflow-hidden rounded-xl border border-[#e3e9e3] bg-[#edf3ee]">
+                            {row.imageUrl ? (
+                              <Image
+                                src={row.imageUrl}
+                                alt={`Ảnh lá ${row.resultLabel}`}
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="grid h-full w-full place-items-center text-[#2E5A44]">
+                                <FileImage size={18} />
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold text-neutral-900">
+                          {row.resultLabel}
+                        </td>
+                        <td className="px-4 py-3">
+                          <SeverityBadge value={row.severity} />
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold">
+                          {row.confidence}
+                        </td>
+                        <td className="px-4 py-3">
+                          <HistoryStatusBadge status={row.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => row.report && void openSharePanel(row.report)}
+                              disabled={!row.report}
+                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Chia sẻ"
+                            >
+                              <Share2 size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => router.push("/dashboard/client/chat")}
+                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44]"
+                              title="Trò chuyện"
+                            >
+                              <MessageCircleMore size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => row.report && reopenReport(row.report)}
+                              disabled={!row.report}
+                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Xem"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteHistoryRow(row)}
+                              className="grid size-9 place-items-center rounded-xl text-red-500 transition hover:bg-red-50"
+                              title="Xóa"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </article>
-      ) : null}
+
+          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
+                disabled={historyPage === 1}
+                className="grid size-9 place-items-center rounded-xl text-neutral-700 transition hover:bg-[#edf3ee] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              {buildHistoryPagination(historyPage, totalHistoryPages).map((item, index) =>
+                item === "..." ? (
+                  <span key={`dots-${index}`} className="px-2 text-sm font-bold text-neutral-500">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setHistoryPage(item)}
+                    className={`grid size-9 place-items-center rounded-xl text-sm font-bold transition ${
+                      historyPage === item
+                        ? "border border-[#9db4a4] bg-white text-[#2E5A44]"
+                        : "text-neutral-600 hover:bg-[#edf3ee]"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.min(totalHistoryPages, page + 1))}
+                disabled={historyPage === totalHistoryPages}
+                className="grid size-9 place-items-center rounded-xl text-neutral-700 transition hover:bg-[#edf3ee] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 text-[13px] text-neutral-500 sm:flex-row sm:items-center">
+              <span>
+                Hiển thị {historyTotal === 0 ? 0 : (historyPage - 1) * historyPageSize + 1}-
+                {Math.min(historyPage * historyPageSize, historyTotal)} của{" "}
+                {historyTotal} kết quả
+              </span>
+              <button
+                type="button"
+                className="h-10 rounded-xl border border-[#e3e9e3] bg-white px-4 text-[13px] font-bold text-neutral-700"
+              >
+                5 / trang
+              </button>
+            </div>
+          </div>
+      </article>
 
       {viewerMode === "fullscreen" && diagnosisImageUrl ? (
         <FullscreenViewer
@@ -716,6 +1138,92 @@ function ReportStatCard({
       </div>
     </div>
   );
+}
+
+function SeverityBadge({ value }: { value: string }) {
+  const normalized = value.trim().toLocaleLowerCase("vi");
+  const className =
+    normalized === "cao" || normalized === "nặng" || normalized === "rất cao"
+      ? "bg-red-50 text-red-600"
+      : normalized === "trung bình"
+        ? "bg-[#fff1bf] text-[#7b6015]"
+        : normalized === "thấp"
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-neutral-50 text-neutral-500";
+
+  return (
+    <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-bold ${className}`}>
+      {value}
+    </span>
+  );
+}
+
+function HistoryStatusBadge({ status }: { status: HistoryStatus }) {
+  const labels: Record<HistoryStatus, string> = {
+    CONSULTING: "Đang tư vấn",
+    PENDING: "Chưa xử lý",
+    RESOLVED: "Đã xử lý",
+  };
+  const className =
+    status === "CONSULTING"
+      ? "bg-blue-50 text-blue-600"
+      : status === "PENDING"
+        ? "bg-neutral-100 text-neutral-600"
+        : "bg-emerald-50 text-emerald-700";
+
+  return (
+    <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-bold ${className}`}>
+      {labels[status]}
+    </span>
+  );
+}
+
+function toDiagnosisHistoryRow(item: PredictionHistoryItem): DiagnosisHistoryRow {
+  const resultLabel = formatDiseaseLabel(item.predictedDisease || item.data.predictedDisease);
+  const confidence = item.confidenceText || formatConfidence(item.data.confidenceText);
+  const imageUrl = resolveHistoryImageUrl(item);
+  const report: ReportSnapshot = {
+    id: item.id,
+    fileName: item.originalFilename || `${resultLabel}.jpg`,
+    createdAt: item.createdAt,
+    previewUrl: imageUrl,
+    result: {
+      ...item.data,
+      historyId: item.id,
+      image: imageUrl
+        ? {
+            ...(item.image ?? item.data.image ?? {}),
+            url: imageUrl,
+          }
+        : (item.image ?? item.data.image),
+    },
+  };
+
+  return {
+    id: item.id,
+    createdAt: item.createdAt,
+    imageUrl: imageUrl || undefined,
+    resultLabel,
+    severity: item.severity ? formatSeverity(item.severity) : formatSeverity(item.data.recommendation?.severity),
+    confidence,
+    status: normalizeHistoryStatus(item.status),
+    report,
+  };
+}
+
+function resolveHistoryImageUrl(item: PredictionHistoryItem) {
+  return (
+    item.image?.url ||
+    item.data.image?.url ||
+    (item.image?.path ? `/api/backend/v1/predict/history/images/${encodeURIComponent(item.id)}` : "")
+  );
+}
+
+function normalizeHistoryStatus(value: string): HistoryStatus {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "CONSULTING") return "CONSULTING";
+  if (normalized === "RESOLVED") return "RESOLVED";
+  return "PENDING";
 }
 
 function DiagnosisImagePanel({
@@ -1098,6 +1606,50 @@ function getStatusLabel(
   return "Chưa xử lý";
 }
 
+function buildDiagnosisShareMessage(
+  report: ReportSnapshot,
+  diagnosisLabel: string,
+  confidenceLabel: string,
+  sourceLabel: string,
+) {
+  const severity = formatSeverity(report.result.recommendation?.severity);
+  const summary = report.result.recommendation?.diseaseSummary
+    ? translateDiagnosisText(report.result.recommendation.diseaseSummary)
+    : "";
+  const immediateActions = translateStringItems(report.result.decisionSupport?.immediateActions).slice(0, 3);
+  const monitoringPlan = translateStringItems(report.result.decisionSupport?.monitoringPlan).slice(0, 3);
+  const imageUrl = report.result.image?.url;
+  const lines = [
+    "Tôi muốn chia sẻ báo cáo chẩn đoán AI để kỹ sư theo dõi và trao đổi thêm.",
+    "",
+    `Bệnh dự đoán: ${diagnosisLabel || formatDiseaseLabel(report.result.predictedDisease)}`,
+    `Độ tin cậy: ${confidenceLabel}`,
+    `Mức độ: ${severity}`,
+    `Nguồn ảnh: ${sourceLabel}`,
+    `Thời gian chẩn đoán: ${formatDateTime(report.createdAt)}`,
+    report.fileName ? `Tên ảnh: ${report.fileName}` : "",
+    imageUrl ? `Ảnh chẩn đoán: ${imageUrl}` : "",
+    summary ? "" : "",
+    summary ? `Tóm tắt: ${summary}` : "",
+    immediateActions.length ? "" : "",
+    ...formatShareList("Việc cần làm ngay", immediateActions),
+    monitoringPlan.length ? "" : "",
+    ...formatShareList("Theo dõi", monitoringPlan),
+  ].filter((line) => line !== "");
+
+  return truncateMessage(lines.join("\n"), 1900);
+}
+
+function formatShareList(title: string, items: string[]) {
+  if (items.length === 0) return [];
+  return [title, ...items.map((item) => `- ${item}`)];
+}
+
+function truncateMessage(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 function formatDiseaseLabel(value: string) {
   const normalized = normalizeDiseaseKey(value);
   return diseaseLabels[value] ?? diseaseLabels[normalized] ?? translateDiagnosisText(value);
@@ -1124,6 +1676,36 @@ function formatDateTime(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatHistoryDateTime(value: string) {
+  try {
+    return new Date(value).toLocaleString("vi-VN", {
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function buildHistoryPagination(currentPage: number, totalPages: number) {
+  if (totalPages <= 4) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages: Array<number | "..."> = [1];
+  if (currentPage > 3) pages.push("...");
+  const middlePages = [currentPage - 1, currentPage, currentPage + 1].filter(
+    (page) => page > 1 && page < totalPages,
+  );
+  pages.push(...middlePages);
+  if (currentPage < totalPages - 2) pages.push("...");
+  pages.push(totalPages);
+  return [...new Set(pages)];
 }
 
 function clampConfidence(value: number) {

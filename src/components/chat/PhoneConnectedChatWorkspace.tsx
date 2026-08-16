@@ -11,9 +11,11 @@ import {
 import Link from "next/link";
 import {
   CheckCheck,
+  ClipboardList,
   ImagePlus,
   MessageCircleMore,
   Phone,
+  Plus,
   RotateCw,
   Search,
   Send,
@@ -27,6 +29,7 @@ import { connectionClient } from "@/lib/connections/client";
 import type {
   ChatConversation,
   ChatMessage,
+  TreatmentRegimen,
 } from "@/lib/chat/types";
 import type { UserConnection } from "@/lib/connections/types";
 
@@ -40,6 +43,18 @@ interface AttachmentDraft {
 type PendingConversationTarget = {
   kind: "connection";
   connection: UserConnection;
+};
+
+const emptyTreatmentPlan: TreatmentRegimen = {
+  diagnosis: "",
+  expectedOutcome: "",
+  followUpDate: "",
+  steps: [
+    { completed: false, day: 1, task: "" },
+    { completed: false, day: 2, task: "" },
+    { completed: false, day: 3, task: "" },
+  ],
+  title: "",
 };
 
 const chatSocketUrl =
@@ -98,35 +113,68 @@ function formatMessageTime(value: string) {
 function MessageBubble({
   message,
   mine,
+  onToggleRegimenStep,
+  updatingStepKey,
 }: {
   message: ChatMessage;
   mine: boolean;
+  onToggleRegimenStep?: (message: ChatMessage, day: number, completed: boolean) => void;
+  updatingStepKey?: string;
 }) {
   if (message.type === "TREATMENT_REGIMEN" && message.regimen) {
+    const completedCount = message.regimen.steps.filter((step) => step.completed).length;
     return (
-      <article className="max-w-[460px] rounded-2xl bg-[#203e30] p-4 text-sm text-white shadow-sm">
-        <div className="flex items-center gap-2">
-          <Stethoscope size={16} className="text-[#EED56D]" />
-          <b className="text-sm">{message.regimen.title}</b>
+      <article className="w-full max-w-[620px] rounded-2xl border border-[#dbe8df] bg-white p-4 text-sm text-neutral-800 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#2E5A44] text-white">
+              <ClipboardList size={17} />
+            </span>
+            <span className="min-w-0">
+              <small className="block text-xs font-extrabold uppercase tracking-wide text-[#B28B00]">
+                Checklist điều trị
+              </small>
+              <b className="mt-0.5 block truncate text-base text-neutral-950">
+                {message.regimen.title}
+              </b>
+            </span>
+          </div>
+          <span className="rounded-full bg-[#edf3ee] px-3 py-1 text-xs font-extrabold text-[#2E5A44]">
+            {completedCount}/{message.regimen.steps.length}
+          </span>
         </div>
         {message.regimen.diagnosis && (
-          <p className="mt-2 text-sm leading-relaxed text-white/75">
-            Chan doan: {message.regimen.diagnosis}
+          <p className="mt-3 rounded-xl border border-[#eef3ee] bg-[#f8faf7] px-3 py-2 text-sm font-semibold leading-relaxed text-neutral-600">
+            Chẩn đoán: {message.regimen.diagnosis}
           </p>
         )}
         <div className="mt-3 space-y-2">
           {message.regimen.steps.map((step) => (
-            <div key={step.day} className="rounded-xl bg-white/10 p-2">
-              <b className="text-sm text-[#EED56D]">Ngay {step.day}</b>
-              <p className="mt-1 text-sm leading-relaxed text-white/80">
-                {step.task}
-              </p>
-            </div>
+            <label
+              key={step.day}
+              className="flex cursor-pointer gap-3 rounded-xl border border-neutral-200 bg-white p-3 hover:bg-[#f8fbf7]"
+            >
+              <input
+                type="checkbox"
+                checked={step.completed}
+                disabled={updatingStepKey === `${message.id}:${step.day}`}
+                onChange={(event) =>
+                  onToggleRegimenStep?.(message, step.day, event.target.checked)
+                }
+                className="mt-0.5 size-5 shrink-0 accent-[#2E5A44] disabled:cursor-wait"
+              />
+              <span>
+                <b className="text-sm text-neutral-950">Bước {step.day}</b>
+                <p className="mt-1 text-sm font-semibold leading-relaxed text-neutral-600">
+                  {step.task || "Chưa nhập nội dung bước điều trị."}
+                </p>
+              </span>
+            </label>
           ))}
         </div>
         {message.regimen.followUpDate && (
-          <small className="mt-3 block text-sm text-white/55">
-            Tai kham: {message.regimen.followUpDate}
+          <small className="mt-3 block text-sm font-semibold text-neutral-500">
+            Tái khám: {message.regimen.followUpDate}
           </small>
         )}
       </article>
@@ -147,11 +195,10 @@ function MessageBubble({
           style={{ backgroundImage: `url(${message.image})` }}
         />
       )}
-      <p className="px-3.5 py-2.5 leading-relaxed">{message.content}</p>
+      <p className="whitespace-pre-line px-3.5 py-2.5 leading-relaxed">{message.content}</p>
     </div>
   );
 }
-
 export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [connections, setConnections] = useState<UserConnection[]>([]);
@@ -162,6 +209,9 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [treatmentPanelOpen, setTreatmentPanelOpen] = useState(false);
+  const [regimenDraft, setRegimenDraft] = useState<TreatmentRegimen>(emptyTreatmentPlan);
+  const [updatingStepKey, setUpdatingStepKey] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -265,6 +315,15 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [activeConversation?.id, activeConversation?.messages.length]);
+
+  const applyConversationUpdate = (conversation: ChatConversation) => {
+    setConversations((current) =>
+      current
+        .map((item) => (item.id === conversation.id ? conversation : item))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    );
+    setActiveId(conversation.id);
+  };
 
   const visibleConversations = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("vi");
@@ -384,14 +443,7 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
         content,
         image: attachment?.preview ?? null,
       });
-      setConversations((current) =>
-        current
-          .map((item) =>
-            item.id === result.conversation.id ? result.conversation : item,
-          )
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-      );
-      setActiveId(result.conversation.id);
+      applyConversationUpdate(result.conversation);
       setDraft("");
       setAttachment(null);
     } catch (sendError) {
@@ -401,6 +453,77 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
     }
   };
 
+  const publishTreatmentPlan = async () => {
+    if (!activeConversation || role !== "ENGINEER") return;
+    const steps = regimenDraft.steps
+      .map((step, index) => ({
+        ...step,
+        completed: false,
+        day: index + 1,
+        task: step.task.trim(),
+      }))
+      .filter((step) => step.task.length > 0);
+    const title = regimenDraft.title.trim();
+    if (!title || steps.length === 0) {
+      setError("Vui lòng nhập tên phác đồ và ít nhất một bước điều trị.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const result = await chatClient.publishRegimen(activeConversation.id, {
+        sender: "ENGINEER",
+        regimen: {
+          ...regimenDraft,
+          title,
+          diagnosis: regimenDraft.diagnosis.trim(),
+          expectedOutcome: regimenDraft.expectedOutcome.trim(),
+          followUpDate: regimenDraft.followUpDate.trim(),
+          steps,
+        },
+      });
+      applyConversationUpdate(result.conversation);
+      setRegimenDraft(emptyTreatmentPlan);
+      setTreatmentPanelOpen(false);
+    } catch (publishError) {
+      setError(
+        publishError instanceof Error
+          ? publishError.message
+          : "Không thể gửi phác đồ điều trị.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateRegimenStep = async (
+    message: ChatMessage,
+    day: number,
+    completed: boolean,
+  ) => {
+    if (!activeConversation) return;
+    const stepKey = `${message.id}:${day}`;
+    setUpdatingStepKey(stepKey);
+    setError("");
+    try {
+      const result = await chatClient.updateRegimenStep(
+        activeConversation.id,
+        message.id,
+        day,
+        { completed },
+      );
+      applyConversationUpdate(result.conversation);
+    } catch (updateError) {
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Không thể cập nhật checklist điều trị.",
+      );
+    } finally {
+      setUpdatingStepKey("");
+    }
+  };
   const selectImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -577,6 +700,17 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {role === "ENGINEER" && (
+                  <button
+                    type="button"
+                    onClick={() => setTreatmentPanelOpen((current) => !current)}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#d8c067] bg-[#fff9dc] px-3 text-sm font-bold text-[#594915] hover:bg-[#fff4bf]"
+                    aria-expanded={treatmentPanelOpen}
+                  >
+                    <ClipboardList size={15} />
+                    Điều trị
+                  </button>
+                )}
                 <Link
                   href="/dashboard/community?tab=connected"
                   className="inline-flex h-10 items-center justify-center rounded-xl border border-neutral-200 px-3 text-sm font-bold text-neutral-600 hover:bg-[#edf3ee] hover:text-[#2E5A44]"
@@ -596,24 +730,180 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
               </div>
             </header>
 
+            {treatmentPanelOpen && role === "ENGINEER" && (
+              <div className="shrink-0 border-b border-neutral-100 bg-[#fffdf5] px-4 py-3 sm:px-6">
+                <div className="grid max-h-[42vh] min-h-0 max-w-3xl gap-3 overflow-y-auto pr-1 scrollbar-thin">
+                  {role === "ENGINEER" && (
+                    <section className="min-h-0 rounded-2xl border border-[#eadfa8] bg-white p-3">
+                      <div className="flex items-center gap-2 text-sm font-extrabold text-[#2E5A44]">
+                        <Stethoscope size={16} />
+                        Lập phác đồ điều trị
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <input
+                          value={regimenDraft.title}
+                          onChange={(event) =>
+                            setRegimenDraft((current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          placeholder="Tên phác đồ"
+                          className="h-10 rounded-xl border border-neutral-200 px-3 text-sm font-semibold outline-none focus:border-[#2E5A44]"
+                        />
+                        <input
+                          value={regimenDraft.followUpDate}
+                          onChange={(event) =>
+                            setRegimenDraft((current) => ({
+                              ...current,
+                              followUpDate: event.target.value,
+                            }))
+                          }
+                          placeholder="Ngày tái khám"
+                          className="h-10 rounded-xl border border-neutral-200 px-3 text-sm font-semibold outline-none focus:border-[#2E5A44]"
+                        />
+                        <input
+                          value={regimenDraft.diagnosis}
+                          onChange={(event) =>
+                            setRegimenDraft((current) => ({
+                              ...current,
+                              diagnosis: event.target.value,
+                            }))
+                          }
+                          placeholder="Chẩn đoán"
+                          className="h-10 rounded-xl border border-neutral-200 px-3 text-sm font-semibold outline-none focus:border-[#2E5A44]"
+                        />
+                        <input
+                          value={regimenDraft.expectedOutcome}
+                          onChange={(event) =>
+                            setRegimenDraft((current) => ({
+                              ...current,
+                              expectedOutcome: event.target.value,
+                            }))
+                          }
+                          placeholder="Mục tiêu mong đợi"
+                          className="h-10 rounded-xl border border-neutral-200 px-3 text-sm font-semibold outline-none focus:border-[#2E5A44]"
+                        />
+                      </div>
+                      <div className="mt-2 max-h-44 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                        {regimenDraft.steps.map((step, index) => (
+                          <div key={step.day} className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRegimenDraft((current) => ({
+                                  ...current,
+                                  steps: current.steps.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, completed: !item.completed }
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              className={`grid size-10 shrink-0 place-items-center rounded-xl border text-sm font-extrabold ${
+                                step.completed
+                                  ? "border-[#2E5A44] bg-[#2E5A44] text-white"
+                                  : "border-neutral-200 text-neutral-500"
+                              }`}
+                              aria-label={`Đánh dấu bước ${index + 1}`}
+                            >
+                              {index + 1}
+                            </button>
+                            <input
+                              value={step.task}
+                              onChange={(event) =>
+                                setRegimenDraft((current) => ({
+                                  ...current,
+                                  steps: current.steps.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, task: event.target.value }
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              placeholder={`Bước ${index + 1}: việc cần làm`}
+                              className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 px-3 text-sm font-semibold outline-none focus:border-[#2E5A44]"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRegimenDraft((current) => ({
+                              ...current,
+                              steps: [
+                                ...current.steps,
+                                {
+                                  completed: false,
+                                  day: current.steps.length + 1,
+                                  task: "",
+                                },
+                              ],
+                            }))
+                          }
+                          className="inline-flex h-9 items-center gap-2 rounded-xl border border-neutral-200 px-3 text-sm font-bold text-neutral-600 hover:bg-neutral-50"
+                        >
+                          <Plus size={14} />
+                          Thêm bước
+                        </button>
+                        <button
+                          type="button"
+                          onClick={publishTreatmentPlan}
+                          disabled={busy}
+                          className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E5A44] px-3 text-sm font-bold text-white disabled:cursor-wait disabled:bg-neutral-200"
+                        >
+                          <Stethoscope size={14} />
+                          Gửi phác đồ
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
+
+                </div>
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#f7f8f5] px-4 py-5 scrollbar-thin sm:px-6">
               {activeConversation.messages.map((message) => {
                 const mine = isMine(message, role);
+                const isRegimenMessage = message.type === "TREATMENT_REGIMEN";
                 return (
                   <div
                     key={message.id}
-                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      isRegimenMessage
+                        ? "justify-center"
+                        : mine
+                          ? "justify-end"
+                          : "justify-start"
+                    }`}
                   >
-                    <div className={mine ? "items-end" : "items-start"}>
-                      {!mine && (
+                    <div
+                      className={
+                        isRegimenMessage
+                          ? "w-full max-w-[680px]"
+                          : mine
+                            ? "items-end"
+                            : "items-start"
+                      }
+                    >
+                      {!mine && !isRegimenMessage && (
                         <small className="mb-1.5 block text-sm font-bold text-neutral-500">
                           {peerName(activeConversation, role)}
                         </small>
                       )}
-                      <MessageBubble message={message} mine={mine} />
+                      <MessageBubble
+                        message={message}
+                        mine={mine}
+                        onToggleRegimenStep={updateRegimenStep}
+                        updatingStepKey={updatingStepKey}
+                      />
                       <span
                         className={`mt-1 flex items-center gap-1 text-[13px] text-neutral-400 ${
-                          mine ? "justify-end" : "justify-start"
+                          isRegimenMessage ? "justify-center" : mine ? "justify-end" : "justify-start"
                         }`}
                       >
                         {formatMessageTime(message.sentAt)}

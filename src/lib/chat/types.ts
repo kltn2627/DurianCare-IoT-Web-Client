@@ -79,3 +79,7 @@ export interface PublishRegimenRequest {
   sender: "ENGINEER";
   regimen: TreatmentRegimen;
 }
+
+export interface UpdateRegimenStepRequest {
+  completed: boolean;
+}
