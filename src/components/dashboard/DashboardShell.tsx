@@ -7,6 +7,7 @@ import {
   Bell,
   BookOpen,
   Bot,
+  Camera,
   ChevronDown,
   CalendarDays,
   ChevronLeft,
@@ -56,6 +57,7 @@ const ownerNav: NavItem[] = [
     icon: Microscope,
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
+  { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
   {
     href: "/dashboard/client/authorization",
     label: "Ủy quyền",
@@ -136,6 +138,7 @@ const ownerNavFixed: NavItem[] = [
     icon: CalendarDays,
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
+  { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
   { href: "/dashboard/client/crops", label: "Vụ mùa & QR", icon: QrCode },
   {
     href: "/dashboard/client/authorization",

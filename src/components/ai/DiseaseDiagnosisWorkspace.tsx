@@ -1,19 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
   BadgeCheck,
   BookOpen,
   Camera,
+  CameraOff,
   ChevronDown,
   Download,
   ExternalLink,
   FileImage,
   LoaderCircle,
   Maximize2,
+  Pause,
+  Play,
   RefreshCw,
   ScanSearch,
   ShieldCheck,
@@ -29,6 +32,7 @@ import type {
   PredictionSource,
   ReferenceSourceSummary,
 } from "@/lib/ai/types";
+import { cameraClient } from "@/lib/camera/client";
 import { diseaseLabels } from "@/lib/labels";
 import { translateRecommendation } from "@/lib/treatment-terms";
 
@@ -57,11 +61,21 @@ const sourceOptions: SourceOption[] = [
   { value: "IOT_CAMERA", label: "Camera IoT" },
 ];
 
+// Mirrors the camera list configured in CameraSection — update both when adding cameras.
+const CAMERA_DEVICES = [
+  { id: "esp32-cam-01", label: "Camera Vườn Chính",  sublabel: "esp32-cam-01" },
+  { id: "esp32-cam-02", label: "Camera Vườn Phụ",    sublabel: "esp32-cam-02" },
+];
+
+type CaptureMode = "upload" | "esp32cam";
+
 export function DiseaseDiagnosisWorkspace() {
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [source, setSource] = useState<PredictionSource>("WEB");
-  const [deviceId, setDeviceId] = useState("");
+  // Always initialised to a real camera ID — farmers never type this manually.
+  const [deviceId, setDeviceId] = useState(CAMERA_DEVICES[0].id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [errorKind, setErrorKind] = useState<PredictionErrorKind | null>(null);
@@ -69,6 +83,7 @@ export function DiseaseDiagnosisWorkspace() {
   const [history, setHistory] = useState<ReportSnapshot[]>([]);
   const [zoom, setZoom] = useState(100);
   const [viewerMode, setViewerMode] = useState<ViewerMode>(null);
+  const [cameraError, setCameraError] = useState(false);
 
   useEffect(() => {
     if (!file) {
@@ -97,6 +112,8 @@ export function DiseaseDiagnosisWorkspace() {
   const showServiceUnavailableCard = errorKind === "service-unavailable" && !activeReport;
   const report = activeReport!;
   const canUpload = Boolean(file) && !loading && (source !== "IOT_CAMERA" || deviceId.trim().length > 0);
+  const canCapture = !loading && !cameraError;
+  const selectedCamera = CAMERA_DEVICES.find((c) => c.id === deviceId) ?? CAMERA_DEVICES[0];
 
   const handleFileChange = (selectedFile: File | null) => {
     setError("");
@@ -125,16 +142,18 @@ export function DiseaseDiagnosisWorkspace() {
   };
 
   const resetForm = () => {
+    setCaptureMode("upload");
     setFile(null);
     setPreviewUrl("");
     setSource("WEB");
-    setDeviceId("");
+    setDeviceId(CAMERA_DEVICES[0].id);
     setLoading(false);
     setError("");
     setErrorKind(null);
     setActiveReport(null);
     setZoom(100);
     setViewerMode(null);
+    setCameraError(false);
   };
 
   const upload = async () => {
@@ -182,6 +201,63 @@ export function DiseaseDiagnosisWorkspace() {
     }
   };
 
+  // Fetches a live frame from ESP32-CAM and runs it through the AI pipeline.
+  const captureFromEsp32 = async () => {
+    if (!deviceId.trim()) {
+      setError("Vui lòng nhập mã thiết bị ESP32-CAM trước khi chụp.");
+      setErrorKind("general");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setErrorKind(null);
+    setActiveReport(null);
+    setViewerMode(null);
+
+    let snapshotBlobUrl: string | null = null;
+    try {
+      // 1. Pull a live JPEG from the camera proxy
+      snapshotBlobUrl = await cameraClient.fetchSnapshotBlob(deviceId.trim());
+
+      // 2. Convert blob URL → ArrayBuffer → File (so predictLeafDisease can send it as FormData)
+      const imageResp = await fetch(snapshotBlobUrl);
+      const imageBlob = await imageResp.blob();
+      const snapshotFile = new File([imageBlob], `esp32cam-${Date.now()}.jpg`, { type: "image/jpeg" });
+
+      // Update the upload preview area so the user sees the captured frame
+      setFile(snapshotFile);
+      setSource("IOT_CAMERA");
+
+      // 3. Run prediction via the existing AI service pipeline
+      const response = await predictLeafDisease(snapshotFile, "IOT_CAMERA", deviceId.trim());
+
+      const snapshot: ReportSnapshot = {
+        id: `${Date.now()}-esp32cam`,
+        fileName: snapshotFile.name,
+        createdAt: new Date().toISOString(),
+        // Keep snapshotBlobUrl alive — it becomes the preview thumbnail in history
+        previewUrl: snapshotBlobUrl,
+        result: response.data,
+      };
+      snapshotBlobUrl = null; // ownership transferred to snapshot; do NOT revoke
+
+      setActiveReport(snapshot);
+      setHistory((current) => [snapshot, ...current].slice(0, 5));
+    } catch (cause) {
+      if (snapshotBlobUrl) { URL.revokeObjectURL(snapshotBlobUrl); }
+      const failure = classifyPredictionFailure(cause);
+      setErrorKind(failure.kind);
+      setError(
+        failure.kind === "general" && cause instanceof Error && cause.message.includes("Snapshot")
+          ? "Không thể lấy ảnh từ ESP32-CAM. Kiểm tra mã thiết bị và kết nối mạng."
+          : failure.message,
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const reopenReport = (report: ReportSnapshot) => {
     setActiveReport(report);
     setError("");
@@ -223,123 +299,261 @@ export function DiseaseDiagnosisWorkspace() {
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
           <div className="rounded-[28px] border border-dashed border-[#d3ddd4] bg-[#fbfcfa] p-5">
-            <label
-              htmlFor="ai-leaf-upload"
-              className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[24px] border border-[#e3eae3] bg-white px-6 py-8 text-center transition hover:border-[#b8c7b9] hover:shadow-sm"
-            >
-              {previewUrl ? (
-                <div className="relative h-[240px] w-full overflow-hidden rounded-[20px] bg-[#f3f6f3]">
-                  <Image
-                    src={previewUrl}
-                    alt="Ảnh lá đã chọn"
-                    fill
-                    unoptimized
-                    className="object-contain"
-                  />
+
+            {/* ── Input-source toggle ───────────────────────────────────── */}
+            <div className="mb-4 flex gap-2 rounded-2xl border border-[#e3eae3] bg-white p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setCaptureMode("upload");
+                  setError("");
+                  setErrorKind(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition ${
+                  captureMode === "upload"
+                    ? "bg-[#2E5A44] text-white shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                }`}
+              >
+                <FileImage size={15} />
+                Tải ảnh lên
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCaptureMode("esp32cam");
+                  setSource("IOT_CAMERA");
+                  setError("");
+                  setErrorKind(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition ${
+                  captureMode === "esp32cam"
+                    ? "bg-[#2E5A44] text-white shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                }`}
+              >
+                <Camera size={15} />
+                Chụp từ ESP32-CAM
+              </button>
+            </div>
+
+            {captureMode === "upload" ? (
+              <>
+                {/* ── File drop zone ────────────────────────────────────── */}
+                <label
+                  htmlFor="ai-leaf-upload"
+                  className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[24px] border border-[#e3eae3] bg-white px-6 py-8 text-center transition hover:border-[#b8c7b9] hover:shadow-sm"
+                >
+                  {previewUrl ? (
+                    <div className="relative h-[240px] w-full overflow-hidden rounded-[20px] bg-[#f3f6f3]">
+                      <Image
+                        src={previewUrl}
+                        alt="Ảnh lá đã chọn"
+                        fill
+                        unoptimized
+                        className="object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="grid size-14 place-items-center rounded-full bg-[#edf3ee] text-[#2E5A44]">
+                        <FileImage size={28} />
+                      </span>
+                      <h2 className="mt-4 text-lg font-extrabold tracking-tight text-neutral-900">
+                        Chọn hoặc kéo thả ảnh lá
+                      </h2>
+                      <p className="mt-2 max-w-md text-[13px] leading-6 text-neutral-500">
+                        Hỗ trợ JPEG, PNG, WEBP.
+                      </p>
+                    </>
+                  )}
+                </label>
+
+                <input
+                  id="ai-leaf-upload"
+                  type="file"
+                  accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
+                />
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="space-y-2">
+                      <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                        Nguồn ảnh
+                      </span>
+                      <select
+                        value={source}
+                        onChange={(event) => {
+                          setError("");
+                          setErrorKind(null);
+                          setActiveReport(null);
+                          setSource(event.target.value as PredictionSource);
+                        }}
+                        className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+                      >
+                        {sourceOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                        Mã thiết bị IoT
+                      </span>
+                      <input
+                        value={deviceId}
+                        onChange={(event) => {
+                          setError("");
+                          setErrorKind(null);
+                          setDeviceId(event.target.value);
+                        }}
+                        disabled={source !== "IOT_CAMERA"}
+                        placeholder={source === "IOT_CAMERA" ? "VD: ESP32-CAM-DEMO-001" : "Chỉ cần khi chọn IoT Camera"}
+                        className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void upload()}
+                      disabled={!canUpload}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
+                      {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                    >
+                      <RefreshCw size={16} />
+                      Làm mới
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <span className="grid size-14 place-items-center rounded-full bg-[#edf3ee] text-[#2E5A44]">
-                    <FileImage size={28} />
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {file ? (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
+                      <FileImage size={13} />
+                      {file.name}
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1.5 text-xs font-bold text-[#7b6015]">
+                    <Camera size={13} />
+                    Nguồn: {sourceLabel}
                   </span>
-                  <h2 className="mt-4 text-lg font-extrabold tracking-tight text-neutral-900">
-                    Chọn hoặc kéo thả ảnh lá
-                  </h2>
-                  <p className="mt-2 max-w-md text-[13px] leading-6 text-neutral-500">
-                    Hỗ trợ JPEG, PNG, WEBP.
+                </div>
+              </>
+            ) : (
+              /* ── ESP32-CAM capture panel ──────────────────────────────── */
+              <div className="rounded-[24px] border border-[#e3eae3] bg-white px-6 py-7 space-y-6">
+
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <span className="grid size-11 place-items-center rounded-xl bg-[#edf3ee] text-[#2E5A44]">
+                    <Camera size={22} />
+                  </span>
+                  <div>
+                    <h2 className="text-[15px] font-bold text-neutral-900">Chụp ảnh từ ESP32-CAM</h2>
+                    <p className="mt-0.5 text-[13px] text-neutral-500">
+                      Chọn camera và nhấn chụp — ảnh được lấy trực tiếp, không cần thao tác thêm.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Camera card picker */}
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                    Chọn camera
                   </p>
-                </>
-              )}
-            </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {CAMERA_DEVICES.map((cam) => {
+                      const selected = deviceId === cam.id;
+                      return (
+                        <button
+                          key={cam.id}
+                          type="button"
+                          onClick={() => {
+                            setDeviceId(cam.id);
+                            setError("");
+                            setErrorKind(null);
+                            setCameraError(false);
+                          }}
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                            selected
+                              ? "border-[#2E5A44] bg-[#edf3ee] shadow-sm"
+                              : "border-[#e3eae3] bg-white hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                          }`}
+                        >
+                          <span
+                            className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                              selected ? "bg-[#2E5A44] text-white" : "bg-[#f0f4f0] text-[#2E5A44]"
+                            }`}
+                          >
+                            <Camera size={16} />
+                          </span>
+                          <span className="min-w-0">
+                            <b className={`block text-[13px] ${selected ? "text-[#2E5A44]" : "text-neutral-800"}`}>
+                              {cam.label}
+                            </b>
+                            <span className="block text-[11px] text-neutral-400">{cam.sublabel}</span>
+                          </span>
+                          {selected && (
+                            <span className="ml-auto size-4 shrink-0 rounded-full bg-[#2E5A44] text-white flex items-center justify-center">
+                              <svg viewBox="0 0 10 8" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M1 4l2.5 2.5L9 1" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            <input
-              id="ai-leaf-upload"
-              type="file"
-              accept={ACCEPTED_IMAGE_TYPES.join(",")}
-              capture="environment"
-              className="sr-only"
-              onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
-            />
+                {/* Live preview frame */}
+                <Esp32LivePreview
+                  deviceId={deviceId}
+                  disabled={loading}
+                  onCameraError={setCameraError}
+                />
 
-<div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
-              <div className="grid gap-4 md:grid-cols-3">
-                <label className="space-y-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Nguồn ảnh
-                  </span>
-                  <select
-                    value={source}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setActiveReport(null);
-                      setSource(event.target.value as PredictionSource);
-                    }}
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+                {/* Capture + reset */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void captureFromEsp32()}
+                    disabled={!canCapture}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-5 py-3.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {sourceOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-2 md:col-span-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Mã thiết bị IoT
-                  </span>
-                  <input
-                    value={deviceId}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setDeviceId(event.target.value);
-                    }}
-                    disabled={source !== "IOT_CAMERA"}
-                    placeholder={
-                      source === "IOT_CAMERA"
-                        ? "VD: ESP32-CAM-DEMO-001"
-                        : "Chỉ cần khi chọn IoT Camera"
-                    }
-                    className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
-                  />
-                </label>
+                    {loading ? (
+                      <LoaderCircle size={18} className="animate-spin" />
+                    ) : (
+                      <Camera size={18} />
+                    )}
+                    {loading ? "Đang chụp & phân tích..." : "📸  Chụp & Phân tích ngay"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3.5 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                  >
+                    <RefreshCw size={16} />
+                    Làm mới
+                  </button>
+                </div>
               </div>
-
-              <div className="flex flex-wrap gap-3 sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => void upload()}
-                  disabled={!canUpload}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
-                  {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                >
-                  <RefreshCw size={16} />
-                  Làm mới
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {file ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
-                  <FileImage size={13} />
-                  {file.name}
-                </span>
-              ) : null}
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1.5 text-xs font-bold text-[#7b6015]">
-                <Camera size={13} />
-                Nguồn: {sourceLabel}
-              </span>
-            </div>
+            )}
 
             {error ? (
               <div
@@ -375,7 +589,9 @@ export function DiseaseDiagnosisWorkspace() {
 
             {loading ? (
               <div className="mt-4 rounded-xl border border-[#e1e8df] bg-[#f7faf7] px-4 py-3 text-xs text-neutral-500">
-                Đang xử lý ảnh. Nếu ảnh hợp lệ, kết quả sẽ xuất hiện ngay bên phải.
+                {captureMode === "esp32cam"
+                  ? "Đang lấy ảnh từ ESP32-CAM và phân tích AI. Vui lòng chờ..."
+                  : "Đang xử lý ảnh. Nếu ảnh hợp lệ, kết quả sẽ xuất hiện ngay bên phải."}
               </div>
             ) : null}
           </div>
@@ -667,6 +883,201 @@ export function DiseaseDiagnosisWorkspace() {
         />
       ) : null}
     </section>
+  );
+}
+
+// ── ESP32-CAM live preview ────────────────────────────────────────────────────
+// Self-contained: owns polling loop, blob lifecycle, error/retry, play/pause.
+
+const LIVE_POLL_MS = 4_000; // matches backend CACHE_TTL — no benefit polling faster
+
+function Esp32LivePreview({
+  deviceId,
+  disabled,
+  onCameraError,
+}: {
+  deviceId: string;
+  disabled: boolean;
+  onCameraError: (hasError: boolean) => void;
+}) {
+  const [liveUrl, setLiveUrl]       = useState<string | null>(null);
+  const [paused, setPaused]         = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [lastAt, setLastAt]         = useState<number | null>(null);
+  const [initializing, setInit]     = useState(true);
+
+  const inFlightRef = useRef(false);
+  const blobUrlRef  = useRef<string | null>(null);
+
+  // Notify parent when camera error state changes
+  useEffect(() => { onCameraError(error !== null); }, [error, onCameraError]);
+
+  // Reset everything when the selected device changes
+  useEffect(() => {
+    setLiveUrl(null);
+    setError(null);
+    setLastAt(null);
+    setInit(true);
+    inFlightRef.current = false;
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+  }, [deviceId]);
+
+  // Release last blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
+
+  const fetchFrame = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      const url = await cameraClient.fetchSnapshotBlob(deviceId);
+      // Atomically swap blob URL and revoke the previous one
+      setLiveUrl((prev) => {
+        if (prev && prev === blobUrlRef.current) URL.revokeObjectURL(prev);
+        blobUrlRef.current = url;
+        return url;
+      });
+      setError(null);
+      setLastAt(Date.now());
+      setInit(false);
+    } catch {
+      setError("Không thể kết nối đến Camera. Vui lòng kiểm tra nguồn điện hoặc kết nối Wi-Fi.");
+      setInit(false);
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [deviceId]);
+
+  // Start/stop the polling loop
+  useEffect(() => {
+    if (paused || disabled) return;
+    void fetchFrame();
+    const timer = setInterval(() => void fetchFrame(), LIVE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [fetchFrame, paused, disabled]);
+
+  const isLive = !paused && !disabled && !error && liveUrl !== null;
+
+  const retry = () => {
+    setError(null);
+    setInit(true);
+    void fetchFrame();
+  };
+
+  return (
+    <div>
+      {/* 16:9 camera viewport */}
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-neutral-900 shadow-inner">
+
+        {/* Frame image */}
+        {liveUrl ? (
+          <img src={liveUrl} alt="ESP32-CAM live" className="h-full w-full object-cover" />
+        ) : null}
+
+        {/* Initialising shimmer */}
+        {initializing && !error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-900">
+            <div className="size-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <p className="text-[12px] text-neutral-400">Đang kết nối camera...</p>
+          </div>
+        ) : null}
+
+        {/* Error overlay */}
+        {error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-900/95 px-6 text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-red-900/40 text-red-400">
+              <CameraOff size={28} />
+            </span>
+            <div>
+              <p className="text-[13px] font-semibold text-neutral-200">Camera không phản hồi</p>
+              <p className="mt-1 max-w-[260px] text-[11px] leading-5 text-neutral-400">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={retry}
+              className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-[12px] font-bold text-white transition hover:bg-white/20"
+            >
+              <RefreshCw size={13} />
+              Thử kết nối lại
+            </button>
+          </div>
+        ) : null}
+
+        {/* AI-analysis overlay — shown when parent is running prediction */}
+        {disabled && !error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
+            <div className="size-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            <p className="text-[13px] font-bold text-white">Đang phân tích bệnh bằng AI...</p>
+            <p className="text-[11px] text-white/60">Vui lòng chờ kết quả</p>
+          </div>
+        ) : null}
+
+        {/* LIVE badge */}
+        {isLive ? (
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
+            <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-white">Live</span>
+          </div>
+        ) : null}
+
+        {/* Paused indicator */}
+        {paused && !disabled && liveUrl ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <div className="rounded-2xl bg-black/50 px-5 py-3 backdrop-blur-sm">
+              <p className="text-[13px] font-bold text-white">⏸ Đã tạm dừng</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Last-update timestamp */}
+        {lastAt && !disabled ? (
+          <div className="absolute bottom-3 right-3 rounded-full bg-black/40 px-2.5 py-1 backdrop-blur-sm">
+            <span className="text-[10px] text-white/70">
+              {new Date(lastAt).toLocaleTimeString("vi-VN", {
+                hour: "2-digit", minute: "2-digit", second: "2-digit",
+              })}
+            </span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Controls row below frame */}
+      <div className="mt-2 flex items-center justify-between px-1">
+        {error ? (
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#2E5A44] transition hover:underline"
+          >
+            <RefreshCw size={12} />
+            Thử kết nối lại
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPaused((p) => !p)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 transition hover:text-neutral-700 disabled:opacity-40"
+          >
+            {paused ? <Play size={12} /> : <Pause size={12} />}
+            {paused ? "Tiếp tục phát" : "Tạm dừng"}
+          </button>
+        )}
+        <span
+          className={`text-[11px] font-medium ${
+            error ? "text-red-500" : isLive ? "text-[#4b9666]" : "text-neutral-400"
+          }`}
+        >
+          {error ? "⚠ Mất kết nối" : isLive ? "● Đang phát sóng" : paused ? "○ Đã tạm dừng" : "○ Chờ..."}
+        </span>
+      </div>
+    </div>
   );
 }
 
