@@ -16,7 +16,8 @@ import {
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { dashboardStats } from "@/constants/durianMockData";
-import { readSession } from "@/lib/auth/server";
+import { AUTH_COOKIES, readSession } from "@/lib/auth/server";
+import type { IotDevice } from "@/lib/iot/types";
 
 export const metadata: Metadata = { title: "Dashboard chủ trang trại" };
 
@@ -86,6 +87,7 @@ export default async function ClientDashboardPage() {
   const cookieStore = await cookies();
   const session = readSession(cookieStore);
   const userName = session?.profile.fullName?.trim() || "nhà vườn";
+  const iotSnapshot = await readIotSnapshot(cookieStore);
 
   return (
     <DashboardShell role="OWNER" userName={userName}>
@@ -100,20 +102,20 @@ export default async function ClientDashboardPage() {
               Chào buổi sáng, {userName}.
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-5 text-[#d2ded5]">
-              Hệ thống IoT vận hành ổn định. Có 3 cảnh báo và 2 yêu cầu hợp tác
-              mới cần xem xét.
+              {iotSnapshot.description}
             </p>
           </div>
           <div className="mt-8 grid grid-cols-2 gap-7 lg:mt-0">
             <div className="rounded-2xl border border-white/10 bg-white/[.08] px-7 py-5">
               <small className="text-sm text-[#c8d6cc]">
-                Thời tiết tại vườn
+                Telemetry mới nhất
               </small>
-              <b className="mt-1 block text-xl">29.3°C</b>
+              <b className="mt-1 block text-xl">{iotSnapshot.temperature}</b>
             </div>
             <div className="rounded-2xl bg-[#EED56D] px-7 py-5 text-[#294f3b]">
-              <small className="text-sm font-semibold">Sức khỏe vườn</small>
-              <b className="mt-1 block text-xl">92%</b>
+              <small className="text-sm font-semibold">Thiết bị IoT</small>
+              <b className="mt-1 block text-xl">{iotSnapshot.deviceCount}</b>
+              <small className="mt-1 block text-xs font-bold">{iotSnapshot.connectivity}</small>
             </div>
           </div>
         </section>
@@ -159,4 +161,48 @@ export default async function ClientDashboardPage() {
       </div>
     </DashboardShell>
   );
+}
+
+async function readIotSnapshot(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+  const accessToken = cookieStore.get(AUTH_COOKIES.accessToken)?.value;
+  if (!accessToken) {
+    return {
+      description: "Đăng nhập để xem telemetry IoT theo farm/khu được cấp quyền.",
+      connectivity: "UNKNOWN",
+      deviceCount: "--",
+      temperature: "--",
+    };
+  }
+  try {
+    const backendBase = (process.env.DURIANCARE_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+    const response = await fetch(`${backendBase}/api/iot/devices`, {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new Error("Unable to load IoT devices");
+    const body = (await response.json()) as { devices: IotDevice[] };
+    const device = body.devices.find((item) => item.latestTelemetry) ?? body.devices[0];
+    const telemetry = device?.latestTelemetry ?? null;
+    return {
+      description: device
+        ? `IoT đang đọc từ ${device.name}. Kết nối: ${device.connectivityStatus ?? "UNKNOWN"}.`
+        : "Chưa có device registry nào thuộc phạm vi farm/khu bạn được quyền xem.",
+      connectivity: device?.connectivityStatus ?? "UNKNOWN",
+      deviceCount: String(body.devices.length).padStart(2, "0"),
+      temperature: telemetry?.temperature === null || telemetry?.temperature === undefined
+        ? "--"
+        : `${formatNumber(telemetry.temperature)}°C`,
+    };
+  } catch {
+    return {
+      description: "Không thể tải telemetry IoT lúc này. Web không dùng giá trị mẫu.",
+      connectivity: "UNKNOWN",
+      deviceCount: "--",
+      temperature: "--",
+    };
+  }
+}
+
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
