@@ -61,6 +61,18 @@ const chatSocketUrl =
   process.env.NEXT_PUBLIC_CHAT_SOCKET_URL?.replace(/\/$/, "") ||
   "http://localhost:3002";
 
+async function fetchChatSocketToken() {
+  const response = await fetch("/api/chat/socket-token", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Không lấy được token realtime chat.");
+  }
+  const payload = (await response.json()) as { accessToken?: string };
+  if (!payload.accessToken) {
+    throw new Error("Token realtime chat không hợp lệ.");
+  }
+  return payload.accessToken;
+}
+
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -266,31 +278,43 @@ export function PhoneConnectedChatWorkspace({ role }: { role: WorkspaceRole }) {
   const activeConversation = conversations.find((item) => item.id === activeId);
 
   useEffect(() => {
-    const socket = io(`${chatSocketUrl}/chat`, {
-      transports: ["websocket", "polling"],
-    });
-    socketRef.current = socket;
-
-    socket.on("conversation.updated", (conversation: ChatConversation) => {
-      if (!conversation?.id) return;
-      setConversations((current) => {
-        const exists = current.some((item) => item.id === conversation.id);
-        const next = exists
-          ? current.map((item) => (item.id === conversation.id ? conversation : item))
-          : [conversation, ...current];
-        return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    let cancelled = false;
+    void fetchChatSocketToken().then((token) => {
+      if (cancelled) return;
+      const socket = io(`${chatSocketUrl}/chat`, {
+        auth: { token },
+        transports: ["websocket", "polling"],
       });
-    });
-    socket.on("conversation.deleted", (payload: { id?: string }) => {
-      if (!payload?.id) return;
-      setConversations((current) =>
-        current.filter((conversation) => conversation.id !== payload.id),
-      );
-      setActiveId((current) => (current === payload.id ? "" : current));
-    });
+      socketRef.current = socket;
+
+      socket.on("connect_error", () => {
+        void fetchChatSocketToken().then((nextToken) => {
+          socket.auth = { token: nextToken };
+          socket.connect();
+        }).catch(() => undefined);
+      });
+      socket.on("conversation.updated", (conversation: ChatConversation) => {
+        if (!conversation?.id) return;
+        setConversations((current) => {
+          const exists = current.some((item) => item.id === conversation.id);
+          const next = exists
+            ? current.map((item) => (item.id === conversation.id ? conversation : item))
+            : [conversation, ...current];
+          return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        });
+      });
+      socket.on("conversation.deleted", (payload: { id?: string }) => {
+        if (!payload?.id) return;
+        setConversations((current) =>
+          current.filter((conversation) => conversation.id !== payload.id),
+        );
+        setActiveId((current) => (current === payload.id ? "" : current));
+      });
+    }).catch(() => undefined);
 
     return () => {
-      socket.disconnect();
+      cancelled = true;
+      socketRef.current?.disconnect();
       socketRef.current = null;
     };
   }, []);

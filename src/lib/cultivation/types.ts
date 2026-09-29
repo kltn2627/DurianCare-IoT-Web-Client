@@ -161,6 +161,43 @@ export interface FarmOption {
   location?: string | null;
 }
 
+/** Canonical persisted zone model returned inside FarmCatalogDto.FarmResponse.zones. */
+export type FarmZoneStatus = "ACTIVE" | "INACTIVE" | "QUARANTINED" | "ARCHIVED";
+
+export interface FarmZoneRequest {
+  areaSquareMeters?: number | null;
+  boundaryGeoJson?: Record<string, unknown> | null;
+  code?: string | null;
+  description?: string | null;
+  name: string;
+}
+
+export interface FarmZoneCatalog extends FarmZoneRequest {
+  createdAt?: string | null;
+  id: string;
+  status: FarmZoneStatus;
+  updatedAt?: string | null;
+}
+
+export interface FarmCatalog extends FarmOption {
+  address?: string | null;
+  areaHectares?: number | null;
+  createdAt?: string | null;
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  ownerUserId: string;
+  province?: string | null;
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  updatedAt?: string | null;
+  zones: FarmZoneCatalog[];
+}
+
+export interface CanonicalCultivationZone extends FarmZoneCatalog {
+  farmId: string;
+  farmName: string;
+}
+
 export interface CultivationZoneRequest {
   farmId: string;
   name: string;

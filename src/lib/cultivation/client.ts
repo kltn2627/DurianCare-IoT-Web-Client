@@ -12,6 +12,10 @@ import type {
   CultivationPlan,
   CultivationZone,
   CultivationZoneRequest,
+  CanonicalCultivationZone,
+  FarmCatalog,
+  FarmZoneCatalog,
+  FarmZoneRequest,
   ExportRelease,
   ExportReleaseStatus,
   FarmOption,
@@ -103,6 +107,60 @@ function shouldUseMock(caught: unknown) {
   }
   return caught instanceof TypeError;
 }
+
+function farmLabel(farm: FarmCatalog) {
+  return farm.name || farm.code || "Trang trại chưa đặt tên";
+}
+
+function canonicalZones(farms: FarmCatalog[], query?: { farmId?: string; status?: string; search?: string }) {
+  const keyword = query?.search?.trim().toLocaleLowerCase("vi-VN");
+  return farms.flatMap((farm) =>
+    (farm.zones ?? []).map<CanonicalCultivationZone>((zone) => ({
+      ...zone,
+      farmId: farm.id,
+      farmName: farmLabel(farm),
+    })),
+  ).filter((zone) => {
+    const matchesFarm = !query?.farmId || zone.farmId === query.farmId;
+    const matchesStatus = !query?.status || zone.status === query.status;
+    const matchesSearch = !keyword || [zone.name, zone.code, zone.description]
+      .filter(Boolean)
+      .some((value) => String(value).toLocaleLowerCase("vi-VN").includes(keyword));
+    return matchesFarm && matchesStatus && matchesSearch && zone.status !== "ARCHIVED";
+  });
+}
+
+/**
+ * The persisted cultivation-area contract. Unlike the older CultivationZone
+ * client above, this client never falls back to browser localStorage data.
+ */
+export const farmZoneClient = {
+  listFarms: () => cultivationRequest<FarmCatalog[]>("/api/v1/farms"),
+  listZones: async (query?: { farmId?: string; status?: string; search?: string }) =>
+    canonicalZones(await farmZoneClient.listFarms(), query),
+  getZone: async (zoneId: string) => {
+    const zone = (await farmZoneClient.listZones()).find((item) => item.id === zoneId);
+    if (!zone) throw new CultivationApiError("Không tìm thấy khu canh tác.", 404);
+    return zone;
+  },
+  createZone: (body: FarmZoneRequest & { farmId: string }) => {
+    const { farmId, ...request } = body;
+    return cultivationRequest<FarmZoneCatalog>(`/api/v1/farms/${encodeURIComponent(farmId)}/zones`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  },
+  updateZone: (farmId: string, zoneId: string, body: Partial<FarmZoneRequest> & { status?: string }) =>
+    cultivationRequest<FarmZoneCatalog>(
+      `/api/v1/farms/${encodeURIComponent(farmId)}/zones/${encodeURIComponent(zoneId)}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  archiveZone: (farmId: string, zoneId: string) =>
+    cultivationRequest<void>(
+      `/api/v1/farms/${encodeURIComponent(farmId)}/zones/${encodeURIComponent(zoneId)}`,
+      { method: "DELETE" },
+    ),
+};
 
 export const cultivationClient = {
   listFarms: async () => {
