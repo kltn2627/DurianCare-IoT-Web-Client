@@ -10,6 +10,7 @@ import type {
   CultivationActivity,
   CultivationDashboardData,
   CultivationPlan,
+  CultivationSeason,
   CultivationZone,
   CultivationZoneRequest,
   CanonicalCultivationZone,
@@ -323,6 +324,9 @@ export const cultivationClient = {
       throw caught;
     }
   },
+
+  listSeasons: (query: { farmId: string; plotId?: string }) =>
+    cultivationRequest<CultivationSeason[]>(`/api/v1/cultivation-seasons${queryString(query)}`),
 
   careHistory: async (seasonId: string) => {
     try {

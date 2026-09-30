@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Plus, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, Calendar, Loader2, Plus, RefreshCw, X } from "lucide-react";
 import { treeClient, TreeApiError } from "@/lib/trees/client";
 import type { TreeSummary, ZoneDetail, ZoneSafetySummary } from "@/lib/trees/types";
+import { cultivationClient } from "@/lib/cultivation/client";
+import type { CultivationSeason } from "@/lib/cultivation/types";
 import { TreeMapCanvas } from "./TreeMapCanvas";
 import { ZoneSafetySummaryCard } from "./ZoneSafetySummary";
 import { TreeDetailPanel } from "./TreeDetailPanel";
@@ -160,6 +162,75 @@ function GenerateTreesForm({
   );
 }
 
+// ── ActiveSeasonBanner ───────────────────────────────────────────────────────
+
+function ActiveSeasonBanner({
+  season,
+  safeHarvestDate,
+}: {
+  season: CultivationSeason;
+  safeHarvestDate: string | null | undefined;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const end = season.endDate ?? null;
+  const daysLeft = end
+    ? Math.ceil((new Date(end).getTime() - Date.now()) / 86_400_000)
+    : null;
+  const endLabel = end
+    ? new Date(end).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "Không xác định";
+
+  const daysColor =
+    daysLeft == null ? "text-neutral-500" :
+    daysLeft <= 14   ? "text-red-600" :
+    daysLeft <= 30   ? "text-amber-600" : "text-green-700";
+  const daysBg =
+    daysLeft == null ? "bg-neutral-100" :
+    daysLeft <= 14   ? "bg-red-100" :
+    daysLeft <= 30   ? "bg-amber-50" : "bg-green-100";
+
+  const isSafeNow = safeHarvestDate != null && safeHarvestDate <= today;
+  const safeLabel = safeHarvestDate
+    ? new Date(safeHarvestDate).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : null;
+  const daysUntilSafe =
+    safeHarvestDate && safeHarvestDate > today
+      ? Math.ceil((new Date(safeHarvestDate).getTime() - Date.now()) / 86_400_000)
+      : null;
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-green-200 bg-green-50 px-5 py-4">
+      <div className="flex items-start gap-3 min-w-0">
+        <Calendar size={16} className="mt-0.5 shrink-0 text-[#2E5A44]" />
+        <div className="min-w-0">
+          <p className="text-sm font-extrabold text-neutral-900">{season.name}</p>
+          {season.crop ? (
+            <p className="text-xs text-green-800">
+              {season.crop}{season.variety ? ` — ${season.variety}` : ""}
+            </p>
+          ) : null}
+          <p className="mt-0.5 text-xs text-neutral-500">Thu hoạch dự kiến: {endLabel}</p>
+          {safeHarvestDate !== undefined ? (
+            isSafeNow ? (
+              <p className="mt-1 text-xs font-bold text-green-700">✓ Đủ điều kiện thu hoạch (từ {safeLabel})</p>
+            ) : daysUntilSafe != null ? (
+              <p className="mt-1 text-xs font-bold text-amber-700">⚠ Còn {daysUntilSafe} ngày đến ngày an toàn ({safeLabel})</p>
+            ) : (
+              <p className="mt-1 text-xs text-neutral-400">Chưa có dữ liệu hóa chất</p>
+            )
+          ) : null}
+        </div>
+      </div>
+      {daysLeft != null ? (
+        <div className={`shrink-0 rounded-xl px-4 py-2 text-center ${daysBg}`}>
+          <p className={`text-2xl font-black leading-none ${daysColor}`}>{daysLeft}</p>
+          <p className={`text-[10px] font-bold ${daysColor}`}>ngày</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── ZoneTreesWorkspace ────────────────────────────────────────────────────────
 
 interface Props {
@@ -171,6 +242,8 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
   const [zone, setZone] = useState<ZoneDetail | null>(null);
   const [trees, setTrees] = useState<TreeSummary[]>([]);
   const [safety, setSafety] = useState<ZoneSafetySummary | null>(null);
+  const [activeSeason, setActiveSeason] = useState<CultivationSeason | null>(null);
+  const [safeHarvestDate, setSafeHarvestDate] = useState<string | null | undefined>(undefined);
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,16 +254,38 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
     let active = true;
     setLoading(true);
     setError(null);
+    const today = new Date().toISOString().slice(0, 10);
     Promise.all([
       treeClient.getZone(zoneId),
       treeClient.listTrees(zoneId),
       treeClient.getZoneSafety(zoneId).catch(() => null),
+      cultivationClient.listSeasons({ farmId, plotId: zoneId }).catch(() => [] as CultivationSeason[]),
     ])
-      .then(([zoneData, treeData, safetyData]) => {
+      .then(([zoneData, treeData, safetyData, seasons]) => {
         if (!active) return;
         setZone(zoneData);
         setTrees(treeData);
         if (safetyData) setSafety(safetyData);
+        const current =
+          seasons.find(
+            (s) => s.startDate <= today && (!s.endDate || s.endDate >= today),
+          ) ?? null;
+        setActiveSeason(current);
+        if (current) {
+          cultivationClient.getSafeHarvestDate(current.id)
+            .then((res) => {
+              if (!active) return;
+              const resp = res as { earliestSafeHarvestDate?: string | null } | string | null;
+              const date =
+                typeof resp === "object" && resp !== null
+                  ? (resp.earliestSafeHarvestDate ?? null)
+                  : null;
+              setSafeHarvestDate(date);
+            })
+            .catch(() => { if (active) setSafeHarvestDate(null); });
+        } else {
+          setSafeHarvestDate(undefined);
+        }
       })
       .catch((caught) => {
         if (!active) return;
@@ -265,6 +360,11 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
           {error}
         </div>
+      ) : null}
+
+      {/* Active season banner */}
+      {activeSeason ? (
+        <ActiveSeasonBanner season={activeSeason} safeHarvestDate={safeHarvestDate} />
       ) : null}
 
       {/* Safety summary */}

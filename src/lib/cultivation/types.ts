@@ -469,6 +469,20 @@ export interface ApiError {
   message: string;
 }
 
+export interface CultivationSeason {
+  id: string;
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface SafeHarvestDateResponse {
   cultivationSeasonId?: string;
   earliestSafeHarvestDate?: string | null;
