@@ -449,9 +449,10 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
 interface TreeDetailPanelProps {
   treeId: string | null;
   onClose: () => void;
+  onDiagnosisSaved?: () => void;
 }
 
-export function TreeDetailPanel({ treeId, onClose }: TreeDetailPanelProps) {
+export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved }: TreeDetailPanelProps) {
   const [tree, setTree] = useState<TreeDetail | null>(null);
   const [diagnoses, setDiagnoses] = useState<TreeDiagnosis[]>([]);
   const [loading, setLoading] = useState(false);
@@ -504,6 +505,7 @@ export function TreeDetailPanel({ treeId, onClose }: TreeDetailPanelProps) {
     if (!treeId) return;
     const active = { value: true };
     load(treeId, active);
+    onDiagnosisSaved?.();
   }
 
   if (!treeId) return null;

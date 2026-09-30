@@ -422,6 +422,10 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
             <TreeDetailPanel
               treeId={selectedTreeId}
               onClose={() => setSelectedTreeId(null)}
+              onDiagnosisSaved={() => {
+                treeClient.listTrees(zoneId).then(setTrees).catch(() => {});
+                treeClient.getZoneSafety(zoneId).then((s) => { if (s) setSafety(s); }).catch(() => {});
+              }}
             />
           ) : (
             <div className="hidden rounded-2xl border border-dashed border-neutral-200 p-6 text-center text-sm font-semibold text-neutral-400 xl:flex xl:flex-col xl:items-center xl:justify-center xl:gap-2">
