@@ -1,6 +1,8 @@
 export type KnowledgeStatus = "DRAFT" | "REVIEW" | "PUBLISHED" | "REJECTED";
 
-export type KnowledgeRole = "ADMIN" | "ENGINEER" | "FARMER" | "OWNER";
+export type KnowledgeRole = "ADMIN" | "ENGINEER" | "EXPERT" | "FARMER" | "OWNER";
+
+export type KnowledgeSort = "publishedAt,desc" | "views,desc";
 
 export interface KnowledgeArticle {
   id: string;
@@ -8,6 +10,10 @@ export interface KnowledgeArticle {
   slug: string;
   category: string;
   author: string;
+  authorUserId?: string | null;
+  authorRole?: KnowledgeRole | null;
+  authorAvatar?: string | null;
+  authorAvatarUrl?: string | null;
   publishedAt: string;
   updatedAt: string;
   submittedAt?: string | null;
@@ -16,7 +22,7 @@ export interface KnowledgeArticle {
   views: number;
   status: KnowledgeStatus;
   featured: boolean;
-  coverTone: string;
+  coverTone?: string;
   coverImage: string | null;
   coverPreview?: string | null;
   readingTime: string;
@@ -24,6 +30,35 @@ export interface KnowledgeArticle {
   excerpt: string;
   content: string;
   rejectionReason?: string | null;
+}
+
+export interface KnowledgeArticlePage {
+  articles: KnowledgeArticle[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export type KnowledgeMyArticlesResponse = KnowledgeArticlePage;
+
+export interface KnowledgeArticleListParams {
+  search?: string;
+  category?: string;
+  page?: number;
+  size?: number;
+  sort?: KnowledgeSort | string;
+  status?: KnowledgeStatus;
+}
+
+export interface KnowledgeCategoryCount {
+  category: string;
+  count: number;
+}
+
+export interface KnowledgeCategoryOption {
+  value: string;
+  label: string;
 }
 
 export interface KnowledgeArticleInput {
@@ -37,4 +72,10 @@ export interface KnowledgeArticleInput {
   coverPreview?: string | null;
   coverFile?: File | null;
   tags?: string[];
+}
+
+export type KnowledgeArticleRequest = KnowledgeArticleInput;
+
+export interface KnowledgeUploadResponse {
+  article: KnowledgeArticle;
 }

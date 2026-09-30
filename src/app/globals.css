@@ -106,6 +106,80 @@ small {
 .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #bac7bd; border-radius: 999px; }
 
+.prose-durian > * + * {
+  margin-top: 1.15em;
+}
+
+.prose-durian :where(h1, h2, h3) {
+  line-height: 1.25;
+  margin-top: 2em;
+}
+
+.prose-durian :where(p) {
+  color: #33443a;
+}
+
+.prose-durian :where(ul, ol) {
+  padding-left: 1.35rem;
+}
+
+.prose-durian :where(ul) {
+  list-style: disc;
+}
+
+.prose-durian :where(ol) {
+  list-style: decimal;
+}
+
+.prose-durian :where(li + li) {
+  margin-top: .45rem;
+}
+
+.prose-durian :where(blockquote) {
+  border-left: 4px solid var(--moss);
+  border-radius: 0 1rem 1rem 0;
+  background: #f3f8f4;
+  padding: 1rem 1.2rem;
+  color: #3b4d42;
+  font-weight: 650;
+}
+
+.prose-durian :where(a) {
+  color: var(--moss);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose-durian :where(a:hover) {
+  color: var(--moss-dark);
+}
+
+.prose-durian :where(table) {
+  min-width: 640px;
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.prose-durian :where(th, td) {
+  border: 1px solid #dce7de;
+  padding: .75rem .9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose-durian :where(th) {
+  background: #edf3ee;
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
+.prose-durian :where(img) {
+  max-width: 100%;
+  height: auto;
+}
+
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 rgba(94, 155, 111, .35); }
   70% { box-shadow: 0 0 0 7px rgba(94, 155, 111, 0); }

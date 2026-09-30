@@ -8,8 +8,9 @@ export interface BoundingBox {
 }
 
 export interface StoredImageInfo {
-  objectKey: string;
-  url: string;
+  objectKey?: string | null;
+  url?: string | null;
+  path?: string | null;
 }
 
 export interface ReferenceSourceSummary {
@@ -120,11 +121,34 @@ export interface PredictionData {
   image?: StoredImageInfo | null;
   recommendation?: DiseaseRecommendation | null;
   decisionSupport?: DecisionSupport | null;
+  historyId?: string | null;
 }
 
 export interface PredictionResponse {
   status: "success";
   data: PredictionData;
+}
+
+export interface PredictionHistoryItem {
+  id: string;
+  createdAt: string;
+  predictedDisease: string;
+  confidence: number;
+  confidenceText: string;
+  severity?: string | null;
+  status: "PENDING" | "CONSULTING" | "RESOLVED" | string;
+  source: PredictionSource;
+  deviceId?: string | null;
+  image?: StoredImageInfo | null;
+  originalFilename?: string | null;
+  data: PredictionData;
+}
+
+export interface PredictionHistoryResponse {
+  items: PredictionHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface PredictionErrorBody {
