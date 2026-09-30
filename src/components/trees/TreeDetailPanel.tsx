@@ -13,6 +13,7 @@ import { treeClient, TreeApiError } from "@/lib/trees/client";
 import { predictLeafDisease } from "@/lib/ai/client";
 import type { PredictionData } from "@/lib/ai/types";
 import type { TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
+import type { DiseaseCategory } from "@/lib/labels";
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -30,11 +31,12 @@ const HEALTH_COLORS: Record<string, string> = {
   SUSPECTED: "text-yellow-700 bg-yellow-50 border-yellow-200",
 };
 
-type DiseaseCategory = "HEALTHY" | "PEST" | "DISEASE";
-
 function categoryFromCode(code: string | null | undefined): DiseaseCategory {
-  if (!code) return "DISEASE";
+  if (!code) return "INVALID_IMAGE";
   const lower = code.toLowerCase();
+  if (lower === "low_confidence") return "LOW_CONFIDENCE";
+  if (lower === "invalid_image") return "INVALID_IMAGE";
+  if (lower === "recovered_by_farmer") return "HEALTHY";
   if (lower.includes("healthy")) return "HEALTHY";
   if (lower.includes("allocaridara")) return "PEST";
   return "DISEASE";
@@ -44,18 +46,24 @@ const CAT_BADGE: Record<DiseaseCategory, string> = {
   HEALTHY: "bg-green-50 text-green-700",
   DISEASE: "bg-red-50 text-red-700",
   PEST: "bg-amber-50 text-amber-700",
+  LOW_CONFIDENCE: "bg-neutral-100 text-neutral-600",
+  INVALID_IMAGE: "bg-neutral-100 text-neutral-500",
 };
 
 const CAT_DOT: Record<DiseaseCategory, string> = {
   HEALTHY: "bg-green-500",
   DISEASE: "bg-red-500",
   PEST: "bg-amber-400",
+  LOW_CONFIDENCE: "bg-neutral-400",
+  INVALID_IMAGE: "bg-neutral-300",
 };
 
 const CAT_LABEL: Record<DiseaseCategory, string> = {
   HEALTHY: "Khỏe",
   DISEASE: "Bệnh",
   PEST: "Sâu/Bọ",
+  LOW_CONFIDENCE: "Thấp tin cậy",
+  INVALID_IMAGE: "Ảnh không hợp lệ",
 };
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -324,8 +332,8 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
     try {
       await treeClient.saveDiagnosis(treeId, {
         imageUrl: "RECOVERY_VERIFICATION_NO_IMAGE",
-        diseaseCode: "HEALTHY_LEAF",
-        diseaseName: "Lá khỏe mạnh",
+        diseaseCode: "RECOVERED_BY_FARMER",
+        diseaseName: "Phục hồi (xác nhận bởi nông dân)",
         confidence: null,
         boundingBox: null,
         source: "RECOVERY_VERIFICATION",

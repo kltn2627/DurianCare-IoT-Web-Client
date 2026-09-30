@@ -736,14 +736,16 @@ export function DiseaseDiagnosisWorkspace({ treeId = null, treeCode = null }: { 
 
           {/* Category-based alert banner */}
           {report ? (() => {
-            const cat = getDiseaseCategory(report.result.predictedDisease);
-            const msg = getDiseaseAlertMessage(report.result.predictedDisease);
+            const cat = getDiseaseCategory(report.result.predictedDisease, report.result.confidence);
+            const msg = getDiseaseAlertMessage(report.result.predictedDisease, report.result.confidence);
             const styles =
               cat === "HEALTHY"
                 ? "border border-green-100 bg-green-50 text-green-800"
                 : cat === "PEST"
                   ? "border border-amber-100 bg-amber-50 text-amber-900"
-                  : "border border-red-100 bg-red-50 text-red-800";
+                  : cat === "LOW_CONFIDENCE" || cat === "INVALID_IMAGE"
+                    ? "border border-neutral-200 bg-neutral-50 text-neutral-700"
+                    : "border border-red-100 bg-red-50 text-red-800";
             return (
               <div className={`mt-4 rounded-xl px-4 py-3 text-[13px] font-semibold leading-6 ${styles}`}>
                 {msg}
