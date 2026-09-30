@@ -11,3 +11,28 @@ export const diseaseLabels: Record<string, string> = {
   ALLOCARIDARA_ATTACK: "Sâu chích hút Allocaridara",
 };
 
+export type DiseaseCategory = "HEALTHY" | "PEST" | "DISEASE";
+
+const PEST_CODES = new Set([
+  "allocaridara_attack",
+  "allocaridara_attacked",
+]);
+
+const HEALTHY_CODES = new Set([
+  "healthy_leaf",
+  "healthy",
+]);
+
+export function getDiseaseCategory(code: string): DiseaseCategory {
+  const normalized = code.trim().toLowerCase().replace(/-/g, "_").replace(/\s+/g, "_");
+  if (HEALTHY_CODES.has(normalized)) return "HEALTHY";
+  if (PEST_CODES.has(normalized)) return "PEST";
+  return "DISEASE";
+}
+
+export function getDiseaseAlertMessage(code: string): string {
+  const cat = getDiseaseCategory(code);
+  if (cat === "HEALTHY") return "Chưa phát hiện dấu hiệu bất thường trên lá.";
+  if (cat === "PEST") return "⚠️ Phát hiện dấu hiệu sâu/bọ gây hại trên lá. Vui lòng kiểm tra cây.";
+  return "Phát hiện dấu hiệu bệnh trên lá.";
+}

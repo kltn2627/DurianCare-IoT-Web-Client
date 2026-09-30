@@ -33,8 +33,9 @@ import type {
   ReferenceSourceSummary,
 } from "@/lib/ai/types";
 import { cameraClient } from "@/lib/camera/client";
-import { diseaseLabels } from "@/lib/labels";
+import { diseaseLabels, getDiseaseAlertMessage, getDiseaseCategory } from "@/lib/labels";
 import { translateRecommendation } from "@/lib/treatment-terms";
+import { treeClient } from "@/lib/trees/client";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -63,13 +64,12 @@ const sourceOptions: SourceOption[] = [
 
 // Mirrors the camera list configured in CameraSection — update both when adding cameras.
 const CAMERA_DEVICES = [
-  { id: "esp32-cam-01", label: "Camera Vườn Chính",  sublabel: "esp32-cam-01" },
-  { id: "esp32-cam-02", label: "Camera Vườn Phụ",    sublabel: "esp32-cam-02" },
+  { id: "ESP32-CAM-001", label: "Camera Vườn Chính", sublabel: "ESP32-CAM-001" },
 ];
 
 type CaptureMode = "upload" | "esp32cam";
 
-export function DiseaseDiagnosisWorkspace() {
+export function DiseaseDiagnosisWorkspace({ treeId = null, treeCode = null }: { treeId?: string | null; treeCode?: string | null }) {
   const [captureMode, setCaptureMode] = useState<CaptureMode>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -84,6 +84,8 @@ export function DiseaseDiagnosisWorkspace() {
   const [zoom, setZoom] = useState(100);
   const [viewerMode, setViewerMode] = useState<ViewerMode>(null);
   const [cameraError, setCameraError] = useState(false);
+  const [treeSaveState, setTreeSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [treeSaveError, setTreeSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!file) {
@@ -154,6 +156,28 @@ export function DiseaseDiagnosisWorkspace() {
     setZoom(100);
     setViewerMode(null);
     setCameraError(false);
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
+  };
+
+  const handleSaveToTree = async (snap: ReportSnapshot) => {
+    if (!treeId) return;
+    setTreeSaveState("saving");
+    setTreeSaveError(null);
+    try {
+      await treeClient.saveDiagnosis(treeId, {
+        imageUrl: snap.result.image?.url || "WEB_AI_NO_STORED_IMAGE",
+        diseaseCode: snap.result.predictedDisease,
+        diseaseName: diseaseLabels[snap.result.predictedDisease] ?? null,
+        confidence: snap.result.confidence / 100, // AI returns 0-100%, backend expects 0-1 float
+        boundingBox: snap.result.boundingBox as Record<string, unknown> | null ?? null,
+        source: snap.result.source,
+      });
+      setTreeSaveState("saved");
+    } catch (err) {
+      setTreeSaveState("error");
+      setTreeSaveError(err instanceof Error ? err.message : "Không thể lưu chuẩn đoán.");
+    }
   };
 
   const upload = async () => {
@@ -174,6 +198,8 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
 
     try {
       const response = await predictLeafDisease(
@@ -214,6 +240,8 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
 
     let snapshotBlobUrl: string | null = null;
     try {
@@ -661,9 +689,16 @@ export function DiseaseDiagnosisWorkspace() {
         <article className="panel p-7 lg:p-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1 text-xs font-bold text-[#7b6015]">
-                <BadgeCheck size={14} />
-                Báo cáo chẩn đoán
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1 text-xs font-bold text-[#7b6015]">
+                  <BadgeCheck size={14} />
+                  Báo cáo chẩn đoán
+                </div>
+                {treeCode ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[#d0dbd0] bg-[#f0f6f0] px-3 py-1 text-xs font-bold text-[#2E5A44]">
+                    🌳 Cây: {treeCode}
+                  </div>
+                ) : null}
               </div>
               <h2 className="mt-4 text-[1.6rem] font-extrabold tracking-tight text-neutral-900">
                 {diagnosisLabel}
@@ -697,6 +732,53 @@ export function DiseaseDiagnosisWorkspace() {
               </div>
             ) : null}
           </div>
+
+          {/* Category-based alert banner */}
+          {report ? (() => {
+            const cat = getDiseaseCategory(report.result.predictedDisease);
+            const msg = getDiseaseAlertMessage(report.result.predictedDisease);
+            const styles =
+              cat === "HEALTHY"
+                ? "border border-green-100 bg-green-50 text-green-800"
+                : cat === "PEST"
+                  ? "border border-amber-100 bg-amber-50 text-amber-900"
+                  : "border border-red-100 bg-red-50 text-red-800";
+            return (
+              <div className={`mt-4 rounded-xl px-4 py-3 text-[13px] font-semibold leading-6 ${styles}`}>
+                {msg}
+              </div>
+            );
+          })() : null}
+
+          {/* Save to tree — shown only when a treeId was passed via URL */}
+          {treeId ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#d8e1d8] bg-[#f8fbf8] px-4 py-3">
+              <span className="text-xs font-bold text-neutral-500">
+                {treeCode ? `Lưu kết quả vào hồ sơ cây ${treeCode}` : "Lưu kết quả vào hồ sơ cây"}
+              </span>
+              {treeSaveState === "saved" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                  <BadgeCheck size={13} /> {treeCode ? `Đã lưu kết quả cho cây ${treeCode}` : "Đã lưu thành công"}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={treeSaveState === "saving"}
+                  onClick={() => { void handleSaveToTree(report); }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#254d3a] disabled:opacity-60"
+                >
+                  {treeSaveState === "saving" ? (
+                    <><LoaderCircle size={13} className="animate-spin" /> Đang lưu...</>
+                  ) : (
+                    <><BadgeCheck size={13} /> Lưu chuẩn đoán</>
+                  )}
+                </button>
+              )}
+              {treeSaveState === "error" && treeSaveError ? (
+                <span className="text-xs text-red-600">{treeSaveError}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-6">
             <DiagnosisImagePanel

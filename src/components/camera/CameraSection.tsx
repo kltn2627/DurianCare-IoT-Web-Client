@@ -23,13 +23,13 @@ import {
   X,
 } from "lucide-react";
 import { cameraClient } from "@/lib/camera/client";
-import type { AiDiagnosisResult, AiStatus, CameraCapture, RiskLevel } from "@/lib/camera/types";
+import type { AiDiagnosisResult, AiStatus, CameraCapture, CameraDevice, RiskLevel } from "@/lib/camera/types";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CAMERA_DEVICES = [
-  { id: "esp32-cam-01", label: "ESP32-CAM 01 (Vườn chính)" },
-  { id: "esp32-cam-02", label: "ESP32-CAM 02 (Vườn phụ)" },
+// Fallback list — used when the backend has no registered camera_devices yet.
+const FALLBACK_DEVICES = [
+  { id: "ESP32-CAM-001", label: "ESP32-CAM 001 (Vườn chính)" },
 ];
 
 // Giới hạn khung giờ ban ngày (6h–16h) — ban đêm thiếu sáng, ảnh không dùng được
@@ -351,7 +351,29 @@ function DiagnosisCard({ diag, aiStatus, diseaseDetected, confidenceScore }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CameraSection() {
-  const [deviceId, setDeviceId] = useState(CAMERA_DEVICES[0].id);
+  const [deviceId, setDeviceId] = useState(FALLBACK_DEVICES[0].id);
+
+  // ── Device registry ───────────────────────────────────────────────────────
+  const [registeredDevices, setRegisteredDevices] = useState<CameraDevice[]>([]);
+  useEffect(() => {
+    cameraClient.listDevices()
+      .then((r) => {
+        if (r.devices.length > 0) setRegisteredDevices(r.devices);
+      })
+      .catch(() => { /* backend may not have V9 yet — fall back to static list */ });
+  }, []);
+
+  // Effective device list: registered if available, fallback otherwise
+  const deviceList = registeredDevices.length > 0
+    ? registeredDevices.map((d) => ({
+        id: d.device_id,
+        label: d.device_id,
+        online: d.online,
+        lastSeen: d.last_seen,
+      }))
+    : FALLBACK_DEVICES.map((d) => ({ ...d, online: undefined, lastSeen: undefined }));
+
+  const selectedDevice = registeredDevices.find((d) => d.device_id === deviceId);
 
   // ── Live snapshot ─────────────────────────────────────────────────────────
   const [snapshotUrl, setSnapshotUrl]       = useState<string | null>(null);
@@ -442,6 +464,49 @@ export function CameraSection() {
 
   useEffect(() => { void fetchHistory(); }, [fetchHistory]);
 
+  // ── Camera config (IP update) ─────────────────────────────────────────────
+  const [configOpen, setConfigOpen]     = useState(false);
+  const [configUrl, setConfigUrl]       = useState("");
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configPinging, setConfigPinging] = useState(false);
+  const [configPingResult, setConfigPingResult] = useState<"ok" | "fail" | null>(null);
+  const [configError, setConfigError]   = useState<string | null>(null);
+  const [configSaved, setConfigSaved]   = useState(false);
+
+  function closeConfig() {
+    setConfigOpen(false);
+    setConfigUrl("");
+    setConfigSaving(false);
+    setConfigPinging(false);
+    setConfigPingResult(null);
+    setConfigError(null);
+    setConfigSaved(false);
+  }
+
+  const handleConfigPing = async () => {
+    setConfigPinging(true);
+    setConfigPingResult(null);
+    const ok = await cameraClient.pingSnapshot(deviceId);
+    setConfigPingResult(ok ? "ok" : "fail");
+    setConfigPinging(false);
+  };
+
+  const handleConfigSave = async () => {
+    if (!configUrl.trim()) { setConfigError("Vui lòng nhập URL camera."); return; }
+    setConfigSaving(true);
+    setConfigError(null);
+    try {
+      await cameraClient.updateConfig(deviceId, configUrl.trim());
+      setConfigSaved(true);
+      void refreshSnapshot();
+      setTimeout(closeConfig, 1_200);
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : "Cập nhật thất bại.");
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
   // ── Schedule ──────────────────────────────────────────────────────────────
   const [schedEnabled, setSchedEnabled]   = useState(false);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
@@ -513,15 +578,29 @@ export function CameraSection() {
             <p className="mt-0.5 text-[13px] text-[#7e8b83]">ESP32-CAM • Giám sát & Chẩn đoán bệnh lá sầu riêng</p>
           </div>
         </div>
-        <select
-          value={deviceId}
-          onChange={(e) => setDeviceId(e.target.value)}
-          className="h-9 rounded-xl border border-[#dfe5de] bg-white px-3 text-[13px] font-semibold outline-none"
-        >
-          {CAMERA_DEVICES.map((d) => (
-            <option key={d.id} value={d.id}>{d.label}</option>
-          ))}
-        </select>
+        <div className="flex flex-col items-end gap-1">
+          <select
+            value={deviceId}
+            onChange={(e) => setDeviceId(e.target.value)}
+            className="h-9 rounded-xl border border-[#dfe5de] bg-white px-3 text-[13px] font-semibold outline-none"
+          >
+            {deviceList.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.online === false ? "⚠ " : ""}{d.label}
+              </option>
+            ))}
+          </select>
+          {selectedDevice != null && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              selectedDevice.online
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-600"
+            }`}>
+              <span className={`inline-block size-1.5 rounded-full ${selectedDevice.online ? "bg-green-500 animate-pulse" : "bg-red-400"}`} />
+              {selectedDevice.online ? "Online" : "Offline"}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Preview + Schedule grid ── */}
@@ -531,12 +610,21 @@ export function CameraSection() {
         <div className="overflow-hidden rounded-2xl border border-[#e8ece7] bg-white">
           <div className="flex items-center justify-between border-b border-[#e8ece7] px-4 py-2.5">
             <span className="text-[12px] font-semibold text-[#536259]">Xem trực tiếp</span>
-            {!previewError && !previewLoading && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf4ec] px-2.5 py-1 text-[10px] font-bold text-[#37704f]">
-                <span className="inline-block size-1.5 animate-pulse rounded-full bg-[#4b9666]" />
-                LIVE · 3s
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {!previewError && !previewLoading && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf4ec] px-2.5 py-1 text-[10px] font-bold text-[#37704f]">
+                  <span className="inline-block size-1.5 animate-pulse rounded-full bg-[#4b9666]" />
+                  LIVE · 3s
+                </span>
+              )}
+              <button
+                onClick={() => setConfigOpen(true)}
+                title="Cấu hình địa chỉ camera"
+                className="rounded-lg p-1 text-[#7e8b83] transition-colors hover:bg-[#f0f4f1] hover:text-[#2E5A44]"
+              >
+                <Settings2 size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="relative bg-black" style={{ aspectRatio: "4/3" }}>
@@ -595,6 +683,12 @@ export function CameraSection() {
 
           {/* Capture controls */}
           <div className="space-y-2 p-3">
+            {selectedDevice != null && !selectedDevice.online && (
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-[12px] text-red-600">
+                <CameraOff size={14} className="shrink-0" />
+                Camera đang offline. Chụp hình sẽ thất bại cho đến khi camera kết nối lại.
+              </div>
+            )}
             <button
               onClick={handleCaptureNow}
               disabled={isCapturing}
@@ -833,6 +927,91 @@ export function CameraSection() {
                 <p className="text-[12px] text-[#7e8b83]">{enlarged.notes}</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── Camera config modal ── */}
+      {configOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={closeConfig}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#e8ece7] px-5 py-3.5">
+              <div className="flex items-center gap-2 text-[14px] font-bold text-[#1a2a20]">
+                <Settings2 size={16} className="text-[#2E5A44]" />
+                Cấu hình Camera
+              </div>
+              <button onClick={closeConfig} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <p className="text-[12px] leading-relaxed text-[#536259]">
+                Nhập URL mới của ESP32-CAM sau khi đổi mạng Wi-Fi hoặc 4G.{" "}
+                <span className="font-mono text-[#2E5A44]">Ví dụ: http://192.168.1.137</span>
+              </p>
+
+              <input
+                type="url"
+                value={configUrl}
+                onChange={(e) => { setConfigUrl(e.target.value); setConfigPingResult(null); setConfigError(null); }}
+                placeholder="http://192.168.1.xxx"
+                className="w-full rounded-xl border border-[#dfe5de] px-3 py-2.5 text-[13px] outline-none focus:border-[#2E5A44] focus:ring-1 focus:ring-[#2E5A44]/20"
+              />
+
+              <button
+                onClick={handleConfigPing}
+                disabled={configPinging || !configUrl.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2E5A44] py-2 text-[12px] font-semibold text-[#2E5A44] transition-colors hover:bg-[#edf7f1] disabled:opacity-50"
+              >
+                {configPinging
+                  ? <><Loader2 size={13} className="animate-spin" /> Đang kiểm tra...</>
+                  : "Kiểm tra kết nối"
+                }
+              </button>
+
+              {configPingResult === "ok" && (
+                <div className="flex items-center gap-2 rounded-xl bg-green-50 px-3 py-2 text-[12px] text-green-700">
+                  <CheckCircle2 size={14} className="shrink-0" />
+                  Camera phản hồi — kết nối tốt!
+                </div>
+              )}
+              {configPingResult === "fail" && (
+                <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-[12px] text-red-600">
+                  <AlertCircle size={14} className="shrink-0" />
+                  Không phản hồi — kiểm tra URL hoặc kết nối mạng.
+                </div>
+              )}
+              {configError && (
+                <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-[12px] text-red-600">
+                  <AlertCircle size={14} className="shrink-0" />
+                  {configError}
+                </div>
+              )}
+              {configSaved && (
+                <div className="flex items-center gap-2 rounded-xl bg-green-50 px-3 py-2 text-[12px] text-green-700">
+                  <CheckCircle2 size={14} className="shrink-0" />
+                  Đã lưu! Camera sẽ dùng IP mới ngay lập tức.
+                </div>
+              )}
+
+              <button
+                onClick={handleConfigSave}
+                disabled={configSaving || !configUrl.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#264d3b] disabled:opacity-50"
+              >
+                {configSaving
+                  ? <><Loader2 size={13} className="animate-spin" /> Đang lưu...</>
+                  : "Lưu cấu hình"
+                }
+              </button>
+            </div>
           </div>
         </div>
       )}

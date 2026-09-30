@@ -23,6 +23,7 @@ import {
   QrCode,
   Search,
   ShieldCheck,
+  TreePine,
   UserRound,
   UsersRound,
   X,
@@ -49,6 +50,11 @@ const ownerNav: NavItem[] = [
     href: "/dashboard/client/cultivation-zones",
     label: "Khu canh tác",
     icon: MapPinned,
+  },
+  {
+    href: "/dashboard/client/farms",
+    label: "Bản đồ cây",
+    icon: TreePine,
   },
   { href: "/dashboard/client", label: "Tổng quan", icon: LayoutDashboard },
   {
@@ -126,6 +132,11 @@ const ownerNavFixed: NavItem[] = [
     href: "/dashboard/client/cultivation-zones",
     label: "Khu canh tác",
     icon: MapPinned,
+  },
+  {
+    href: "/dashboard/client/farms",
+    label: "Bản đồ cây",
+    icon: TreePine,
   },
   {
     href: "/dashboard/client/sensors",

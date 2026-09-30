@@ -1,7 +1,11 @@
 import { apiFetch } from "@/lib/auth/client";
 import type {
+  AssignTreeInput,
   CameraCapture,
   CaptureHistoryResponse,
+  CameraDevice,
+  DeviceListResponse,
+  DeviceResponse,
   ScheduleResponse,
   ScheduleSlotInput,
 } from "./types";
@@ -84,4 +88,36 @@ export const cameraClient = {
       method: "PUT",
       body: JSON.stringify({ device_id: deviceId, schedules }),
     }),
+
+  listDevices: (): Promise<DeviceListResponse> =>
+    cameraFetch<DeviceListResponse>("/api/v1/camera/devices"),
+
+  getDevice: (deviceId: string): Promise<DeviceResponse> =>
+    cameraFetch<DeviceResponse>(
+      `/api/v1/camera/devices/${encodeURIComponent(deviceId)}`,
+    ),
+
+  assignTree: (deviceId: string, input: AssignTreeInput): Promise<DeviceResponse> =>
+    cameraFetch<DeviceResponse>(
+      `/api/v1/camera/devices/${encodeURIComponent(deviceId)}/tree`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+
+  updateConfig: (deviceId: string, cameraUrl: string): Promise<{ device: CameraDevice; camera_url: string }> =>
+    cameraFetch<{ device: CameraDevice; camera_url: string }>("/api/v1/camera/config", {
+      method: "POST",
+      body: JSON.stringify({ device_id: deviceId, camera_url: cameraUrl }),
+    }),
+
+  pingSnapshot: async (deviceId: string): Promise<boolean> => {
+    try {
+      const response = await apiFetch(
+        `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`,
+        { method: "HEAD" },
+      );
+      return response.status < 500;
+    } catch {
+      return false;
+    }
+  },
 };

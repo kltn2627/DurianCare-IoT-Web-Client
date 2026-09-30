@@ -60,3 +60,36 @@ export interface ScheduleSlotInput {
   label: string;
   enabled: boolean;
 }
+
+export interface CameraDevice {
+  id: string;
+  device_id: string;
+  mac_address: string | null;
+  ip_address: string;
+  port: number;
+  protocol: "http" | "https";
+  online: boolean;
+  last_seen: string | null;
+  firmware_version: string | null;
+  ssid: string | null;
+  tree_id: string | null;
+  zone_id: string | null;
+  farm_id: string | null;
+  capabilities: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceListResponse {
+  devices: CameraDevice[];
+}
+
+export interface DeviceResponse {
+  device: CameraDevice;
+}
+
+export interface AssignTreeInput {
+  treeId: string | null;
+  zoneId?: string | null;
+  farmId?: string | null;
+}
