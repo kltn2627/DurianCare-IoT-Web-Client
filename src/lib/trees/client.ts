@@ -1,7 +1,11 @@
 import { apiFetch } from "@/lib/auth/client";
 import type {
+  CreateFarmRequest,
   CreateTreeRequest,
+  CreateZoneRequest,
   FarmSummary,
+  GenerateTreesRequest,
+  GenerateTreesResult,
   PagedResponse,
   SaveDiagnosisRequest,
   TreeDetail,
@@ -63,8 +67,20 @@ export const treeClient = {
   getFarm: (farmId: string) =>
     treeRequest<FarmSummary>(`/api/farms/${encodeURIComponent(farmId)}`),
 
+  createFarm: (body: CreateFarmRequest) =>
+    treeRequest<FarmSummary>("/api/v1/farms", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   listZones: (farmId: string) =>
     treeRequest<ZoneSummary[]>(`/api/farms/${encodeURIComponent(farmId)}/zones`),
+
+  createZone: (farmId: string, body: CreateZoneRequest) =>
+    treeRequest<ZoneSummary>(`/api/v1/farms/${encodeURIComponent(farmId)}/zones`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   // ── Zones ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +95,12 @@ export const treeClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  generateTrees: (zoneId: string, body: GenerateTreesRequest) =>
+    treeRequest<GenerateTreesResult>(
+      `/api/zones/${encodeURIComponent(zoneId)}/trees/generate`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   getZoneSafety: (zoneId: string) =>
     treeRequest<ZoneSafetySummary>(

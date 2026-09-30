@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, RefreshCw, X } from "lucide-react";
 import { treeClient, TreeApiError } from "@/lib/trees/client";
 import type { TreeSummary, ZoneDetail, ZoneSafetySummary } from "@/lib/trees/types";
 import { TreeMapCanvas } from "./TreeMapCanvas";
@@ -23,6 +23,145 @@ const HEALTH_BADGE: Record<string, string> = {
   SUSPECTED: "bg-orange-100 text-orange-800",
 };
 
+// ── Generate Trees inline form ────────────────────────────────────────────────
+
+interface GenerateFormProps {
+  zoneId: string;
+  defaultRows?: number | null;
+  defaultTreesPerRow?: number | null;
+  onGenerated: (count: number) => void;
+  onCancel: () => void;
+}
+
+function GenerateTreesForm({
+  zoneId,
+  defaultRows,
+  defaultTreesPerRow,
+  onGenerated,
+  onCancel,
+}: GenerateFormProps) {
+  const [rows, setRows] = useState(defaultRows ? String(defaultRows) : "");
+  const [treesPerRow, setTreesPerRow] = useState(
+    defaultTreesPerRow ? String(defaultTreesPerRow) : "",
+  );
+  const [variety, setVariety] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const r = parseInt(rows, 10);
+    const t = parseInt(treesPerRow, 10);
+    if (!r || r < 1 || !t || t < 1) {
+      setErr("Số hàng và số cây/hàng phải >= 1.");
+      return;
+    }
+    if (r * t > 10000) {
+      setErr("Tổng số cây không được vượt quá 10 000.");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      const result = await treeClient.generateTrees(zoneId, {
+        rows: r,
+        treesPerRow: t,
+        variety: variety.trim() || null,
+      });
+      onGenerated(result.generated);
+    } catch (caught) {
+      setErr(
+        caught instanceof TreeApiError
+          ? caught.message
+          : caught instanceof Error
+            ? caught.message
+            : "Tạo cây thất bại.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="rounded-xl border border-[#2E5A44]/40 bg-[#f0f7f1] p-4 space-y-3"
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-bold text-[#2E5A44] text-sm">Tạo cây tự động theo lưới</p>
+        <button type="button" onClick={onCancel} className="text-neutral-400 hover:text-neutral-600">
+          <X size={16} />
+        </button>
+      </div>
+      {err ? (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-xs font-semibold text-red-700">{err}</p>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-bold text-neutral-600 mb-1 block">Số hàng *</label>
+          <input
+            required
+            type="number"
+            min="1"
+            max="500"
+            placeholder="VD: 5"
+            value={rows}
+            onChange={(e) => setRows(e.target.value)}
+            className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#2E5A44]"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-neutral-600 mb-1 block">Cây mỗi hàng *</label>
+          <input
+            required
+            type="number"
+            min="1"
+            max="500"
+            placeholder="VD: 5"
+            value={treesPerRow}
+            onChange={(e) => setTreesPerRow(e.target.value)}
+            className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#2E5A44]"
+          />
+        </div>
+      </div>
+      <input
+        placeholder="Giống cây (tùy chọn)"
+        value={variety}
+        onChange={(e) => setVariety(e.target.value)}
+        className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#2E5A44]"
+      />
+      {rows && treesPerRow && parseInt(rows) > 0 && parseInt(treesPerRow) > 0 ? (
+        <p className="text-xs text-neutral-500">
+          Sẽ tạo tối đa{" "}
+          <strong className="text-[#2E5A44]">
+            {parseInt(rows) * parseInt(treesPerRow)} cây
+          </strong>{" "}
+          (bỏ qua mã đã tồn tại). Mã cây: H01-C01 → H{String(parseInt(rows)).padStart(2, "0")}-C{String(parseInt(treesPerRow)).padStart(2, "0")}
+        </p>
+      ) : null}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-bold text-neutral-600 hover:bg-neutral-50"
+        >
+          Hủy
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-[#2E5A44] px-4 py-2 text-sm font-bold text-white disabled:opacity-60 hover:bg-[#25493a]"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+          Tạo cây
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ── ZoneTreesWorkspace ────────────────────────────────────────────────────────
+
 interface Props {
   farmId: string;
   zoneId: string;
@@ -35,6 +174,8 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
   const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generatingTrees, setGeneratingTrees] = useState(false);
+  const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
 
   const load = () => {
     let active = true;
@@ -138,7 +279,35 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
               <h2 className="text-sm font-extrabold text-neutral-900">
                 Bản đồ cây ({trees.length} cây)
               </h2>
+              <button
+                type="button"
+                onClick={() => { setGeneratingTrees(true); setGenerateSuccess(null); }}
+                className="flex items-center gap-1.5 rounded-xl bg-[#2E5A44] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#25493a] transition-colors"
+              >
+                <Plus size={14} />
+                Tạo cây tự động
+              </button>
             </div>
+            {generateSuccess ? (
+              <div className="mb-3 rounded-xl bg-green-100 px-3 py-2 text-xs font-semibold text-green-800">
+                {generateSuccess}
+              </div>
+            ) : null}
+            {generatingTrees ? (
+              <div className="mb-4">
+                <GenerateTreesForm
+                  zoneId={zoneId}
+                  defaultRows={zone.rowCount}
+                  defaultTreesPerRow={zone.treesPerRow}
+                  onGenerated={(count) => {
+                    setGeneratingTrees(false);
+                    setGenerateSuccess(`Đã tạo ${count} cây thành công. Đang tải lại...`);
+                    treeClient.listTrees(zoneId).then(setTrees).catch(() => {});
+                  }}
+                  onCancel={() => setGeneratingTrees(false)}
+                />
+              </div>
+            ) : null}
             <TreeMapCanvas
               trees={trees}
               selectedTreeId={selectedTreeId}

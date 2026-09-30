@@ -89,8 +89,9 @@ export function TreeMapCanvas({
           ))}
 
           {positionedTrees.map((tree) => {
-            const cx = (tree.positionX ?? 0) * 1000;
-            const cy = (tree.positionY ?? 0) * 600;
+            // Map 0–1 into padded range 30–970 / 30–570 so circles never clip at edges
+            const cx = 30 + (tree.positionX ?? 0) * 940;
+            const cy = 30 + (tree.positionY ?? 0) * 540;
             const color = treeColor(tree);
             const isSelected = tree.id === selectedTreeId;
             return (
