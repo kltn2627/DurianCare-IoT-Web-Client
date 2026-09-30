@@ -20,6 +20,7 @@ import {
   dispatchEngineers,
 } from "@/constants/durianMockData";
 import type { ExpertConversation } from "./types";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 
 type DispatchPriority = "HIGH" | "MEDIUM" | "NORMAL";
 
@@ -138,6 +139,7 @@ export function AdminChatDispatch() {
 
   return (
     <div className="space-y-4">
+      <MockDataBanner />
       <section className="grid-pattern overflow-hidden rounded-[26px] bg-[#294f3b] p-6 text-white sm:p-7">
         <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
           <div className="max-w-2xl">

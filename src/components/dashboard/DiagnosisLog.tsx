@@ -1,11 +1,13 @@
 import { Bot } from "lucide-react";
 import { diagnosisHistory } from "@/constants/durianMockData";
 import { diseaseLabels } from "@/lib/labels";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 
 export function DiagnosisLog() {
   return (
     <section id="diagnosis" className="panel scroll-mt-24 p-7 lg:p-8">
-      <div className="flex items-center gap-7">
+      <MockDataBanner />
+      <div className="mt-5 flex items-center gap-7">
         <span className="grid size-10 place-items-center rounded-xl bg-[#e9f0ea] text-[#2E5A44]">
           <Bot size={20} />
         </span>

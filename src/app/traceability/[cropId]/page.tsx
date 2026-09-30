@@ -16,6 +16,7 @@ import { cropHealthHistory, cropLots, sensorTimeline, treatmentLog } from "@/con
 import { diseaseLabels } from "@/lib/labels";
 import { PublicActions } from "@/components/traceability/PublicActions";
 import { TraceabilityChart } from "@/components/traceability/TraceabilityChart";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 import type { PublicTraceData } from "@/lib/export/types";
 
 type PageProps = { params: Promise<{ cropId: string }> };
@@ -302,6 +303,9 @@ export default async function TraceabilityPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen pb-12">
+      <div className="mx-auto max-w-[1100px] px-4 pt-4 sm:px-6">
+        <MockDataBanner />
+      </div>
       <header className="grid-pattern bg-[#244b37] text-white">
         <div className="mx-auto max-w-[1100px] px-4 py-5 sm:px-6">
           <div className="flex items-center justify-between">

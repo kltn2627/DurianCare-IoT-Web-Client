@@ -2,10 +2,13 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { diseaseDistribution } from "@/constants/durianMockData";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 
 export function DiseasePieChart() {
   return (
-    <div className="grid items-center gap-10 sm:grid-cols-[1fr_220px]">
+    <div className="space-y-4">
+      <MockDataBanner />
+      <div className="grid items-center gap-10 sm:grid-cols-[1fr_220px]">
       <div className="relative h-[300px]">
         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 420, height: 300 }}>
           <PieChart>
@@ -26,6 +29,7 @@ export function DiseasePieChart() {
           </div>
         ))}
       </div>
+    </div>
     </div>
   );
 }

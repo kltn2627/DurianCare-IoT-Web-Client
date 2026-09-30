@@ -19,6 +19,7 @@ import {
   cultivationClient,
   CultivationApiError,
 } from "@/lib/cultivation/client";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 import type { ExportRelease, HarvestBatch } from "@/lib/cultivation/types";
 import {
   exportStatusLabels,
@@ -215,6 +216,7 @@ export function CropQrBuilder() {
 
   return (
     <section id="crops" className="space-y-4">
+      <MockDataBanner />
       <div className="panel p-5 sm:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">

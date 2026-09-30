@@ -16,6 +16,7 @@ import {
 import { cropLots, farmZones } from "@/constants/durianMockData";
 import { formatDosageLabel, formatSafetyInterval } from "@/lib/treatment-terms";
 import type { DashboardRole } from "./DashboardShell";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 
 type TaskType =
   | "fertilizer"
@@ -307,6 +308,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
 
   return (
     <div className="space-y-8">
+      <MockDataBanner />
       <section className="grid-pattern rounded-[24px] bg-[#294f3b] p-8 text-white lg:flex lg:items-center lg:justify-between lg:p-10">
         <div>
           <p className="text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">

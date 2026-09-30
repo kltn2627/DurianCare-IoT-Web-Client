@@ -13,6 +13,7 @@ import { AdminManagement } from "@/components/dashboard/AdminManagement";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { dashboardStats, systemFarms } from "@/constants/durianMockData";
+import { MockDataBanner } from "@/components/shared/MockDataBanner";
 
 export const metadata: Metadata = { title: "Trung tâm quản trị" };
 
@@ -20,6 +21,7 @@ export default async function AdminDashboardPage() {
   return (
     <DashboardShell role="ADMIN">
       <div className="space-y-8">
+        <MockDataBanner />
         <section id="overview" className="grid-pattern scroll-mt-24 overflow-hidden rounded-[24px] bg-[#213f30] p-8 text-white lg:flex lg:items-center lg:justify-between lg:p-10">
           <div><p className="text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">DURIANCARE CONTROL CENTER • 06/06/2026</p><h1 className="mt-4 text-2xl font-extrabold tracking-[-1px] sm:text-3xl">Trung tâm điều hành hệ sinh thái</h1><p className="mt-2 max-w-2xl text-sm leading-5 text-[#cbd9cf]">Theo dõi sức khỏe toàn hệ thống, chuẩn hóa phác đồ và kiểm soát chất lượng đội ngũ kỹ sư.</p></div>
           <span className="mt-7 inline-flex items-center gap-4 rounded-xl border border-white/10 bg-white/[.08] px-5 py-4 text-[15px] font-bold lg:mt-0"><Activity size={16} className="text-[#EED56D]" /> Hệ thống hoạt động bình thường</span>
