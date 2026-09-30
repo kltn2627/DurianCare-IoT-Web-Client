@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   CheckCircle,
   ChevronDown,
   ChevronUp,
@@ -14,6 +16,8 @@ import { predictLeafDisease } from "@/lib/ai/client";
 import type { PredictionData } from "@/lib/ai/types";
 import type { TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
 import type { DiseaseCategory } from "@/lib/labels";
+import { knowledgeClient } from "@/lib/knowledge/client";
+import type { KnowledgeArticle } from "@/lib/knowledge/types";
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -94,8 +98,23 @@ function AIPanel({ treeId, treeCode, onSaved }: AIPanelProps) {
   const [predError, setPredError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
+  const [kbArticles, setKbArticles] = useState<KnowledgeArticle[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const cat = prediction ? categoryFromCode(prediction.predictedDisease) : null;
+    if (!cat || cat === "HEALTHY" || cat === "LOW_CONFIDENCE" || cat === "INVALID_IMAGE") {
+      setKbArticles([]);
+      return;
+    }
+    const diseaseName = prediction?.recommendation?.vietnameseName ?? prediction?.predictedDisease ?? "";
+    if (!diseaseName) return;
+    knowledgeClient
+      .list({ search: diseaseName, size: 2, status: "PUBLISHED" })
+      .then((page) => setKbArticles(page.articles))
+      .catch(() => setKbArticles([]));
+  }, [prediction]);
 
   function reset() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -259,6 +278,24 @@ function AIPanel({ treeId, treeCode, onSaved }: AIPanelProps) {
               <p className="text-xs opacity-70">{prediction.predictedDisease}</p>
               {prediction.recommendation?.diseaseSummary ? (
                 <p className="text-xs opacity-80 mt-1">{prediction.recommendation.diseaseSummary}</p>
+              ) : null}
+              {kbArticles.length > 0 ? (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-60">
+                    <BookOpen size={10} className="inline mr-1" />
+                    Tìm hiểu thêm
+                  </p>
+                  {kbArticles.map((a) => (
+                    <Link
+                      key={a.id}
+                      href={`/dashboard/client/knowledge/${encodeURIComponent(a.slug)}`}
+                      className="block rounded-lg border border-current/10 bg-white/50 px-2.5 py-2 hover:bg-white/80 transition-colors"
+                    >
+                      <p className="text-xs font-bold leading-snug">{a.title}</p>
+                      <p className="mt-0.5 text-[10px] opacity-70 leading-snug line-clamp-2">{a.excerpt}</p>
+                    </Link>
+                  ))}
+                </div>
               ) : null}
             </div>
           ) : null}
