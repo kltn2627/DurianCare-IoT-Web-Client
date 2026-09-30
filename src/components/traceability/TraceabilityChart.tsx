@@ -2,12 +2,9 @@
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { sensorTimeline } from "@/constants/durianMockData";
-import { MockDataBanner } from "@/components/shared/MockDataBanner";
-
 export function TraceabilityChart() {
   return (
     <div className="space-y-3">
-      <MockDataBanner />
       <div className="h-[240px] w-full">
       <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 900, height: 240 }}>
         <AreaChart data={sensorTimeline} margin={{ left: -25, right: 8 }}>

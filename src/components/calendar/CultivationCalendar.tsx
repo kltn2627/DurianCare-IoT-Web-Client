@@ -29,7 +29,6 @@ import {
   cultivationTaskTypes,
   farmZones,
 } from "@/constants/durianMockData";
-import { MockDataBanner } from "@/components/shared/MockDataBanner";
 import type {
   CultivationTask,
   CultivationTaskType,
@@ -904,7 +903,6 @@ export function CultivationCalendar() {
 
   return (
     <div className="space-y-4">
-      <MockDataBanner />
       <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-6 text-white sm:p-7">
         <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
           <div className="max-w-2xl">

@@ -7,10 +7,14 @@ import type {
   BiologicalLevel,
   CareHistoryResponse,
   ComplianceAssessment,
+  CreateCultivationScheduleRequest,
   CultivationActivity,
   CultivationDashboardData,
   CultivationPlan,
+  CultivationSchedule,
   CultivationSeason,
+  CultivationTaskStatus,
+  CultivationTaskType,
   CultivationZone,
   CultivationZoneRequest,
   CanonicalCultivationZone,
@@ -348,5 +352,38 @@ export const cultivationClient = {
       harvestBatches: Array.isArray(harvestBatches) ? harvestBatches : [],
       exportReleases: Array.isArray(exportReleases) ? exportReleases : [],
     };
+  },
+
+  async listCultivationSchedules(query?: {
+    zoneId?: string;
+    cropId?: string;
+    status?: CultivationTaskStatus;
+    type?: CultivationTaskType;
+  }): Promise<CultivationSchedule[]> {
+    return cultivationRequest<CultivationSchedule[]>(
+      "/api/cultivation-schedules" + queryString(query),
+    );
+  },
+
+  async createCultivationSchedule(
+    body: CreateCultivationScheduleRequest,
+  ): Promise<CultivationSchedule> {
+    return cultivationRequest<CultivationSchedule>("/api/cultivation-schedules", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  async updateCultivationScheduleStatus(
+    id: string,
+    status: CultivationTaskStatus,
+  ): Promise<CultivationSchedule> {
+    return cultivationRequest<CultivationSchedule>(
+      `/api/cultivation-schedules/${id}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      },
+    );
   },
 };

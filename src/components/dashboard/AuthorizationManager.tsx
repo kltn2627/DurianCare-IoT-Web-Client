@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { BadgeCheck, Check, ShieldCheck, ShieldX, UserRoundCheck, X } from "lucide-react";
 import { activeEngineers, authorizationRequests } from "@/constants/durianMockData";
-import { MockDataBanner } from "@/components/shared/MockDataBanner";
-
 type RequestState = "pending" | "approved" | "rejected";
 
 export function AuthorizationManager() {
@@ -16,7 +14,6 @@ export function AuthorizationManager() {
 
   return (
     <section id="authorization" className="grid scroll-mt-24 gap-9 xl:grid-cols-[1.3fr_.7fr]">
-      <MockDataBanner />
       <article className="panel p-7 lg:p-8">
         <div className="flex items-center gap-7"><span className="grid size-10 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]"><UserRoundCheck size={20} /></span><div><h2 className="text-[15px] font-bold">Yêu cầu hợp tác quản lý vườn</h2><p className="mt-1 text-[13px] text-[#7e8b83]">Xét duyệt kỹ sư và giới hạn phạm vi can thiệp</p></div></div>
         <div className="mt-7 space-y-5">

@@ -497,3 +497,35 @@ export type CultivationDashboardData = {
   harvestBatches: HarvestBatch[];
   exportReleases: ExportRelease[];
 };
+
+export type CultivationTaskType = "fertilizer" | "pesticide" | "irrigation" | "pruning" | "inspection";
+export type CultivationTaskStatus = "planned" | "in-progress" | "done";
+
+export interface CultivationSchedule {
+  id: string;
+  zoneId: string;
+  cropId: string;
+  type: CultivationTaskType;
+  status: CultivationTaskStatus;
+  date: string;
+  time: string | null;
+  materialName: string | null;
+  dosage: string | null;
+  assignee: string | null;
+  safetyInterval: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateCultivationScheduleRequest = {
+  assignee: string;
+  cropId: string;
+  dosage: string;
+  materialName: string;
+  notes: string;
+  safetyInterval: string;
+  scheduledAt: string;
+  type: CultivationTaskType;
+  zoneId: string;
+};

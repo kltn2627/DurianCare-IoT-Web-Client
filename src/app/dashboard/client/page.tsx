@@ -18,7 +18,6 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { dashboardStats } from "@/constants/durianMockData";
 import { AUTH_COOKIES, readSession } from "@/lib/auth/server";
-import { MockDataBanner } from "@/components/shared/MockDataBanner";
 import type { IotDevice } from "@/lib/iot/types";
 
 export const metadata: Metadata = { title: "Dashboard chủ trang trại" };
@@ -100,7 +99,6 @@ export default async function ClientDashboardPage() {
   return (
     <DashboardShell role="OWNER" userName={userName}>
       <div className="space-y-8">
-        <MockDataBanner />
         <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-8 text-white shadow-xl shadow-[#2e5a4418] lg:flex lg:items-center lg:justify-between lg:p-10">
           <div>
             <p className="flex items-center gap-4 text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">
