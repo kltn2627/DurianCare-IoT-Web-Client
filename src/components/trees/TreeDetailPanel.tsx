@@ -110,10 +110,10 @@ function AIPanel({ treeId, treeCode, onSaved }: AIPanelProps) {
       setKbArticles([]);
       return;
     }
-    const diseaseName = prediction?.recommendation?.vietnameseName ?? prediction?.predictedDisease ?? "";
-    if (!diseaseName) return;
+    const diseaseCodeForKb = prediction?.predictedDisease ?? "";
+    if (!diseaseCodeForKb) return;
     knowledgeClient
-      .list({ search: diseaseName, size: 2, status: "PUBLISHED" })
+      .list({ search: diseaseCodeForKb, size: 2, status: "PUBLISHED" })
       .then((page) => setKbArticles(page.articles))
       .catch(() => setKbArticles([]));
   }, [prediction]);
@@ -369,6 +369,7 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
     setSaving(true);
     setError(null);
     try {
+      await treeClient.updateHealthStatus(treeId, "RECOVERED");
       await treeClient.saveDiagnosis(treeId, {
         imageUrl: "RECOVERY_VERIFICATION_NO_IMAGE",
         diseaseCode: "RECOVERED_BY_FARMER",
@@ -446,6 +447,65 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
   );
 }
 
+// ── Treatment panel (DISEASED/SUSPECTED → TREATING) ──────────────────────────
+
+interface TreatmentPanelProps {
+  treeId: string;
+  treeCode: string;
+  onSaved: () => void;
+}
+
+function TreatmentPanel({ treeId, treeCode, onSaved }: TreatmentPanelProps) {
+  const [saving, setSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function startTreatment() {
+    setSaving(true);
+    setError(null);
+    try {
+      await treeClient.updateHealthStatus(treeId, "TREATING");
+      setSavedOk(true);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lưu thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (savedOk) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+        <CheckCircle size={16} className="text-orange-600 shrink-0" />
+        <p className="text-sm font-semibold text-orange-700">Cây {treeCode} đã được đánh dấu đang điều trị.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
+      <p className="text-xs font-extrabold text-orange-700">BẮT ĐẦU ĐIỀU TRỊ</p>
+      <p className="text-xs text-neutral-600">Đánh dấu cây đang trong quá trình điều trị bệnh.</p>
+      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
+      {saving ? (
+        <div className="flex items-center gap-2 text-sm text-neutral-500">
+          <Loader2 size={14} className="animate-spin" />
+          Đang lưu...
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={startTreatment}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700"
+        >
+          Bắt đầu điều trị
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 interface TreeDetailPanelProps {
@@ -515,8 +575,8 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved }: TreeDetai
   const health = tree?.healthStatus;
   const healthClass =
     health ? HEALTH_COLORS[health] : "text-neutral-500 bg-neutral-50 border-neutral-200";
-  const needsRecovery =
-    health === "DISEASED" || health === "TREATING" || health === "SUSPECTED";
+  const needsTreatment = health === "DISEASED" || health === "SUSPECTED";
+  const needsRecovery = health === "TREATING";
 
   return (
     <aside className="flex h-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
@@ -564,7 +624,12 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved }: TreeDetai
               </span>
             ) : null}
 
-            {/* Recovery confirmation */}
+            {/* Treatment start (DISEASED/SUSPECTED → TREATING) */}
+            {needsTreatment ? (
+              <TreatmentPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
+            ) : null}
+
+            {/* Recovery confirmation (TREATING → RECOVERED) */}
             {needsRecovery ? (
               <RecoveryPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
             ) : null}

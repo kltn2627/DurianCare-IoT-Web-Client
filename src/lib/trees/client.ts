@@ -135,4 +135,10 @@ export const treeClient = {
     treeRequest<TreeDiagnosis>(
       `/api/trees/${encodeURIComponent(treeId)}/diagnoses/latest`,
     ),
+
+  updateHealthStatus: (treeId: string, healthStatus: "TREATING" | "RECOVERED") =>
+    treeRequest<TreeDetail>(
+      `/api/trees/${encodeURIComponent(treeId)}/health-status`,
+      { method: "PATCH", body: JSON.stringify({ healthStatus }) },
+    ),
 };
