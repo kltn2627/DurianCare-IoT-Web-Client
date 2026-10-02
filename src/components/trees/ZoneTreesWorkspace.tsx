@@ -16,6 +16,7 @@ const HEALTH_LABELS: Record<string, string> = {
   DISEASED: "Bệnh",
   TREATING: "Điều trị",
   SUSPECTED: "Nghi ngờ",
+  RECOVERED: "Đã hồi phục",
 };
 
 const HEALTH_BADGE: Record<string, string> = {
@@ -23,6 +24,7 @@ const HEALTH_BADGE: Record<string, string> = {
   DISEASED: "bg-red-100 text-red-800",
   TREATING: "bg-orange-100 text-orange-800",
   SUSPECTED: "bg-orange-100 text-orange-800",
+  RECOVERED: "bg-cyan-100 text-cyan-800",
 };
 
 // ── Generate Trees inline form ────────────────────────────────────────────────

@@ -26,6 +26,7 @@ const HEALTH_LABELS: Record<string, string> = {
   DISEASED: "Bệnh",
   TREATING: "Đang điều trị",
   SUSPECTED: "Nghi ngờ",
+  RECOVERED: "Đã hồi phục",
 };
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -33,6 +34,7 @@ const HEALTH_COLORS: Record<string, string> = {
   DISEASED: "text-red-700 bg-red-50 border-red-200",
   TREATING: "text-orange-700 bg-orange-50 border-orange-200",
   SUSPECTED: "text-yellow-700 bg-yellow-50 border-yellow-200",
+  RECOVERED: "text-cyan-700 bg-cyan-50 border-cyan-200",
 };
 
 function categoryFromCode(code: string | null | undefined): DiseaseCategory {

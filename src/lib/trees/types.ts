@@ -1,4 +1,4 @@
-export type TreeHealthStatus = "HEALTHY" | "DISEASED" | "TREATING" | "SUSPECTED";
+export type TreeHealthStatus = "HEALTHY" | "DISEASED" | "TREATING" | "SUSPECTED" | "RECOVERED";
 export type TreeStatus = "ACTIVE" | "REMOVED" | "REPLANTED";
 export type ZoneStatus = "ACTIVE" | "INACTIVE" | "PREPARING";
 
