@@ -175,3 +175,30 @@ export interface PagedResponse<T> {
   number: number;
   size: number;
 }
+
+export type CarePlanStatus = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export interface TreeCarePlan {
+  id: string;
+  treeId: string;
+  farmId: string;
+  diagnosisId?: string | null;
+  diseaseCode: string;
+  knowledgeArticleId?: string | null;
+  treatment?: string | null;
+  startDate: string;
+  followUpDate?: string | null;
+  status: CarePlanStatus;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCarePlanRequest {
+  diagnosisId?: string | null;
+  diseaseCode: string;
+  knowledgeArticleId?: string | null;
+  treatment?: string | null;
+  startDate: string;
+  followUpDate?: string | null;
+}

@@ -14,7 +14,7 @@ import {
 import { treeClient, TreeApiError } from "@/lib/trees/client";
 import { predictLeafDisease } from "@/lib/ai/client";
 import type { PredictionData } from "@/lib/ai/types";
-import type { TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
+import type { CreateCarePlanRequest, TreeCarePlan, TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
 import type { DiseaseCategory } from "@/lib/labels";
 import { knowledgeClient } from "@/lib/knowledge/client";
 import type { KnowledgeArticle } from "@/lib/knowledge/types";
@@ -506,6 +506,154 @@ function TreatmentPanel({ treeId, treeCode, onSaved }: TreatmentPanelProps) {
   );
 }
 
+// ── Care Plan Section ─────────────────────────────────────────────────────────
+
+const PLAN_STATUS_LABEL: Record<string, string> = {
+  PLANNED: "Đã lên kế hoạch",
+  IN_PROGRESS: "Đang thực hiện",
+  COMPLETED: "Hoàn thành",
+  CANCELLED: "Đã hủy",
+};
+
+const PLAN_STATUS_COLOR: Record<string, string> = {
+  PLANNED: "text-blue-700 bg-blue-50",
+  IN_PROGRESS: "text-orange-700 bg-orange-50",
+  COMPLETED: "text-green-700 bg-green-50",
+  CANCELLED: "text-neutral-500 bg-neutral-100",
+};
+
+interface CarePlanSectionProps {
+  treeId: string;
+  latestDiseaseCode: string | null | undefined;
+  onPlanCreated: () => void;
+}
+
+function CarePlanSection({ treeId, latestDiseaseCode, onPlanCreated }: CarePlanSectionProps) {
+  const [plans, setPlans] = useState<TreeCarePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [treatment, setTreatment] = useState("");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    treeClient.listCarePlans(treeId)
+      .then((data) => setPlans(data))
+      .catch(() => setPlans([]))
+      .finally(() => setLoading(false));
+  }, [treeId]);
+
+  async function createPlan() {
+    if (!latestDiseaseCode) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const body: CreateCarePlanRequest = {
+        diseaseCode: latestDiseaseCode,
+        treatment: treatment.trim() || undefined,
+        startDate: today,
+        followUpDate: followUpDate || undefined,
+      };
+      const created = await treeClient.createCarePlan(treeId, body);
+      setPlans((prev) => [created, ...prev]);
+      setShowCreate(false);
+      setTreatment("");
+      setFollowUpDate("");
+      onPlanCreated();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Tạo kế hoạch thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activePlan = plans.find((p) => p.status === "PLANNED" || p.status === "IN_PROGRESS");
+
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-extrabold text-blue-800">KẾ HOẠCH CHĂM SÓC</p>
+        {latestDiseaseCode && !activePlan ? (
+          <button
+            type="button"
+            onClick={() => setShowCreate((v) => !v)}
+            className="text-xs font-bold text-blue-700 hover:underline"
+          >
+            {showCreate ? "Hủy" : "+ Tạo kế hoạch"}
+          </button>
+        ) : null}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <Loader2 size={12} className="animate-spin" />
+          Đang tải...
+        </div>
+      ) : plans.length === 0 && !showCreate ? (
+        <p className="text-xs text-neutral-400">Chưa có kế hoạch chăm sóc nào.</p>
+      ) : null}
+
+      {activePlan ? (
+        <div className="rounded-lg border border-blue-200 bg-white p-3 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-neutral-700">{activePlan.diseaseCode}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${PLAN_STATUS_COLOR[activePlan.status] ?? ""}`}>
+              {PLAN_STATUS_LABEL[activePlan.status] ?? activePlan.status}
+            </span>
+          </div>
+          {activePlan.treatment ? (
+            <p className="text-xs text-neutral-600">{activePlan.treatment}</p>
+          ) : null}
+          <div className="flex gap-3 text-[10px] text-neutral-500">
+            <span>Bắt đầu: {activePlan.startDate}</span>
+            {activePlan.followUpDate ? <span>Tái khám: {activePlan.followUpDate}</span> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showCreate ? (
+        <div className="space-y-2">
+          <textarea
+            className="w-full rounded-xl border border-neutral-200 p-2.5 text-sm text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+            rows={2}
+            placeholder="Hướng điều trị (tùy chọn)..."
+            value={treatment}
+            onChange={(e) => setTreatment(e.target.value)}
+          />
+          <div>
+            <label className="text-[10px] font-bold text-neutral-500">Ngày tái khám (tùy chọn)</label>
+            <input
+              type="date"
+              className="mt-0.5 w-full rounded-xl border border-neutral-200 p-2 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+            />
+          </div>
+          {saveError ? <p className="text-xs font-semibold text-red-600">{saveError}</p> : null}
+          {saving ? (
+            <div className="flex items-center gap-2 text-sm text-neutral-500">
+              <Loader2 size={14} className="animate-spin" />
+              Đang tạo...
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={createPlan}
+              disabled={!latestDiseaseCode}
+              className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            >
+              Tạo kế hoạch
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 interface TreeDetailPanelProps {
@@ -632,6 +780,15 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved }: TreeDetai
             {/* Recovery confirmation (TREATING → RECOVERED) */}
             {needsRecovery ? (
               <RecoveryPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
+            ) : null}
+
+            {/* Care plan (DISEASED/TREATING/SUSPECTED) */}
+            {health === "DISEASED" || health === "TREATING" || health === "SUSPECTED" ? (
+              <CarePlanSection
+                treeId={treeId}
+                latestDiseaseCode={tree.latestDiseaseCode}
+                onPlanCreated={refresh}
+              />
             ) : null}
 
             {/* Embedded AI panel */}

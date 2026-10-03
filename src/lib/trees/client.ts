@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/auth/client";
 import type {
+  CarePlanStatus,
+  CreateCarePlanRequest,
   CreateFarmRequest,
   CreateTreeRequest,
   CreateZoneRequest,
@@ -8,6 +10,7 @@ import type {
   GenerateTreesResult,
   PagedResponse,
   SaveDiagnosisRequest,
+  TreeCarePlan,
   TreeDetail,
   TreeDiagnosis,
   TreeSummary,
@@ -141,4 +144,21 @@ export const treeClient = {
       `/api/trees/${encodeURIComponent(treeId)}/health-status`,
       { method: "PATCH", body: JSON.stringify({ healthStatus }) },
     ),
+
+  // ── Care Plans ──────────────────────────────────────────────────────────────
+
+  listCarePlans: (treeId: string) =>
+    treeRequest<TreeCarePlan[]>(`/api/trees/${encodeURIComponent(treeId)}/care-plans`),
+
+  createCarePlan: (treeId: string, body: CreateCarePlanRequest) =>
+    treeRequest<TreeCarePlan>(`/api/trees/${encodeURIComponent(treeId)}/care-plans`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateCarePlanStatus: (planId: string, status: CarePlanStatus) =>
+    treeRequest<TreeCarePlan>(`/api/care-plans/${encodeURIComponent(planId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };
