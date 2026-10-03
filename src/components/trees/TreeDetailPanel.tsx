@@ -14,7 +14,7 @@ import {
 import { treeClient, TreeApiError } from "@/lib/trees/client";
 import { predictLeafDisease } from "@/lib/ai/client";
 import type { PredictionData } from "@/lib/ai/types";
-import type { CreateCarePlanRequest, TreeCarePlan, TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
+import type { CreateCarePlanRequest, RecoveryEvaluationResponse, TreeCarePlan, TreeDetail, TreeDiagnosis } from "@/lib/trees/types";
 import type { DiseaseCategory } from "@/lib/labels";
 import { knowledgeClient } from "@/lib/knowledge/client";
 import type { KnowledgeArticle } from "@/lib/knowledge/types";
@@ -354,12 +354,41 @@ interface RecoveryPanelProps {
   onSaved: () => void;
 }
 
+const RECOVERY_OUTCOME_ELIGIBLE = new Set(["RECOVERED", "IMPROVED"]);
+
+const RECOVERY_OUTCOME_LABEL: Record<string, string> = {
+  RECOVERED: "Đã hồi phục",
+  IMPROVED: "Cải thiện rõ rệt",
+  STABLE: "Ổn định",
+  WORSENED: "Xấu đi",
+  UNCERTAIN: "Chưa xác định",
+};
+
 function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState("");
+  const [evaluating, setEvaluating] = useState(false);
+  const [evaluation, setEvaluation] = useState<RecoveryEvaluationResponse | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleExpand() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !evaluation) {
+      setEvaluating(true);
+      setError(null);
+      try {
+        const result = await treeClient.evaluateRecovery(treeId);
+        setEvaluation(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không thể đánh giá phục hồi.");
+      } finally {
+        setEvaluating(false);
+      }
+    }
+  }
 
   async function confirm() {
     if (!notes.trim()) {
@@ -369,7 +398,6 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
     setSaving(true);
     setError(null);
     try {
-      await treeClient.updateHealthStatus(treeId, "RECOVERED");
       await treeClient.saveDiagnosis(treeId, {
         imageUrl: "RECOVERY_VERIFICATION_NO_IMAGE",
         diseaseCode: "RECOVERED_BY_FARMER",
@@ -387,6 +415,8 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
     }
   }
 
+  const eligible = evaluation ? RECOVERY_OUTCOME_ELIGIBLE.has(evaluation.outcome) : false;
+
   if (savedOk) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-3">
@@ -401,7 +431,7 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
       <button
         type="button"
         className="flex w-full items-center justify-between"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleExpand}
       >
         <span className="text-xs font-extrabold text-green-700">XÁC NHẬN PHỤC HỒI</span>
         {expanded ? (
@@ -413,34 +443,59 @@ function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
 
       {expanded ? (
         <div className="mt-3 space-y-3">
-          <p className="text-xs text-neutral-600">
-            Xác nhận cây đã phục hồi sau điều trị. Ghi chú bắt buộc để tạo bằng chứng.
-          </p>
-          <textarea
-            className="w-full rounded-xl border border-neutral-200 p-2.5 text-sm text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
-            rows={3}
-            placeholder="Ghi chú xác nhận (bắt buộc)..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+          {evaluating ? (
+            <div className="flex items-center gap-2 text-xs text-neutral-500">
+              <Loader2 size={12} className="animate-spin" />
+              Đang đánh giá tình trạng phục hồi...
+            </div>
+          ) : evaluation ? (
+            <div className={`rounded-lg border p-3 ${eligible ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+              <p className={`text-xs font-bold ${eligible ? "text-green-700" : "text-red-700"}`}>
+                {RECOVERY_OUTCOME_LABEL[evaluation.outcome] ?? evaluation.outcome}
+              </p>
+              <p className="mt-1 text-xs text-neutral-600">{evaluation.reason}</p>
+              {!eligible ? (
+                <p className="mt-2 text-xs font-bold text-red-600">Chưa đủ điều kiện xác nhận hồi phục</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {eligible ? (
+            <>
+              <p className="text-xs text-neutral-600">
+                Xác nhận cây đã phục hồi sau điều trị. Ghi chú bắt buộc để tạo bằng chứng.
+              </p>
+              <textarea
+                className="w-full rounded-xl border border-neutral-200 p-2.5 text-sm text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
+                rows={3}
+                placeholder="Ghi chú xác nhận (bắt buộc)..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </>
+          ) : null}
+
           {error ? (
             <p className="text-xs font-semibold text-red-600">{error}</p>
           ) : null}
-          {saving ? (
-            <div className="flex items-center gap-2 text-sm text-neutral-500">
-              <Loader2 size={14} className="animate-spin" />
-              Đang lưu...
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={confirm}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
-            >
-              <CheckCircle size={14} />
-              Gửi xác nhận phục hồi
-            </button>
-          )}
+
+          {eligible ? (
+            saving ? (
+              <div className="flex items-center gap-2 text-sm text-neutral-500">
+                <Loader2 size={14} className="animate-spin" />
+                Đang lưu...
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={confirm}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
+              >
+                <CheckCircle size={14} />
+                Gửi xác nhận phục hồi
+              </button>
+            )
+          ) : null}
         </div>
       ) : null}
     </div>

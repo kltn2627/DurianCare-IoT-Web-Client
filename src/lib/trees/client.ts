@@ -9,6 +9,7 @@ import type {
   GenerateTreesRequest,
   GenerateTreesResult,
   PagedResponse,
+  RecoveryEvaluationResponse,
   SaveDiagnosisRequest,
   TreeCarePlan,
   TreeDetail,
@@ -161,4 +162,10 @@ export const treeClient = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  evaluateRecovery: (treeId: string) =>
+    treeRequest<RecoveryEvaluationResponse>(
+      `/api/trees/${encodeURIComponent(treeId)}/evaluate-recovery`,
+      { method: "POST" },
+    ),
 };
