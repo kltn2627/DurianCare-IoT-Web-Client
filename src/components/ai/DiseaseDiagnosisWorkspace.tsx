@@ -2,50 +2,41 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
   BadgeCheck,
   BookOpen,
   Camera,
+  CameraOff,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Download,
-  Eye,
   ExternalLink,
   FileImage,
   LoaderCircle,
   Maximize2,
-  MessageCircleMore,
+  Pause,
+  Play,
   RefreshCw,
   ScanSearch,
-  Search,
   ShieldCheck,
-  Share2,
   Sprout,
-  Trash2,
   ZoomIn,
   FlaskConical,
   Sparkles,
 } from "lucide-react";
-import {
-  AiApiError,
-  deletePredictionHistory,
-  listPredictionHistory,
-  predictLeafDisease,
-} from "@/lib/ai/client";
+import { AiApiError, predictLeafDisease } from "@/lib/ai/client";
 import type {
   KnowledgeLineItem,
   PredictionData,
-  PredictionHistoryItem,
   PredictionSource,
   ReferenceSourceSummary,
 } from "@/lib/ai/types";
-import { chatClient } from "@/lib/chat/client";
-import { diseaseLabels } from "@/lib/labels";
+import { cameraClient } from "@/lib/camera/client";
+import { diseaseLabels, getDiseaseAlertMessage, getDiseaseCategory } from "@/lib/labels";
 import { translateRecommendation } from "@/lib/treatment-terms";
+import { treeClient } from "@/lib/trees/client";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -60,29 +51,10 @@ type ReportSnapshot = {
 
 type PredictionErrorKind = "invalid-image" | "service-unavailable" | "general";
 type ViewerMode = "fullscreen" | null;
-type HistoryStatus = "PENDING" | "CONSULTING" | "RESOLVED";
-
-type ShareEngineer = {
-  name: string;
-  phoneNumber: string;
-  specialty: string;
-  initials: string;
-};
 
 type SourceOption = {
   value: PredictionSource;
   label: string;
-};
-
-type DiagnosisHistoryRow = {
-  id: string;
-  createdAt: string;
-  imageUrl?: string;
-  resultLabel: string;
-  severity: string;
-  confidence: string;
-  status: HistoryStatus;
-  report?: ReportSnapshot;
 };
 
 const sourceOptions: SourceOption[] = [
@@ -91,31 +63,30 @@ const sourceOptions: SourceOption[] = [
   { value: "IOT_CAMERA", label: "Camera IoT" },
 ];
 
-export function DiseaseDiagnosisWorkspace() {
-  const router = useRouter();
+// Mirrors the camera list configured in CameraSection — update both when adding cameras.
+const CAMERA_DEVICES = [
+  { id: "ESP32-CAM-001", label: "Camera Vườn Chính", sublabel: "ESP32-CAM-001" },
+];
+
+type CaptureMode = "upload" | "esp32cam";
+
+export function DiseaseDiagnosisWorkspace({ treeId = null, treeCode = null }: { treeId?: string | null; treeCode?: string | null }) {
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [source, setSource] = useState<PredictionSource>("WEB");
-  const [deviceId, setDeviceId] = useState("");
+  // Always initialised to a real camera ID — farmers never type this manually.
+  const [deviceId, setDeviceId] = useState(CAMERA_DEVICES[0].id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [errorKind, setErrorKind] = useState<PredictionErrorKind | null>(null);
   const [activeReport, setActiveReport] = useState<ReportSnapshot | null>(null);
-  const [historyRows, setHistoryRows] = useState<DiagnosisHistoryRow[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState("");
-  const [historyQuery, setHistoryQuery] = useState("");
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatus | "ALL">("ALL");
-  const [historyPage, setHistoryPage] = useState(1);
+  const [history, setHistory] = useState<ReportSnapshot[]>([]);
   const [zoom, setZoom] = useState(100);
   const [viewerMode, setViewerMode] = useState<ViewerMode>(null);
-  const [sharePanelOpen, setSharePanelOpen] = useState(false);
-  const [shareEngineers, setShareEngineers] = useState<ShareEngineer[]>([]);
-  const [shareLoading, setShareLoading] = useState(false);
-  const [shareSendingPhone, setShareSendingPhone] = useState("");
-  const [shareError, setShareError] = useState("");
-  const [shareSuccess, setShareSuccess] = useState("");
+  const [cameraError, setCameraError] = useState(false);
+  const [treeSaveState, setTreeSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [treeSaveError, setTreeSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!file) {
@@ -144,20 +115,14 @@ export function DiseaseDiagnosisWorkspace() {
   const showServiceUnavailableCard = errorKind === "service-unavailable" && !activeReport;
   const report = activeReport!;
   const canUpload = Boolean(file) && !loading && (source !== "IOT_CAMERA" || deviceId.trim().length > 0);
-
-  const clearShareState = () => {
-    setSharePanelOpen(false);
-    setShareError("");
-    setShareSuccess("");
-    setShareSendingPhone("");
-  };
+  const canCapture = !loading && !cameraError;
+  const selectedCamera = CAMERA_DEVICES.find((c) => c.id === deviceId) ?? CAMERA_DEVICES[0];
 
   const handleFileChange = (selectedFile: File | null) => {
     setError("");
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
-    clearShareState();
 
     if (!selectedFile) {
       setFile(null);
@@ -180,17 +145,40 @@ export function DiseaseDiagnosisWorkspace() {
   };
 
   const resetForm = () => {
+    setCaptureMode("upload");
     setFile(null);
     setPreviewUrl("");
     setSource("WEB");
-    setDeviceId("");
+    setDeviceId(CAMERA_DEVICES[0].id);
     setLoading(false);
     setError("");
     setErrorKind(null);
     setActiveReport(null);
     setZoom(100);
     setViewerMode(null);
-    clearShareState();
+    setCameraError(false);
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
+  };
+
+  const handleSaveToTree = async (snap: ReportSnapshot) => {
+    if (!treeId) return;
+    setTreeSaveState("saving");
+    setTreeSaveError(null);
+    try {
+      await treeClient.saveDiagnosis(treeId, {
+        imageUrl: snap.result.image?.url || "WEB_AI_NO_STORED_IMAGE",
+        diseaseCode: snap.result.predictedDisease,
+        diseaseName: diseaseLabels[snap.result.predictedDisease] ?? null,
+        confidence: snap.result.confidence / 100, // AI returns 0-100%, backend expects 0-1 float
+        boundingBox: snap.result.boundingBox as Record<string, unknown> | null ?? null,
+        source: snap.result.source,
+      });
+      setTreeSaveState("saved");
+    } catch (err) {
+      setTreeSaveState("error");
+      setTreeSaveError(err instanceof Error ? err.message : "Không thể lưu chuẩn đoán.");
+    }
   };
 
   const upload = async () => {
@@ -211,7 +199,8 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setActiveReport(null);
     setViewerMode(null);
-    clearShareState();
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
 
     try {
       const response = await predictLeafDisease(
@@ -229,12 +218,70 @@ export function DiseaseDiagnosisWorkspace() {
       };
 
       setActiveReport(snapshot);
-      setHistoryPage(1);
-      await loadDiagnosisHistory(1);
+      setHistory((current) => [snapshot, ...current].slice(0, 5));
     } catch (cause) {
       const failure = classifyPredictionFailure(cause);
       setErrorKind(failure.kind);
       setError(failure.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetches a live frame from ESP32-CAM and runs it through the AI pipeline.
+  const captureFromEsp32 = async () => {
+    if (!deviceId.trim()) {
+      setError("Vui lòng nhập mã thiết bị ESP32-CAM trước khi chụp.");
+      setErrorKind("general");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setErrorKind(null);
+    setActiveReport(null);
+    setViewerMode(null);
+    setTreeSaveState("idle");
+    setTreeSaveError(null);
+
+    let snapshotBlobUrl: string | null = null;
+    try {
+      // 1. Pull a live JPEG from the camera proxy
+      snapshotBlobUrl = await cameraClient.fetchSnapshotBlob(deviceId.trim());
+
+      // 2. Convert blob URL → ArrayBuffer → File (so predictLeafDisease can send it as FormData)
+      const imageResp = await fetch(snapshotBlobUrl);
+      const imageBlob = await imageResp.blob();
+      const snapshotFile = new File([imageBlob], `esp32cam-${Date.now()}.jpg`, { type: "image/jpeg" });
+
+      // Update the upload preview area so the user sees the captured frame
+      setFile(snapshotFile);
+      setSource("IOT_CAMERA");
+
+      // 3. Run prediction via the existing AI service pipeline
+      const response = await predictLeafDisease(snapshotFile, "IOT_CAMERA", deviceId.trim());
+
+      const snapshot: ReportSnapshot = {
+        id: `${Date.now()}-esp32cam`,
+        fileName: snapshotFile.name,
+        createdAt: new Date().toISOString(),
+        // Keep snapshotBlobUrl alive — it becomes the preview thumbnail in history
+        previewUrl: snapshotBlobUrl,
+        result: response.data,
+      };
+      snapshotBlobUrl = null; // ownership transferred to snapshot; do NOT revoke
+
+      setActiveReport(snapshot);
+      setHistory((current) => [snapshot, ...current].slice(0, 5));
+    } catch (cause) {
+      if (snapshotBlobUrl) { URL.revokeObjectURL(snapshotBlobUrl); }
+      const failure = classifyPredictionFailure(cause);
+      setErrorKind(failure.kind);
+      setError(
+        failure.kind === "general" && cause instanceof Error && cause.message.includes("Snapshot")
+          ? "Không thể lấy ảnh từ ESP32-CAM. Kiểm tra mã thiết bị và kết nối mạng."
+          : failure.message,
+      );
     } finally {
       setLoading(false);
     }
@@ -246,137 +293,11 @@ export function DiseaseDiagnosisWorkspace() {
     setErrorKind(null);
     setViewerMode(null);
     setZoom(100);
-    clearShareState();
   };
 
   const diagnosisImageUrl = report?.result.image?.url ?? null;
   const originalImageUrl = report?.previewUrl ?? previewUrl ?? null;
   const hasDecisionSupport = Boolean(report?.result.decisionSupport);
-  const historyPageSize = 5;
-  const totalHistoryPages = Math.max(1, Math.ceil(historyTotal / historyPageSize));
-  const visibleHistoryRows = historyRows;
-
-  const loadDiagnosisHistory = useCallback(
-    async (page = historyPage) => {
-      setHistoryLoading(true);
-      setHistoryError("");
-      try {
-        const response = await listPredictionHistory({
-          page,
-          pageSize: historyPageSize,
-          query: historyQuery,
-          status: historyStatusFilter,
-        });
-        setHistoryRows(response.items.map(toDiagnosisHistoryRow));
-        setHistoryTotal(response.total);
-        setHistoryPage(response.page);
-      } catch (historyLoadError) {
-        setHistoryError(
-          historyLoadError instanceof Error
-            ? historyLoadError.message
-            : "Không thể tải lịch sử chẩn đoán.",
-        );
-        setHistoryRows([]);
-        setHistoryTotal(0);
-      } finally {
-        setHistoryLoading(false);
-      }
-    },
-    [historyPage, historyQuery, historyStatusFilter],
-  );
-
-  useEffect(() => {
-    void loadDiagnosisHistory();
-  }, [loadDiagnosisHistory]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historyQuery, historyStatusFilter]);
-
-  useEffect(() => {
-    if (historyPage > totalHistoryPages) {
-      setHistoryPage(totalHistoryPages);
-    }
-  }, [historyPage, totalHistoryPages]);
-
-  const openSharePanel = async (targetReport = activeReport) => {
-    if (!targetReport) return;
-
-    if (targetReport.id !== activeReport?.id) {
-      setActiveReport(targetReport);
-    }
-    setSharePanelOpen(true);
-    setShareError("");
-    setShareSuccess("");
-
-    if (shareEngineers.length > 0) return;
-
-    setShareLoading(true);
-    try {
-      const result = await chatClient.listConversations({ role: "FARMER" });
-      const engineers = result.engineers.filter((engineer) => engineer.phoneNumber);
-      setShareEngineers(engineers);
-      if (engineers.length === 0) {
-        setShareError("Bạn chưa có kỹ sư đã kết nối để chia sẻ báo cáo.");
-      }
-    } catch (shareLoadError) {
-      setShareError(
-        shareLoadError instanceof Error
-          ? shareLoadError.message
-          : "Không thể tải danh sách kỹ sư đã kết nối.",
-      );
-    } finally {
-      setShareLoading(false);
-    }
-  };
-
-  const shareReportToEngineer = async (engineer: ShareEngineer) => {
-    if (!activeReport) return;
-
-    setShareSendingPhone(engineer.phoneNumber);
-    setShareError("");
-    setShareSuccess("");
-    try {
-      const message = buildDiagnosisShareMessage(
-        activeReport,
-        diagnosisLabel,
-        confidenceLabel,
-        sourceLabel,
-      );
-      await chatClient.createConversation({
-        peerPhoneNumber: engineer.phoneNumber,
-        cropContext: `Chia sẻ báo cáo AI: ${diagnosisLabel || "Chẩn đoán lá sầu riêng"}`,
-        sensorContext: "Báo cáo được gửi từ màn hình Phân tích AI.",
-        initialMessage: message,
-      });
-      setShareSuccess(`Đã gửi báo cáo cho ${engineer.name}. Đang mở phòng chat...`);
-      window.setTimeout(() => {
-        router.push("/dashboard/client/chat");
-      }, 600);
-    } catch (shareSendError) {
-      setShareError(
-        shareSendError instanceof Error
-          ? shareSendError.message
-          : "Không thể chia sẻ báo cáo cho kỹ sư.",
-      );
-    } finally {
-      setShareSendingPhone("");
-    }
-  };
-
-  const deleteHistoryRow = async (row: DiagnosisHistoryRow) => {
-    setHistoryError("");
-    try {
-      await deletePredictionHistory(row.id);
-      await loadDiagnosisHistory(historyPage);
-    } catch (historyDeleteError) {
-      setHistoryError(
-        historyDeleteError instanceof Error
-          ? historyDeleteError.message
-          : "Không thể xóa lịch sử chẩn đoán.",
-      );
-    }
-  };
 
   return (
     <section className="space-y-8">
@@ -407,123 +328,261 @@ export function DiseaseDiagnosisWorkspace() {
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
           <div className="rounded-[28px] border border-dashed border-[#d3ddd4] bg-[#fbfcfa] p-5">
-            <label
-              htmlFor="ai-leaf-upload"
-              className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[24px] border border-[#e3eae3] bg-white px-6 py-8 text-center transition hover:border-[#b8c7b9] hover:shadow-sm"
-            >
-              {previewUrl ? (
-                <div className="relative h-[240px] w-full overflow-hidden rounded-[20px] bg-[#f3f6f3]">
-                  <Image
-                    src={previewUrl}
-                    alt="Ảnh lá đã chọn"
-                    fill
-                    unoptimized
-                    className="object-contain"
-                  />
+
+            {/* ── Input-source toggle ───────────────────────────────────── */}
+            <div className="mb-4 flex gap-2 rounded-2xl border border-[#e3eae3] bg-white p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setCaptureMode("upload");
+                  setError("");
+                  setErrorKind(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition ${
+                  captureMode === "upload"
+                    ? "bg-[#2E5A44] text-white shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                }`}
+              >
+                <FileImage size={15} />
+                Tải ảnh lên
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCaptureMode("esp32cam");
+                  setSource("IOT_CAMERA");
+                  setError("");
+                  setErrorKind(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold transition ${
+                  captureMode === "esp32cam"
+                    ? "bg-[#2E5A44] text-white shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                }`}
+              >
+                <Camera size={15} />
+                Chụp từ ESP32-CAM
+              </button>
+            </div>
+
+            {captureMode === "upload" ? (
+              <>
+                {/* ── File drop zone ────────────────────────────────────── */}
+                <label
+                  htmlFor="ai-leaf-upload"
+                  className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-[24px] border border-[#e3eae3] bg-white px-6 py-8 text-center transition hover:border-[#b8c7b9] hover:shadow-sm"
+                >
+                  {previewUrl ? (
+                    <div className="relative h-[240px] w-full overflow-hidden rounded-[20px] bg-[#f3f6f3]">
+                      <Image
+                        src={previewUrl}
+                        alt="Ảnh lá đã chọn"
+                        fill
+                        unoptimized
+                        className="object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="grid size-14 place-items-center rounded-full bg-[#edf3ee] text-[#2E5A44]">
+                        <FileImage size={28} />
+                      </span>
+                      <h2 className="mt-4 text-lg font-extrabold tracking-tight text-neutral-900">
+                        Chọn hoặc kéo thả ảnh lá
+                      </h2>
+                      <p className="mt-2 max-w-md text-[13px] leading-6 text-neutral-500">
+                        Hỗ trợ JPEG, PNG, WEBP.
+                      </p>
+                    </>
+                  )}
+                </label>
+
+                <input
+                  id="ai-leaf-upload"
+                  type="file"
+                  accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
+                />
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="space-y-2">
+                      <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                        Nguồn ảnh
+                      </span>
+                      <select
+                        value={source}
+                        onChange={(event) => {
+                          setError("");
+                          setErrorKind(null);
+                          setActiveReport(null);
+                          setSource(event.target.value as PredictionSource);
+                        }}
+                        className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
+                      >
+                        {sourceOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                        Mã thiết bị IoT
+                      </span>
+                      <input
+                        value={deviceId}
+                        onChange={(event) => {
+                          setError("");
+                          setErrorKind(null);
+                          setDeviceId(event.target.value);
+                        }}
+                        disabled={source !== "IOT_CAMERA"}
+                        placeholder={source === "IOT_CAMERA" ? "VD: ESP32-CAM-DEMO-001" : "Chỉ cần khi chọn IoT Camera"}
+                        className="h-11 w-full rounded-xl border border-[#d8e1d8] bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void upload()}
+                      disabled={!canUpload}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
+                      {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                    >
+                      <RefreshCw size={16} />
+                      Làm mới
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <span className="grid size-14 place-items-center rounded-full bg-[#edf3ee] text-[#2E5A44]">
-                    <FileImage size={28} />
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {file ? (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
+                      <FileImage size={13} />
+                      {file.name}
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1.5 text-xs font-bold text-[#7b6015]">
+                    <Camera size={13} />
+                    Nguồn: {sourceLabel}
                   </span>
-                  <h2 className="mt-4 text-lg font-extrabold tracking-tight text-neutral-900">
-                    Chọn hoặc kéo thả ảnh lá
-                  </h2>
-                  <p className="mt-2 max-w-md text-[13px] leading-6 text-neutral-500">
-                    Hỗ trợ JPEG, PNG, WEBP.
+                </div>
+              </>
+            ) : (
+              /* ── ESP32-CAM capture panel ──────────────────────────────── */
+              <div className="rounded-[24px] border border-[#e3eae3] bg-white px-6 py-7 space-y-6">
+
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <span className="grid size-11 place-items-center rounded-xl bg-[#edf3ee] text-[#2E5A44]">
+                    <Camera size={22} />
+                  </span>
+                  <div>
+                    <h2 className="text-[15px] font-bold text-neutral-900">Chụp ảnh từ ESP32-CAM</h2>
+                    <p className="mt-0.5 text-[13px] text-neutral-500">
+                      Chọn camera và nhấn chụp — ảnh được lấy trực tiếp, không cần thao tác thêm.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Camera card picker */}
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
+                    Chọn camera
                   </p>
-                </>
-              )}
-            </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {CAMERA_DEVICES.map((cam) => {
+                      const selected = deviceId === cam.id;
+                      return (
+                        <button
+                          key={cam.id}
+                          type="button"
+                          onClick={() => {
+                            setDeviceId(cam.id);
+                            setError("");
+                            setErrorKind(null);
+                            setCameraError(false);
+                          }}
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                            selected
+                              ? "border-[#2E5A44] bg-[#edf3ee] shadow-sm"
+                              : "border-[#e3eae3] bg-white hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                          }`}
+                        >
+                          <span
+                            className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                              selected ? "bg-[#2E5A44] text-white" : "bg-[#f0f4f0] text-[#2E5A44]"
+                            }`}
+                          >
+                            <Camera size={16} />
+                          </span>
+                          <span className="min-w-0">
+                            <b className={`block text-[13px] ${selected ? "text-[#2E5A44]" : "text-neutral-800"}`}>
+                              {cam.label}
+                            </b>
+                            <span className="block text-[11px] text-neutral-400">{cam.sublabel}</span>
+                          </span>
+                          {selected && (
+                            <span className="ml-auto size-4 shrink-0 rounded-full bg-[#2E5A44] text-white flex items-center justify-center">
+                              <svg viewBox="0 0 10 8" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M1 4l2.5 2.5L9 1" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            <input
-              id="ai-leaf-upload"
-              type="file"
-              accept={ACCEPTED_IMAGE_TYPES.join(",")}
-              capture="environment"
-              className="sr-only"
-              onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
-            />
+                {/* Live preview frame */}
+                <Esp32LivePreview
+                  deviceId={deviceId}
+                  disabled={loading}
+                  onCameraError={setCameraError}
+                />
 
-            <div className="mt-4 rounded-[22px] border border-[#e3e9e3] bg-white p-4 shadow-sm">
-              <div className="grid gap-3 md:grid-cols-[140px_minmax(0,1fr)]">
-                <label className="space-y-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Nguồn ảnh
-                  </span>
-                  <select
-                    value={source}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setActiveReport(null);
-                      setSource(event.target.value as PredictionSource);
-                    }}
-                    className="h-14 w-full rounded-2xl border border-[#d8e1d8] bg-[#fbfcfa] px-4 text-sm font-semibold text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:bg-white focus:ring-4 focus:ring-[#2E5A4415]"
+                {/* Capture + reset */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void captureFromEsp32()}
+                    disabled={!canCapture}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-5 py-3.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {sourceOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-2">
-                  <span className="block text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                    Mã thiết bị IoT
-                  </span>
-                  <input
-                    value={deviceId}
-                    onChange={(event) => {
-                      setError("");
-                      setErrorKind(null);
-                      setDeviceId(event.target.value);
-                    }}
-                    disabled={source !== "IOT_CAMERA"}
-                    placeholder={
-                      source === "IOT_CAMERA"
-                        ? "VD: ESP32-CAM-DEMO-001"
-                        : "Chỉ cần khi chọn IoT Camera"
-                    }
-                    className="h-14 w-full rounded-2xl border border-[#d8e1d8] bg-[#fbfcfa] px-4 text-sm font-medium text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:bg-white focus:ring-4 focus:ring-[#2E5A4415] disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
-                  />
-                </label>
+                    {loading ? (
+                      <LoaderCircle size={18} className="animate-spin" />
+                    ) : (
+                      <Camera size={18} />
+                    )}
+                    {loading ? "Đang chụp & phân tích..." : "📸  Chụp & Phân tích ngay"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] px-4 py-3.5 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                  >
+                    <RefreshCw size={16} />
+                    Làm mới
+                  </button>
+                </div>
               </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:flex sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => void upload()}
-                  disabled={!canUpload}
-                  className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#2E5A44] px-5 text-[13px] font-bold text-white shadow-sm shadow-[#2E5A4420] transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[170px]"
-                >
-                  {loading ? <LoaderCircle size={16} className="animate-spin" /> : <ScanSearch size={16} />}
-                  {loading ? "Đang phân tích..." : "Chẩn đoán ngay"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border border-[#d8e1d8] bg-white px-5 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8] sm:min-w-[124px]"
-                >
-                  <RefreshCw size={16} />
-                  Làm mới
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {file ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
-                  <FileImage size={13} />
-                  {file.name}
-                </span>
-              ) : null}
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1.5 text-xs font-bold text-[#7b6015]">
-                <Camera size={13} />
-                Nguồn: {sourceLabel}
-              </span>
-            </div>
+            )}
 
             {error ? (
               <div
@@ -559,7 +618,9 @@ export function DiseaseDiagnosisWorkspace() {
 
             {loading ? (
               <div className="mt-4 rounded-xl border border-[#e1e8df] bg-[#f7faf7] px-4 py-3 text-xs text-neutral-500">
-                Đang xử lý ảnh. Nếu ảnh hợp lệ, kết quả sẽ xuất hiện ngay bên phải.
+                {captureMode === "esp32cam"
+                  ? "Đang lấy ảnh từ ESP32-CAM và phân tích AI. Vui lòng chờ..."
+                  : "Đang xử lý ảnh. Nếu ảnh hợp lệ, kết quả sẽ xuất hiện ngay bên phải."}
               </div>
             ) : null}
           </div>
@@ -596,104 +657,6 @@ export function DiseaseDiagnosisWorkspace() {
               label="Mức độ"
               value={report ? formatSeverity(report.result.recommendation?.severity) : "Đang cập nhật"}
             />
-            <div className="rounded-[20px] border border-[#e3e9e3] bg-white p-5 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-500">
-                Chia sẻ & trao đổi với kỹ sư
-              </p>
-              <p className="mt-3 text-[13px] leading-6 text-neutral-500">
-                Gửi kết quả phân tích này cho kỹ sư để được tư vấn chi tiết.
-              </p>
-              <div className="mt-4 grid gap-3">
-                <button
-                  type="button"
-                  onClick={() => void openSharePanel()}
-                  disabled={!activeReport}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-[13px] font-bold text-white shadow-sm shadow-[#2E5A4420] transition hover:bg-[#254c39] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Share2 size={16} />
-                  Chia sẻ qua tin nhắn
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/client/chat")}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                >
-                  <MessageCircleMore size={16} />
-                  Trò chuyện với kỹ sư
-                </button>
-              </div>
-
-              {sharePanelOpen ? (
-                <div className="mt-4 rounded-2xl border border-[#dfe8df] bg-[#fafcf9] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[1.2px] text-neutral-400">
-                        Gửi qua tin nhắn
-                      </p>
-                      <p className="mt-1 text-[13px] font-bold text-neutral-900">
-                        Chọn kỹ sư đang kết nối
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={clearShareState}
-                      className="rounded-lg border border-[#d8e1d8] bg-white px-2 py-1 text-[12px] font-bold text-neutral-600 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                    >
-                      Đóng
-                    </button>
-                  </div>
-
-                  {shareLoading ? (
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#e3e9e3] bg-white px-3 py-2 text-[12px] font-semibold text-neutral-500">
-                      <LoaderCircle size={14} className="animate-spin" />
-                      Đang tải kỹ sư...
-                    </div>
-                  ) : null}
-
-                  {shareError ? (
-                    <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700">
-                      {shareError}
-                    </p>
-                  ) : null}
-
-                  {shareSuccess ? (
-                    <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-700">
-                      {shareSuccess}
-                    </p>
-                  ) : null}
-
-                  {shareEngineers.length > 0 ? (
-                    <div className="mt-3 grid gap-2">
-                      {shareEngineers.map((engineer) => {
-                        const sending = shareSendingPhone === engineer.phoneNumber;
-                        return (
-                          <button
-                            key={engineer.phoneNumber}
-                            type="button"
-                            onClick={() => void shareReportToEngineer(engineer)}
-                            disabled={Boolean(shareSendingPhone)}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-[#e3e9e3] bg-white p-3 text-left transition hover:border-[#b8c7b9] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <span className="min-w-0">
-                              <b className="block truncate text-[13px] text-neutral-900">
-                                {engineer.name}
-                              </b>
-                              <span className="mt-1 block truncate text-[12px] font-semibold text-neutral-500">
-                                {engineer.phoneNumber}
-                              </span>
-                            </span>
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#2E5A44] px-2.5 py-1.5 text-[12px] font-bold text-white">
-                              {sending ? <LoaderCircle size={13} className="animate-spin" /> : <Share2 size={13} />}
-                              {sending ? "Gửi" : "Gửi"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
           </div>
         </div>
       </article>
@@ -727,9 +690,16 @@ export function DiseaseDiagnosisWorkspace() {
         <article className="panel p-7 lg:p-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1 text-xs font-bold text-[#7b6015]">
-                <BadgeCheck size={14} />
-                Báo cáo chẩn đoán
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#faf3d6] px-3 py-1 text-xs font-bold text-[#7b6015]">
+                  <BadgeCheck size={14} />
+                  Báo cáo chẩn đoán
+                </div>
+                {treeCode ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[#d0dbd0] bg-[#f0f6f0] px-3 py-1 text-xs font-bold text-[#2E5A44]">
+                    🌳 Cây: {treeCode}
+                  </div>
+                ) : null}
               </div>
               <h2 className="mt-4 text-[1.6rem] font-extrabold tracking-tight text-neutral-900">
                 {diagnosisLabel}
@@ -743,28 +713,75 @@ export function DiseaseDiagnosisWorkspace() {
 
             {report?.result.image?.url ? (
               <div className="flex flex-wrap gap-3">
-                <>
-                  <a
-                    href={report.result.image.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                  >
-                    <ExternalLink size={16} />
-                    Mở tab mới
-                  </a>
-                  <a
-                    href={report.result.image.url}
-                    download
-                    className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
-                  >
-                    <Download size={16} />
-                    Tải xuống
-                  </a>
-                </>
+                <a
+                  href={report.result.image.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                >
+                  <ExternalLink size={16} />
+                  Mở tab mới
+                </a>
+                <a
+                  href={report.result.image.url}
+                  download
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#d8e1d8] bg-white px-4 py-3 text-[13px] font-bold text-neutral-700 transition hover:border-[#b8c7b9] hover:bg-[#f8fbf8]"
+                >
+                  <Download size={16} />
+                  Tải xuống
+                </a>
               </div>
             ) : null}
           </div>
+
+          {/* Category-based alert banner */}
+          {report ? (() => {
+            const cat = getDiseaseCategory(report.result.predictedDisease, report.result.confidence);
+            const msg = getDiseaseAlertMessage(report.result.predictedDisease, report.result.confidence);
+            const styles =
+              cat === "HEALTHY"
+                ? "border border-green-100 bg-green-50 text-green-800"
+                : cat === "PEST"
+                  ? "border border-amber-100 bg-amber-50 text-amber-900"
+                  : cat === "LOW_CONFIDENCE" || cat === "INVALID_IMAGE"
+                    ? "border border-neutral-200 bg-neutral-50 text-neutral-700"
+                    : "border border-red-100 bg-red-50 text-red-800";
+            return (
+              <div className={`mt-4 rounded-xl px-4 py-3 text-[13px] font-semibold leading-6 ${styles}`}>
+                {msg}
+              </div>
+            );
+          })() : null}
+
+          {/* Save to tree — shown only when a treeId was passed via URL */}
+          {treeId ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#d8e1d8] bg-[#f8fbf8] px-4 py-3">
+              <span className="text-xs font-bold text-neutral-500">
+                {treeCode ? `Lưu kết quả vào hồ sơ cây ${treeCode}` : "Lưu kết quả vào hồ sơ cây"}
+              </span>
+              {treeSaveState === "saved" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                  <BadgeCheck size={13} /> {treeCode ? `Đã lưu kết quả cho cây ${treeCode}` : "Đã lưu thành công"}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={treeSaveState === "saving"}
+                  onClick={() => { void handleSaveToTree(report); }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#2E5A44] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#254d3a] disabled:opacity-60"
+                >
+                  {treeSaveState === "saving" ? (
+                    <><LoaderCircle size={13} className="animate-spin" /> Đang lưu...</>
+                  ) : (
+                    <><BadgeCheck size={13} /> Lưu chuẩn đoán</>
+                  )}
+                </button>
+              )}
+              {treeSaveState === "error" && treeSaveError ? (
+                <span className="text-xs text-red-600">{treeSaveError}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-6">
             <DiagnosisImagePanel
@@ -873,213 +890,75 @@ export function DiseaseDiagnosisWorkspace() {
         </article>
       ) : null}
 
-      <article className="panel p-7 lg:p-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      {showSuccessView ? (
+        <article className="panel p-7 lg:p-8">
+          <div className="flex items-center gap-4">
+            <span className="grid size-11 place-items-center rounded-xl bg-[#e9f0ea] text-[#2E5A44]">
+              <FileImage size={22} />
+            </span>
             <div>
-              <h2 className="text-[16px] font-extrabold uppercase tracking-[1.2px] text-neutral-900">
-                Lịch sử chẩn đoán
-              </h2>
+              <h2 className="text-[15px] font-bold text-neutral-900">Lịch sử chẩn đoán</h2>
               <p className="mt-1 text-[13px] leading-6 text-neutral-500">
-                Các lần phân tích trước đây của bạn
+                Mỗi bản ghi lưu lại ảnh, ngày chẩn đoán, tên bệnh và độ tin cậy để mở lại nhanh.
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_180px]">
-              <label className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-neutral-400" />
-                <input
-                  value={historyQuery}
-                  onChange={(event) => setHistoryQuery(event.target.value)}
-                  placeholder="Tìm kiếm kết quả..."
-                  className="h-12 w-full rounded-2xl border border-[#e3e9e3] bg-white pl-12 pr-4 text-[13px] font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
-                />
-              </label>
-              <select
-                value={historyStatusFilter}
-                onChange={(event) =>
-                  setHistoryStatusFilter(event.target.value as HistoryStatus | "ALL")
-                }
-                className="h-12 rounded-2xl border border-[#e3e9e3] bg-white px-4 text-[13px] font-bold text-neutral-700 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4415]"
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="PENDING">Chưa xử lý</option>
-                <option value="CONSULTING">Đang tư vấn</option>
-                <option value="RESOLVED">Đã xử lý</option>
-              </select>
-            </div>
           </div>
 
-          {historyError ? (
-            <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-700">
-              {historyError}
-            </p>
-          ) : null}
-
-          <div className="mt-5 overflow-hidden rounded-2xl border border-[#e3e9e3] bg-white">
-            <div className="overflow-x-auto">
-              <table className="min-w-[880px] w-full border-collapse text-left">
-                <thead className="bg-[#fbfcfa] text-[12px] font-bold text-neutral-700">
-                  <tr className="border-b border-[#edf1ec]">
-                    <th className="px-4 py-3">Ngày chẩn đoán</th>
-                    <th className="px-4 py-3">Ảnh lá</th>
-                    <th className="px-4 py-3">Kết quả</th>
-                    <th className="px-4 py-3">Mức độ</th>
-                    <th className="px-4 py-3">Độ tin cậy</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3 text-center">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#edf1ec] text-[13px] text-neutral-700">
-                  {historyLoading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                        <span className="inline-flex items-center gap-2 font-semibold">
-                          <LoaderCircle size={16} className="animate-spin" />
-                          Đang tải lịch sử chẩn đoán...
-                        </span>
-                      </td>
-                    </tr>
-                  ) : visibleHistoryRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                        Chưa có lịch sử chẩn đoán thật trong database.
-                      </td>
-                    </tr>
-                  ) : (
-                    visibleHistoryRows.map((row) => (
-                      <tr key={row.id} className="transition hover:bg-[#fbfcfa]">
-                        <td className="whitespace-nowrap px-4 py-3 font-medium">
-                          {formatHistoryDateTime(row.createdAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="relative size-11 overflow-hidden rounded-xl border border-[#e3e9e3] bg-[#edf3ee]">
-                            {row.imageUrl ? (
-                              <Image
-                                src={row.imageUrl}
-                                alt={`Ảnh lá ${row.resultLabel}`}
-                                fill
-                                unoptimized
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="grid h-full w-full place-items-center text-[#2E5A44]">
-                                <FileImage size={18} />
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold text-neutral-900">
-                          {row.resultLabel}
-                        </td>
-                        <td className="px-4 py-3">
-                          <SeverityBadge value={row.severity} />
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold">
-                          {row.confidence}
-                        </td>
-                        <td className="px-4 py-3">
-                          <HistoryStatusBadge status={row.status} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => row.report && void openSharePanel(row.report)}
-                              disabled={!row.report}
-                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-40"
-                              title="Chia sẻ"
-                            >
-                              <Share2 size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => router.push("/dashboard/client/chat")}
-                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44]"
-                              title="Trò chuyện"
-                            >
-                              <MessageCircleMore size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => row.report && reopenReport(row.report)}
-                              disabled={!row.report}
-                              className="grid size-9 place-items-center rounded-xl text-neutral-600 transition hover:bg-[#edf3ee] hover:text-[#2E5A44] disabled:cursor-not-allowed disabled:opacity-40"
-                              title="Xem"
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void deleteHistoryRow(row)}
-                              className="grid size-9 place-items-center rounded-xl text-red-500 transition hover:bg-red-50"
-                              title="Xóa"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
-                disabled={historyPage === 1}
-                className="grid size-9 place-items-center rounded-xl text-neutral-700 transition hover:bg-[#edf3ee] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              {buildHistoryPagination(historyPage, totalHistoryPages).map((item, index) =>
-                item === "..." ? (
-                  <span key={`dots-${index}`} className="px-2 text-sm font-bold text-neutral-500">
-                    ...
-                  </span>
-                ) : (
+          <div className="mt-6 space-y-3">
+            {history.length === 0 ? (
+              <p className="rounded-2xl border border-[#e3e9e3] bg-[#fafcf9] px-4 py-5 text-[13px] text-neutral-500">
+                Chưa có lượt chẩn đoán nào.
+              </p>
+            ) : (
+              history.map((item) => {
+                const thumbnail = item.result.image?.url ?? item.previewUrl;
+                const title = formatDiseaseLabel(item.result.predictedDisease);
+                return (
                   <button
-                    key={item}
+                    key={item.id}
                     type="button"
-                    onClick={() => setHistoryPage(item)}
-                    className={`grid size-9 place-items-center rounded-xl text-sm font-bold transition ${
-                      historyPage === item
-                        ? "border border-[#9db4a4] bg-white text-[#2E5A44]"
-                        : "text-neutral-600 hover:bg-[#edf3ee]"
-                    }`}
+                    onClick={() => reopenReport(item)}
+                    className="flex w-full items-center gap-4 rounded-2xl border border-[#e3e9e3] bg-white p-4 text-left transition hover:border-[#b8c7b9] hover:shadow-sm"
                   >
-                    {item}
-                  </button>
-                ),
-              )}
-              <button
-                type="button"
-                onClick={() => setHistoryPage((page) => Math.min(totalHistoryPages, page + 1))}
-                disabled={historyPage === totalHistoryPages}
-                className="grid size-9 place-items-center rounded-xl text-neutral-700 transition hover:bg-[#edf3ee] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
+                    <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl border border-[#e8eee8] bg-[#f5f8f5]">
+                      {thumbnail ? (
+                        <Image
+                          src={thumbnail}
+                          alt={`Ảnh chẩn đoán ${title}`}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-[#2E5A44]">
+                          <FileImage size={20} />
+                        </div>
+                      )}
+                    </div>
 
-            <div className="flex flex-col gap-3 text-[13px] text-neutral-500 sm:flex-row sm:items-center">
-              <span>
-                Hiển thị {historyTotal === 0 ? 0 : (historyPage - 1) * historyPageSize + 1}-
-                {Math.min(historyPage * historyPageSize, historyTotal)} của{" "}
-                {historyTotal} kết quả
-              </span>
-              <button
-                type="button"
-                className="h-10 rounded-xl border border-[#e3e9e3] bg-white px-4 text-[13px] font-bold text-neutral-700"
-              >
-                5 / trang
-              </button>
-            </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <b className="block truncate text-sm text-neutral-900">{item.fileName}</b>
+                          <small className="mt-1 block text-xs text-neutral-500">
+                            {formatDateTime(item.createdAt)}
+                          </small>
+                        </div>
+                        <span className="rounded-full bg-[#edf3ee] px-3 py-1.5 text-xs font-bold text-[#2E5A44]">
+                          {title}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[13px] text-neutral-500">
+                        Độ tin cậy: {formatConfidence(item.result.confidenceText || item.result.confidenceLabel)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
-      </article>
+        </article>
+      ) : null}
 
       {viewerMode === "fullscreen" && diagnosisImageUrl ? (
         <FullscreenViewer
@@ -1089,6 +968,201 @@ export function DiseaseDiagnosisWorkspace() {
         />
       ) : null}
     </section>
+  );
+}
+
+// ── ESP32-CAM live preview ────────────────────────────────────────────────────
+// Self-contained: owns polling loop, blob lifecycle, error/retry, play/pause.
+
+const LIVE_POLL_MS = 4_000; // matches backend CACHE_TTL — no benefit polling faster
+
+function Esp32LivePreview({
+  deviceId,
+  disabled,
+  onCameraError,
+}: {
+  deviceId: string;
+  disabled: boolean;
+  onCameraError: (hasError: boolean) => void;
+}) {
+  const [liveUrl, setLiveUrl]       = useState<string | null>(null);
+  const [paused, setPaused]         = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [lastAt, setLastAt]         = useState<number | null>(null);
+  const [initializing, setInit]     = useState(true);
+
+  const inFlightRef = useRef(false);
+  const blobUrlRef  = useRef<string | null>(null);
+
+  // Notify parent when camera error state changes
+  useEffect(() => { onCameraError(error !== null); }, [error, onCameraError]);
+
+  // Reset everything when the selected device changes
+  useEffect(() => {
+    setLiveUrl(null);
+    setError(null);
+    setLastAt(null);
+    setInit(true);
+    inFlightRef.current = false;
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+  }, [deviceId]);
+
+  // Release last blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
+
+  const fetchFrame = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      const url = await cameraClient.fetchSnapshotBlob(deviceId);
+      // Atomically swap blob URL and revoke the previous one
+      setLiveUrl((prev) => {
+        if (prev && prev === blobUrlRef.current) URL.revokeObjectURL(prev);
+        blobUrlRef.current = url;
+        return url;
+      });
+      setError(null);
+      setLastAt(Date.now());
+      setInit(false);
+    } catch {
+      setError("Không thể kết nối đến Camera. Vui lòng kiểm tra nguồn điện hoặc kết nối Wi-Fi.");
+      setInit(false);
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [deviceId]);
+
+  // Start/stop the polling loop
+  useEffect(() => {
+    if (paused || disabled) return;
+    void fetchFrame();
+    const timer = setInterval(() => void fetchFrame(), LIVE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [fetchFrame, paused, disabled]);
+
+  const isLive = !paused && !disabled && !error && liveUrl !== null;
+
+  const retry = () => {
+    setError(null);
+    setInit(true);
+    void fetchFrame();
+  };
+
+  return (
+    <div>
+      {/* 16:9 camera viewport */}
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-neutral-900 shadow-inner">
+
+        {/* Frame image */}
+        {liveUrl ? (
+          <img src={liveUrl} alt="ESP32-CAM live" className="h-full w-full object-cover" />
+        ) : null}
+
+        {/* Initialising shimmer */}
+        {initializing && !error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-900">
+            <div className="size-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <p className="text-[12px] text-neutral-400">Đang kết nối camera...</p>
+          </div>
+        ) : null}
+
+        {/* Error overlay */}
+        {error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-900/95 px-6 text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-red-900/40 text-red-400">
+              <CameraOff size={28} />
+            </span>
+            <div>
+              <p className="text-[13px] font-semibold text-neutral-200">Camera không phản hồi</p>
+              <p className="mt-1 max-w-[260px] text-[11px] leading-5 text-neutral-400">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={retry}
+              className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-[12px] font-bold text-white transition hover:bg-white/20"
+            >
+              <RefreshCw size={13} />
+              Thử kết nối lại
+            </button>
+          </div>
+        ) : null}
+
+        {/* AI-analysis overlay — shown when parent is running prediction */}
+        {disabled && !error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm">
+            <div className="size-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            <p className="text-[13px] font-bold text-white">Đang phân tích bệnh bằng AI...</p>
+            <p className="text-[11px] text-white/60">Vui lòng chờ kết quả</p>
+          </div>
+        ) : null}
+
+        {/* LIVE badge */}
+        {isLive ? (
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
+            <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-white">Live</span>
+          </div>
+        ) : null}
+
+        {/* Paused indicator */}
+        {paused && !disabled && liveUrl ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <div className="rounded-2xl bg-black/50 px-5 py-3 backdrop-blur-sm">
+              <p className="text-[13px] font-bold text-white">⏸ Đã tạm dừng</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Last-update timestamp */}
+        {lastAt && !disabled ? (
+          <div className="absolute bottom-3 right-3 rounded-full bg-black/40 px-2.5 py-1 backdrop-blur-sm">
+            <span className="text-[10px] text-white/70">
+              {new Date(lastAt).toLocaleTimeString("vi-VN", {
+                hour: "2-digit", minute: "2-digit", second: "2-digit",
+              })}
+            </span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Controls row below frame */}
+      <div className="mt-2 flex items-center justify-between px-1">
+        {error ? (
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#2E5A44] transition hover:underline"
+          >
+            <RefreshCw size={12} />
+            Thử kết nối lại
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPaused((p) => !p)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 transition hover:text-neutral-700 disabled:opacity-40"
+          >
+            {paused ? <Play size={12} /> : <Pause size={12} />}
+            {paused ? "Tiếp tục phát" : "Tạm dừng"}
+          </button>
+        )}
+        <span
+          className={`text-[11px] font-medium ${
+            error ? "text-red-500" : isLive ? "text-[#4b9666]" : "text-neutral-400"
+          }`}
+        >
+          {error ? "⚠ Mất kết nối" : isLive ? "● Đang phát sóng" : paused ? "○ Đã tạm dừng" : "○ Chờ..."}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -1138,92 +1212,6 @@ function ReportStatCard({
       </div>
     </div>
   );
-}
-
-function SeverityBadge({ value }: { value: string }) {
-  const normalized = value.trim().toLocaleLowerCase("vi");
-  const className =
-    normalized === "cao" || normalized === "nặng" || normalized === "rất cao"
-      ? "bg-red-50 text-red-600"
-      : normalized === "trung bình"
-        ? "bg-[#fff1bf] text-[#7b6015]"
-        : normalized === "thấp"
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-neutral-50 text-neutral-500";
-
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-bold ${className}`}>
-      {value}
-    </span>
-  );
-}
-
-function HistoryStatusBadge({ status }: { status: HistoryStatus }) {
-  const labels: Record<HistoryStatus, string> = {
-    CONSULTING: "Đang tư vấn",
-    PENDING: "Chưa xử lý",
-    RESOLVED: "Đã xử lý",
-  };
-  const className =
-    status === "CONSULTING"
-      ? "bg-blue-50 text-blue-600"
-      : status === "PENDING"
-        ? "bg-neutral-100 text-neutral-600"
-        : "bg-emerald-50 text-emerald-700";
-
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-[12px] font-bold ${className}`}>
-      {labels[status]}
-    </span>
-  );
-}
-
-function toDiagnosisHistoryRow(item: PredictionHistoryItem): DiagnosisHistoryRow {
-  const resultLabel = formatDiseaseLabel(item.predictedDisease || item.data.predictedDisease);
-  const confidence = item.confidenceText || formatConfidence(item.data.confidenceText);
-  const imageUrl = resolveHistoryImageUrl(item);
-  const report: ReportSnapshot = {
-    id: item.id,
-    fileName: item.originalFilename || `${resultLabel}.jpg`,
-    createdAt: item.createdAt,
-    previewUrl: imageUrl,
-    result: {
-      ...item.data,
-      historyId: item.id,
-      image: imageUrl
-        ? {
-            ...(item.image ?? item.data.image ?? {}),
-            url: imageUrl,
-          }
-        : (item.image ?? item.data.image),
-    },
-  };
-
-  return {
-    id: item.id,
-    createdAt: item.createdAt,
-    imageUrl: imageUrl || undefined,
-    resultLabel,
-    severity: item.severity ? formatSeverity(item.severity) : formatSeverity(item.data.recommendation?.severity),
-    confidence,
-    status: normalizeHistoryStatus(item.status),
-    report,
-  };
-}
-
-function resolveHistoryImageUrl(item: PredictionHistoryItem) {
-  return (
-    item.image?.url ||
-    item.data.image?.url ||
-    (item.image?.path ? `/api/backend/v1/predict/history/images/${encodeURIComponent(item.id)}` : "")
-  );
-}
-
-function normalizeHistoryStatus(value: string): HistoryStatus {
-  const normalized = value.trim().toUpperCase();
-  if (normalized === "CONSULTING") return "CONSULTING";
-  if (normalized === "RESOLVED") return "RESOLVED";
-  return "PENDING";
 }
 
 function DiagnosisImagePanel({
@@ -1606,50 +1594,6 @@ function getStatusLabel(
   return "Chưa xử lý";
 }
 
-function buildDiagnosisShareMessage(
-  report: ReportSnapshot,
-  diagnosisLabel: string,
-  confidenceLabel: string,
-  sourceLabel: string,
-) {
-  const severity = formatSeverity(report.result.recommendation?.severity);
-  const summary = report.result.recommendation?.diseaseSummary
-    ? translateDiagnosisText(report.result.recommendation.diseaseSummary)
-    : "";
-  const immediateActions = translateStringItems(report.result.decisionSupport?.immediateActions).slice(0, 3);
-  const monitoringPlan = translateStringItems(report.result.decisionSupport?.monitoringPlan).slice(0, 3);
-  const imageUrl = report.result.image?.url;
-  const lines = [
-    "Tôi muốn chia sẻ báo cáo chẩn đoán AI để kỹ sư theo dõi và trao đổi thêm.",
-    "",
-    `Bệnh dự đoán: ${diagnosisLabel || formatDiseaseLabel(report.result.predictedDisease)}`,
-    `Độ tin cậy: ${confidenceLabel}`,
-    `Mức độ: ${severity}`,
-    `Nguồn ảnh: ${sourceLabel}`,
-    `Thời gian chẩn đoán: ${formatDateTime(report.createdAt)}`,
-    report.fileName ? `Tên ảnh: ${report.fileName}` : "",
-    imageUrl ? `Ảnh chẩn đoán: ${imageUrl}` : "",
-    summary ? "" : "",
-    summary ? `Tóm tắt: ${summary}` : "",
-    immediateActions.length ? "" : "",
-    ...formatShareList("Việc cần làm ngay", immediateActions),
-    monitoringPlan.length ? "" : "",
-    ...formatShareList("Theo dõi", monitoringPlan),
-  ].filter((line) => line !== "");
-
-  return truncateMessage(lines.join("\n"), 1900);
-}
-
-function formatShareList(title: string, items: string[]) {
-  if (items.length === 0) return [];
-  return [title, ...items.map((item) => `- ${item}`)];
-}
-
-function truncateMessage(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
 function formatDiseaseLabel(value: string) {
   const normalized = normalizeDiseaseKey(value);
   return diseaseLabels[value] ?? diseaseLabels[normalized] ?? translateDiagnosisText(value);
@@ -1676,36 +1620,6 @@ function formatDateTime(value: string) {
   } catch {
     return value;
   }
-}
-
-function formatHistoryDateTime(value: string) {
-  try {
-    return new Date(value).toLocaleString("vi-VN", {
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
-}
-
-function buildHistoryPagination(currentPage: number, totalPages: number) {
-  if (totalPages <= 4) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-
-  const pages: Array<number | "..."> = [1];
-  if (currentPage > 3) pages.push("...");
-  const middlePages = [currentPage - 1, currentPage, currentPage + 1].filter(
-    (page) => page > 1 && page < totalPages,
-  );
-  pages.push(...middlePages);
-  if (currentPage < totalPages - 2) pages.push("...");
-  pages.push(totalPages);
-  return [...new Set(pages)];
 }
 
 function clampConfidence(value: number) {

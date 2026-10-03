@@ -469,6 +469,20 @@ export interface ApiError {
   message: string;
 }
 
+export interface CultivationSeason {
+  id: string;
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface SafeHarvestDateResponse {
   cultivationSeasonId?: string;
   earliestSafeHarvestDate?: string | null;
@@ -482,4 +496,36 @@ export type CultivationDashboardData = {
   labSamples: LabSample[];
   harvestBatches: HarvestBatch[];
   exportReleases: ExportRelease[];
+};
+
+export type CultivationTaskType = "fertilizer" | "pesticide" | "irrigation" | "pruning" | "inspection";
+export type CultivationTaskStatus = "planned" | "in-progress" | "done";
+
+export interface CultivationSchedule {
+  id: string;
+  zoneId: string;
+  cropId: string;
+  type: CultivationTaskType;
+  status: CultivationTaskStatus;
+  date: string;
+  time: string | null;
+  materialName: string | null;
+  dosage: string | null;
+  assignee: string | null;
+  safetyInterval: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateCultivationScheduleRequest = {
+  assignee: string;
+  cropId: string;
+  dosage: string;
+  materialName: string;
+  notes: string;
+  safetyInterval: string;
+  scheduledAt: string;
+  type: CultivationTaskType;
+  zoneId: string;
 };

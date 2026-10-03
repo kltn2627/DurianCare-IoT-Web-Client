@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { BadgeCheck, Check, ShieldCheck, ShieldX, UserRoundCheck, X } from "lucide-react";
 import { activeEngineers, authorizationRequests } from "@/constants/durianMockData";
-
 type RequestState = "pending" | "approved" | "rejected";
 
 export function AuthorizationManager() {

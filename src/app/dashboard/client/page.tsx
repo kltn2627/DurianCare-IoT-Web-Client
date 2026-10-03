@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import {
+  BadgeCheck,
   BookOpenText,
   Bot,
   CalendarDays,
@@ -59,6 +60,12 @@ const featureLinks = [
     title: "Vụ mùa & QR",
     subtitle: "Quản lý lô thu hoạch và tạo mã truy xuất nguồn gốc công khai.",
     icon: Sprout,
+  },
+  {
+    href: "/dashboard/client/export-compliance",
+    title: "Đánh giá Xuất khẩu",
+    subtitle: "Điểm sẵn sàng xuất khẩu, kiểm tra dư lượng MRL và thời gian cách ly theo từng thị trường.",
+    icon: BadgeCheck,
   },
   {
     href: "/dashboard/community",
