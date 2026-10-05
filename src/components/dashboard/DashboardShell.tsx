@@ -7,6 +7,7 @@ import {
   Bell,
   BookOpen,
   Bot,
+  Camera,
   ChevronDown,
   CalendarDays,
   ChevronLeft,
@@ -22,6 +23,7 @@ import {
   QrCode,
   Search,
   ShieldCheck,
+  TreePine,
   UserRound,
   UsersRound,
   X,
@@ -49,6 +51,11 @@ const ownerNav: NavItem[] = [
     label: "Khu canh tác",
     icon: MapPinned,
   },
+  {
+    href: "/dashboard/client/farms",
+    label: "Bản đồ cây",
+    icon: TreePine,
+  },
   { href: "/dashboard/client", label: "Tổng quan", icon: LayoutDashboard },
   {
     href: "/dashboard/client/sensors",
@@ -56,6 +63,7 @@ const ownerNav: NavItem[] = [
     icon: Microscope,
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
+  { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
   {
     href: "/dashboard/client/authorization",
     label: "Ủy quyền",
@@ -126,6 +134,11 @@ const ownerNavFixed: NavItem[] = [
     icon: MapPinned,
   },
   {
+    href: "/dashboard/client/farms",
+    label: "Bản đồ cây",
+    icon: TreePine,
+  },
+  {
     href: "/dashboard/client/sensors",
     label: "Cảm biến IoT",
     icon: Microscope,
@@ -136,6 +149,7 @@ const ownerNavFixed: NavItem[] = [
     icon: CalendarDays,
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
+  { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
   { href: "/dashboard/client/crops", label: "Vụ mùa & QR", icon: QrCode },
   {
     href: "/dashboard/client/authorization",

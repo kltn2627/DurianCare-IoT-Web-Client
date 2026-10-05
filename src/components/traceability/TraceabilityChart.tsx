@@ -2,10 +2,10 @@
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { sensorTimeline } from "@/constants/durianMockData";
-
 export function TraceabilityChart() {
   return (
-    <div className="h-[240px] w-full">
+    <div className="space-y-3">
+      <div className="h-[240px] w-full">
       <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 900, height: 240 }}>
         <AreaChart data={sensorTimeline} margin={{ left: -25, right: 8 }}>
           <defs>
@@ -18,6 +18,7 @@ export function TraceabilityChart() {
           <Area type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#2E5A44" strokeWidth={2.5} fill="url(#traceSoil)" />
         </AreaChart>
       </ResponsiveContainer>
+    </div>
     </div>
   );
 }

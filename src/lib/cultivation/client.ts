@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/auth/client";
+
 import type {
   ActivityStatus,
   ActivityType,
@@ -7,10 +8,14 @@ import type {
   BiologicalLevel,
   CareHistoryResponse,
   ComplianceAssessment,
+  CreateCultivationScheduleRequest,
   CultivationActivity,
   CultivationDashboardData,
   CultivationPlan,
+  CultivationSchedule,
   CultivationSeason,
+  CultivationTaskStatus,
+  CultivationTaskType,
   CultivationZone,
   CultivationZoneRequest,
   CanonicalCultivationZone,
@@ -28,49 +33,73 @@ import type {
   SafeHarvestDateResponse,
   TraceabilitySnapshot,
 } from "./types";
+
 import { cultivationMockClient } from "./mock";
+
 import { filterCalendarScope } from "./hierarchy";
 
 export class CultivationApiError extends Error {
   constructor(
     message: string,
+
     public readonly status: number,
+
     public readonly body?: unknown,
   ) {
     super(message);
+
     this.name = "CultivationApiError";
   }
 }
 
 type QueryValue = string | number | boolean | null | undefined;
+
 type Query = Record<string, QueryValue>;
 
 function queryString(query?: Query) {
   const params = new URLSearchParams();
+
   Object.entries(query ?? {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
       params.set(key, String(value));
     }
   });
+
   const text = params.toString();
+
   return text ? `?${text}` : "";
 }
 
-async function cultivationRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function cultivationRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await apiFetch(path, {
     ...init,
+
     headers: {
       accept: "application/json",
+
       "content-type": "application/json",
+
       ...init?.headers,
     },
+
     cache: "no-store",
   });
+
   const text = await response.text();
+
   const payload = text ? safeJson(text) : null;
+
   if (!response.ok) {
-    throw new CultivationApiError(errorMessage(payload, response.statusText), response.status, payload);
+    throw new CultivationApiError(
+      errorMessage(payload, response.statusText),
+      response.status,
+      payload,
+    );
   }
+
   return payload as T;
 }
 
@@ -86,30 +115,52 @@ function errorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     return String((payload as { message: unknown }).message);
   }
+
   if (payload && typeof payload === "object" && "detail" in payload) {
     return String((payload as { detail: unknown }).detail);
   }
+
   return fallback || "Khong the tai du lieu lich canh tac.";
 }
 
 function unwrapArray<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
-  if (payload && typeof payload === "object" && "data" in payload && Array.isArray((payload as { data: unknown }).data)) {
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray((payload as { data: unknown }).data)
+  ) {
     return (payload as { data: T[] }).data;
   }
-  if (payload && typeof payload === "object" && "content" in payload && Array.isArray((payload as { content: unknown }).content)) {
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "content" in payload &&
+    Array.isArray((payload as { content: unknown }).content)
+  ) {
     return (payload as { content: T[] }).content;
   }
+
   return [];
 }
 
 function shouldUseMock(caught: unknown) {
-  if (process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_ENABLE_CULTIVATION_MOCK !== "true") {
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.NEXT_PUBLIC_ENABLE_CULTIVATION_MOCK !== "true"
+  ) {
     return false;
   }
+
   if (caught instanceof CultivationApiError) {
-    return caught.status === 404 || caught.status === 501 || caught.status === 503;
+    return (
+      caught.status === 404 || caught.status === 501 || caught.status === 503
+    );
   }
+
   return caught instanceof TypeError;
 }
 
@@ -117,59 +168,107 @@ function farmLabel(farm: FarmCatalog) {
   return farm.name || farm.code || "Trang trại chưa đặt tên";
 }
 
-function canonicalZones(farms: FarmCatalog[], query?: { farmId?: string; status?: string; search?: string }) {
+function canonicalZones(
+  farms: FarmCatalog[],
+  query?: { farmId?: string; status?: string; search?: string },
+) {
   const keyword = query?.search?.trim().toLocaleLowerCase("vi-VN");
-  return farms.flatMap((farm) =>
-    (farm.zones ?? []).map<CanonicalCultivationZone>((zone) => ({
-      ...zone,
-      farmId: farm.id,
-      farmName: farmLabel(farm),
-    })),
-  ).filter((zone) => {
-    const matchesFarm = !query?.farmId || zone.farmId === query.farmId;
-    const matchesStatus = !query?.status || zone.status === query.status;
-    const matchesSearch = !keyword || [zone.name, zone.code, zone.description]
-      .filter(Boolean)
-      .some((value) => String(value).toLocaleLowerCase("vi-VN").includes(keyword));
-    return matchesFarm && matchesStatus && matchesSearch && zone.status !== "ARCHIVED";
-  });
+
+  return farms
+    .flatMap((farm) =>
+      (farm.zones ?? []).map<CanonicalCultivationZone>((zone) => ({
+        ...zone,
+
+        farmId: farm.id,
+
+        farmName: farmLabel(farm),
+      })),
+    )
+    .filter((zone) => {
+      const matchesFarm = !query?.farmId || zone.farmId === query.farmId;
+
+      const matchesStatus = !query?.status || zone.status === query.status;
+
+      const matchesSearch =
+        !keyword ||
+        [zone.name, zone.code, zone.description]
+
+          .filter(Boolean)
+
+          .some((value) =>
+            String(value).toLocaleLowerCase("vi-VN").includes(keyword),
+          );
+
+      return (
+        matchesFarm &&
+        matchesStatus &&
+        matchesSearch &&
+        zone.status !== "ARCHIVED"
+      );
+    });
 }
 
 /**
+
  * The persisted cultivation-area contract. Unlike the older CultivationZone
+
  * client above, this client never falls back to browser localStorage data.
+
  */
+
 export const farmZoneClient = {
   listFarms: () => cultivationRequest<FarmCatalog[]>("/api/v1/farms"),
-  listZones: async (query?: { farmId?: string; status?: string; search?: string }) =>
-    canonicalZones(await farmZoneClient.listFarms(), query),
+
+  listZones: async (query?: {
+    farmId?: string;
+    status?: string;
+    search?: string;
+  }) => canonicalZones(await farmZoneClient.listFarms(), query),
+
   getZone: async (zoneId: string) => {
-    const zone = (await farmZoneClient.listZones()).find((item) => item.id === zoneId);
-    if (!zone) throw new CultivationApiError("Không tìm thấy khu canh tác.", 404);
+    const zone = (await farmZoneClient.listZones()).find(
+      (item) => item.id === zoneId,
+    );
+
+    if (!zone)
+      throw new CultivationApiError("Không tìm thấy khu canh tác.", 404);
+
     return zone;
   },
+
   createZone: (body: FarmZoneRequest & { farmId: string }) => {
     const { farmId, ...request } = body;
-    return cultivationRequest<FarmZoneCatalog>(`/api/v1/farms/${encodeURIComponent(farmId)}/zones`, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+
+    return cultivationRequest<FarmZoneCatalog>(
+      `/api/v1/farms/${encodeURIComponent(farmId)}/zones`,
+      {
+        method: "POST",
+
+        body: JSON.stringify(request),
+      },
+    );
   },
-  updateZone: (farmId: string, zoneId: string, body: Partial<FarmZoneRequest> & { status?: string }) =>
+
+  updateZone: (
+    farmId: string,
+    zoneId: string,
+    body: Partial<FarmZoneRequest> & { status?: string },
+  ) =>
     cultivationRequest<FarmZoneCatalog>(
       `/api/v1/farms/${encodeURIComponent(farmId)}/zones/${encodeURIComponent(zoneId)}`,
+
       { method: "PATCH", body: JSON.stringify(body) },
     ),
+
   archiveZone: (farmId: string, zoneId: string) =>
     cultivationRequest<void>(
       `/api/v1/farms/${encodeURIComponent(farmId)}/zones/${encodeURIComponent(zoneId)}`,
+
       { method: "DELETE" },
     ),
 };
 
 export const cultivationClient = {
-  listSeasons: (farmId: string, plotId: string) =>
-    cultivationRequest<CultivationSeason[]>(`/api/v1/cultivation-seasons${queryString({ farmId, plotId })}`),
   listFarms: async () => {
     try {
       const payload = await cultivationRequest<unknown>("/api/v1/farms");
@@ -179,274 +278,506 @@ export const cultivationClient = {
       throw caught;
     }
   },
-  listCultivationZones: async (query?: { farmId?: string; status?: string; search?: string }) => {
+
+  listCultivationZones: async (query?: {
+    farmId?: string;
+    status?: string;
+    search?: string;
+  }) => {
     try {
-      const payload = await cultivationRequest<unknown>(`/api/v1/cultivation-zones${queryString(query)}`);
+      const payload = await cultivationRequest<unknown>(
+        `/api/v1/cultivation-zones${queryString(query)}`,
+      );
       return unwrapArray<CultivationZone>(payload);
     } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.listCultivationZones(query);
-      throw caught;
-    }
-  },
-  createCultivationZone: async (body: CultivationZoneRequest) => {
-    try {
-      return await cultivationRequest<CultivationZone>("/api/v1/cultivation-zones", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.createCultivationZone(body);
-      throw caught;
-    }
-  },
-  getCultivationZone: async (id: string) => {
-    try {
-      return await cultivationRequest<CultivationZone>(`/api/v1/cultivation-zones/${encodeURIComponent(id)}`);
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.getCultivationZone(id);
-      throw caught;
-    }
-  },
-  updateCultivationZone: async (id: string, body: CultivationZoneRequest) => {
-    try {
-      return await cultivationRequest<CultivationZone>(`/api/v1/cultivation-zones/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.updateCultivationZone(id, body);
-      throw caught;
-    }
-  },
-  deleteCultivationZone: async (id: string) => {
-    try {
-      await cultivationRequest<unknown>(`/api/v1/cultivation-zones/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.deleteCultivationZone(id);
+      if (shouldUseMock(caught))
+        return cultivationMockClient.listCultivationZones(query);
       throw caught;
     }
   },
 
-  listPlans: async (query?: { farmId?: string; plotId?: string; cultivationSeasonId?: string }) => {
+  createCultivationZone: async (body: CultivationZoneRequest) => {
     try {
-      return await cultivationRequest<CultivationPlan[]>(`/api/v1/cultivation-plans${queryString(query)}`);
+      return await cultivationRequest<CultivationZone>(
+        "/api/v1/cultivation-zones",
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
+    } catch (caught) {
+      if (shouldUseMock(caught))
+        return cultivationMockClient.createCultivationZone(body);
+      throw caught;
+    }
+  },
+
+  getCultivationZone: async (id: string) => {
+    try {
+      return await cultivationRequest<CultivationZone>(
+        `/api/v1/cultivation-zones/${encodeURIComponent(id)}`,
+      );
+    } catch (caught) {
+      if (shouldUseMock(caught))
+        return cultivationMockClient.getCultivationZone(id);
+      throw caught;
+    }
+  },
+
+  updateCultivationZone: async (id: string, body: CultivationZoneRequest) => {
+    try {
+      return await cultivationRequest<CultivationZone>(
+        `/api/v1/cultivation-zones/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        },
+      );
+    } catch (caught) {
+      if (shouldUseMock(caught))
+        return cultivationMockClient.updateCultivationZone(id, body);
+      throw caught;
+    }
+  },
+
+  deleteCultivationZone: async (id: string) => {
+    try {
+      await cultivationRequest<unknown>(
+        `/api/v1/cultivation-zones/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+    } catch (caught) {
+      if (shouldUseMock(caught))
+        return cultivationMockClient.deleteCultivationZone(id);
+      throw caught;
+    }
+  },
+
+  listPlans: async (query?: {
+    farmId?: string;
+    plotId?: string;
+    cultivationSeasonId?: string;
+  }) => {
+    try {
+      return await cultivationRequest<CultivationPlan[]>(
+        `/api/v1/cultivation-plans${queryString(query)}`,
+      );
     } catch (caught) {
       if (shouldUseMock(caught)) return cultivationMockClient.listPlans(query);
       throw caught;
     }
   },
+
   createPlan: async (body: Partial<CultivationPlan>) => {
     try {
-      return await cultivationRequest<CultivationPlan>("/api/v1/cultivation-plans", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      return await cultivationRequest<CultivationPlan>(
+        "/api/v1/cultivation-plans",
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
     } catch (caught) {
       if (shouldUseMock(caught)) return cultivationMockClient.createPlan(body);
       throw caught;
     }
   },
-  getPlan: (id: string) =>
-    cultivationRequest<CultivationPlan>(`/api/v1/cultivation-plans/${encodeURIComponent(id)}`),
-  getPlanCalendar: (id: string) =>
-    cultivationRequest<CultivationActivity[]>(`/api/v1/cultivation-plans/${encodeURIComponent(id)}/calendar`),
 
-  listActivities: async (query?: { cultivationSeasonId?: string; activityType?: ActivityType; status?: ActivityStatus }) => {
-    try {
-      return await cultivationRequest<CultivationActivity[]>(`/api/v1/cultivation-activities${queryString(query)}`);
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.listActivities(query);
-      throw caught;
-    }
+  getPlan: (id: string) =>
+    cultivationRequest<CultivationPlan>(
+      `/api/v1/cultivation-plans/${encodeURIComponent(id)}`,
+    ),
+
+  getPlanCalendar: (id: string) =>
+    cultivationRequest<CultivationActivity[]>(
+      `/api/v1/cultivation-plans/${encodeURIComponent(id)}/calendar`,
+    ),
+
+  listActivities: async (query?: {
+    cultivationSeasonId?: string;
+    activityType?: ActivityType;
+    status?: ActivityStatus;
+  }) => {
+    const payload = await cultivationRequest<unknown>(
+      `/api/v1/cultivation-activities${queryString(query)}`,
+    );
+
+    return unwrapArray<CultivationActivity>(payload);
   },
+
   getActivity: (id: string) =>
-    cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}`),
-  createActivity: async (body: Record<string, unknown>) => {
-    try {
-      return await cultivationRequest<CultivationActivity>("/api/v1/cultivation-activities", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.createActivity(body);
-      throw caught;
-    }
-  },
-  updateActivity: (id: string, body: Record<string, unknown>) =>
-    cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}`, {
-      method: "PATCH",
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}`,
+    ),
+
+  createActivity: (body: Record<string, unknown>) =>
+    cultivationRequest<CultivationActivity>("/api/v1/cultivation-activities", {
+      method: "POST",
+
       body: JSON.stringify(body),
     }),
+
+  updateActivity: (id: string, body: Record<string, unknown>) =>
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+
+        body: JSON.stringify(body),
+      },
+    ),
+
   approveActivity: (id: string, userId: string) =>
-    cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}/approve`, {
-      method: "POST",
-      body: JSON.stringify({ userId }),
-    }),
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/approve`,
+      {
+        method: "POST",
+
+        body: JSON.stringify({ userId }),
+      },
+    ),
+
   rejectActivity: (id: string, userId: string, reason: string) =>
-    cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}/reject`, {
-      method: "POST",
-      body: JSON.stringify({ userId, reason }),
-    }),
-  startActivity: async (id: string) => {
-    try {
-      return await cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}/start`, {
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/reject`,
+      {
         method: "POST",
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.updateActivityStatus(id, "IN_PROGRESS");
-      throw caught;
-    }
-  },
-  completeActivity: async (id: string, body: Record<string, unknown>) => {
-    try {
-      return await cultivationRequest<{ activity: CultivationActivity; execution: unknown; inputUsages: unknown[]; earliestSafeHarvestDate?: string | null }>(
-        `/api/v1/cultivation-activities/${encodeURIComponent(id)}/complete`,
-        { method: "POST", body: JSON.stringify(body) },
-      );
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.completeActivity(id);
-      throw caught;
-    }
-  },
-  skipActivity: async (id: string) => {
-    try {
-      return await cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}/skip`, {
+
+        body: JSON.stringify({ userId, reason }),
+      },
+    ),
+
+  startActivity: (id: string) =>
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/start`,
+      {
         method: "POST",
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.updateActivityStatus(id, "SKIPPED");
-      throw caught;
-    }
-  },
-  cancelActivity: async (id: string) => {
-    try {
-      return await cultivationRequest<CultivationActivity>(`/api/v1/cultivation-activities/${encodeURIComponent(id)}/cancel`, {
+      },
+    ),
+
+  completeActivity: (id: string, body: Record<string, unknown>) =>
+    cultivationRequest<{
+      activity: CultivationActivity;
+      execution: unknown;
+      inputUsages: unknown[];
+      earliestSafeHarvestDate?: string | null;
+    }>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/complete`,
+
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  skipActivity: (id: string) =>
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/skip`,
+      {
         method: "POST",
-      });
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.updateActivityStatus(id, "CANCELLED");
-      throw caught;
-    }
+      },
+    ),
+
+  cancelActivity: (id: string) =>
+    cultivationRequest<CultivationActivity>(
+      `/api/v1/cultivation-activities/${encodeURIComponent(id)}/cancel`,
+      {
+        method: "POST",
+      },
+    ),
+
+  listSeasons: (
+    queryOrFarmId: { farmId: string; plotId?: string } | string,
+    plotId?: string,
+  ) => {
+    const query =
+      typeof queryOrFarmId === "string"
+        ? { farmId: queryOrFarmId, plotId }
+        : queryOrFarmId;
+    return cultivationRequest<CultivationSeason[]>(
+      `/api/v1/cultivation-seasons${queryString(query)}`,
+    );
   },
 
-  careHistory: async (seasonId: string) => {
-    try {
-      return await cultivationRequest<CareHistoryResponse>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/care-history`);
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.careHistory(seasonId);
-      throw caught;
-    }
-  },
+  careHistory: (seasonId: string) =>
+    cultivationRequest<CareHistoryResponse>(
+      `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/care-history`,
+    ),
+
   chemicalHistory: (seasonId: string) =>
-    cultivationRequest<CultivationActivity[]>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/chemical-history`),
+    cultivationRequest<CultivationActivity[]>(
+      `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/chemical-history`,
+    ),
+
   getSafeHarvestDate: (cultivationSeasonId: string) =>
     cultivationRequest<SafeHarvestDateResponse | string | null>(
       `/api/v1/cultivation-seasons/${encodeURIComponent(cultivationSeasonId)}/safe-harvest-date`,
     ),
-  assessCompliance: (cultivationSeasonId: string, targetMarketCode: string, harvestBatchId?: string) =>
+
+  assessCompliance: (
+    cultivationSeasonId: string,
+    targetMarketCode: string,
+    harvestBatchId?: string,
+  ) =>
     cultivationRequest<ComplianceAssessment>(
       `/api/v1/cultivation-seasons/${encodeURIComponent(cultivationSeasonId)}/compliance-assessments`,
-      { method: "POST", body: JSON.stringify({ targetMarketCode, harvestBatchId }) },
+
+      {
+        method: "POST",
+        body: JSON.stringify({ targetMarketCode, harvestBatchId }),
+      },
     ),
 
-  listAgriculturalInputs: (query?: { biologicalLevel?: BiologicalLevel; status?: InputStatus }) =>
-    cultivationRequest<AgriculturalInput[]>(`/api/v1/agricultural-inputs${queryString(query)}`),
+  listAgriculturalInputs: (query?: {
+    biologicalLevel?: BiologicalLevel;
+    status?: InputStatus;
+  }) =>
+    cultivationRequest<AgriculturalInput[]>(
+      `/api/v1/agricultural-inputs${queryString(query)}`,
+    ),
+
   createAgriculturalInput: (body: Record<string, unknown>) =>
     cultivationRequest<AgriculturalInput>("/api/v1/agricultural-inputs", {
       method: "POST",
+
       body: JSON.stringify(body),
     }),
 
-  listResidueStandards: (query?: { marketCode?: string; commodityCode?: string; activeIngredientCode?: string }) =>
-    cultivationRequest<ResidueStandard[]>(`/api/v1/residue-standards${queryString(query)}`),
+  listResidueStandards: (query?: {
+    marketCode?: string;
+    commodityCode?: string;
+    activeIngredientCode?: string;
+  }) =>
+    cultivationRequest<ResidueStandard[]>(
+      `/api/v1/residue-standards${queryString(query)}`,
+    ),
+
   createResidueStandard: (body: Record<string, unknown>) =>
     cultivationRequest<ResidueStandard>("/api/v1/residue-standards", {
       method: "POST",
+
       body: JSON.stringify(body),
     }),
+
   importResidueStandards: (body: Record<string, unknown>[]) =>
     cultivationRequest<ResidueStandard[]>("/api/v1/residue-standards/import", {
+      method: "POST",
+
+      body: JSON.stringify(body),
+    }),
+
+  listLabSamples: (query?: {
+    cultivationSeasonId?: string;
+    harvestBatchId?: string;
+  }) =>
+    cultivationRequest<LabSample[]>(`/api/v1/lab-samples${queryString(query)}`),
+
+  getLabSample: (id: string) =>
+    cultivationRequest<LabSample>(
+      `/api/v1/lab-samples/${encodeURIComponent(id)}`,
+    ),
+
+  createLabSample: (body: Record<string, unknown>) =>
+    cultivationRequest<LabSample>("/api/v1/lab-samples", {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
-  listLabSamples: (query?: { cultivationSeasonId?: string; harvestBatchId?: string }) =>
-    cultivationRequest<LabSample[]>(`/api/v1/lab-samples${queryString(query)}`),
-  getLabSample: (id: string) =>
-    cultivationRequest<LabSample>(`/api/v1/lab-samples/${encodeURIComponent(id)}`),
-  createLabSample: (body: Record<string, unknown>) =>
-    cultivationRequest<LabSample>("/api/v1/lab-samples", { method: "POST", body: JSON.stringify(body) }),
   createLabResult: (body: Record<string, unknown>) =>
-    cultivationRequest<LabResidueResult>("/api/v1/lab-results", { method: "POST", body: JSON.stringify(body) }),
-  sendLabSample: (id: string) =>
-    cultivationRequest<LabSample>(`/api/v1/lab-samples/${encodeURIComponent(id)}/send`, { method: "POST" }),
-  listLabResults: (sampleId: string) =>
-    cultivationRequest<LabResidueResult[]>(`/api/v1/lab-samples/${encodeURIComponent(sampleId)}/results`),
+    cultivationRequest<LabResidueResult>("/api/v1/lab-results", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
-  listHarvestBatches: (query?: { cultivationSeasonId?: string; farmId?: string; plotId?: string }) =>
-    cultivationRequest<HarvestBatch[]>(`/api/v1/harvest-batches${queryString(query)}`),
+  sendLabSample: (id: string) =>
+    cultivationRequest<LabSample>(
+      `/api/v1/lab-samples/${encodeURIComponent(id)}/send`,
+      { method: "POST" },
+    ),
+
+  listLabResults: (sampleId: string) =>
+    cultivationRequest<LabResidueResult[]>(
+      `/api/v1/lab-samples/${encodeURIComponent(sampleId)}/results`,
+    ),
+
+  listHarvestBatches: (query?: {
+    cultivationSeasonId?: string;
+    farmId?: string;
+    plotId?: string;
+  }) =>
+    cultivationRequest<HarvestBatch[]>(
+      `/api/v1/harvest-batches${queryString(query)}`,
+    ),
+
   getHarvestBatch: (id: string) =>
-    cultivationRequest<HarvestBatch>(`/api/v1/harvest-batches/${encodeURIComponent(id)}`),
+    cultivationRequest<HarvestBatch>(
+      `/api/v1/harvest-batches/${encodeURIComponent(id)}`,
+    ),
+
   createHarvestBatch: (body: Record<string, unknown>) =>
-    cultivationRequest<HarvestBatch>("/api/v1/harvest-batches", { method: "POST", body: JSON.stringify(body) }),
+    cultivationRequest<HarvestBatch>("/api/v1/harvest-batches", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   assessExportRelease: (harvestBatchId: string, targetMarketCode: string) =>
     cultivationRequest<ComplianceAssessment>("/api/v1/export-releases/assess", {
       method: "POST",
+
       body: JSON.stringify({ harvestBatchId, targetMarketCode }),
     }),
-  listExportReleases: (query?: { harvestBatchId?: string; targetMarketCode?: string; status?: ExportReleaseStatus }) =>
-    cultivationRequest<ExportRelease[]>(`/api/v1/export-releases${queryString(query)}`),
+
+  listExportReleases: (query?: {
+    harvestBatchId?: string;
+    targetMarketCode?: string;
+    status?: ExportReleaseStatus;
+  }) =>
+    cultivationRequest<ExportRelease[]>(
+      `/api/v1/export-releases${queryString(query)}`,
+    ),
+
   getExportRelease: (id: string) =>
-    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}`),
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}`,
+    ),
+
   createExportRelease: (body: Record<string, unknown>) =>
-    cultivationRequest<ExportRelease>("/api/v1/export-releases", { method: "POST", body: JSON.stringify(body) }),
+    cultivationRequest<ExportRelease>("/api/v1/export-releases", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   submitExportRelease: (id: string) =>
-    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/submit`, {
-      method: "POST",
-    }),
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/submit`,
+      {
+        method: "POST",
+      },
+    ),
+
   approveExportRelease: (id: string) =>
-    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/approve`, {
-      method: "POST",
-    }),
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/approve`,
+      {
+        method: "POST",
+      },
+    ),
+
   releaseExportRelease: (id: string) =>
-    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/release`, {
-      method: "POST",
-    }),
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/release`,
+      {
+        method: "POST",
+      },
+    ),
+
   recallExportRelease: (id: string, reason: string) =>
-    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/recall`, {
-      method: "POST",
-      body: JSON.stringify({ reason }),
-    }),
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/recall`,
+      {
+        method: "POST",
+
+        body: JSON.stringify({ reason }),
+      },
+    ),
+
   traceability: (id: string) =>
-    cultivationRequest<TraceabilitySnapshot>(`/api/v1/export-releases/${encodeURIComponent(id)}/traceability`),
+    cultivationRequest<TraceabilitySnapshot>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/traceability`,
+    ),
+
   auditLogs: (query?: { resourceType?: string; resourceId?: string }) =>
     cultivationRequest<AuditLog[]>(`/api/v1/audit-logs${queryString(query)}`),
 
-  dashboard: async (scope: { farmId: string; plotId: string; cultivationSeasonId: string }): Promise<CultivationDashboardData> => {
-      const [plans, activities, inputs, residueStandards, harvestBatches] = await Promise.all([
+  dashboard: async (scope: {
+    farmId: string;
+    plotId: string;
+    cultivationSeasonId: string;
+  }): Promise<CultivationDashboardData> => {
+    const [plans, activities, inputs, residueStandards, harvestBatches] =
+      await Promise.all([
         cultivationClient.listPlans(scope),
-        cultivationClient.listActivities({ cultivationSeasonId: scope.cultivationSeasonId }),
+
+        cultivationClient.listActivities({
+          cultivationSeasonId: scope.cultivationSeasonId,
+        }),
+
         cultivationClient.listAgriculturalInputs(),
+
         cultivationClient.listResidueStandards(),
+
         cultivationClient.listHarvestBatches(scope),
       ]);
-      const batchIds = Array.isArray(harvestBatches) ? harvestBatches.map((batch) => batch.id) : [];
-      const [samplesByBatch, releasesByBatch] = await Promise.all([
-        Promise.all(batchIds.map((harvestBatchId) => cultivationClient.listLabSamples({ harvestBatchId }))),
-        Promise.all(batchIds.map((harvestBatchId) => cultivationClient.listExportReleases({ harvestBatchId }))),
-      ]);
-      const scoped = filterCalendarScope(Array.isArray(plans) ? plans : [], Array.isArray(activities) ? activities : [], scope);
-      return {
-        plans: scoped.plans,
-        activities: scoped.activities,
-        inputs: Array.isArray(inputs) ? inputs : [],
-        residueStandards: Array.isArray(residueStandards) ? residueStandards : [],
-        labSamples: samplesByBatch.flat(),
-        harvestBatches: Array.isArray(harvestBatches) ? harvestBatches : [],
-        exportReleases: releasesByBatch.flat(),
-      };
+
+    const batchIds = Array.isArray(harvestBatches)
+      ? harvestBatches.map((batch) => batch.id)
+      : [];
+
+    const [samplesByBatch, releasesByBatch] = await Promise.all([
+      Promise.all(
+        batchIds.map((harvestBatchId) =>
+          cultivationClient.listLabSamples({ harvestBatchId }),
+        ),
+      ),
+
+      Promise.all(
+        batchIds.map((harvestBatchId) =>
+          cultivationClient.listExportReleases({ harvestBatchId }),
+        ),
+      ),
+    ]);
+
+    const scoped = filterCalendarScope(
+      Array.isArray(plans) ? plans : [],
+      Array.isArray(activities) ? activities : [],
+      scope,
+    );
+
+    return {
+      plans: scoped.plans,
+      activities: scoped.activities,
+      inputs: Array.isArray(inputs) ? inputs : [],
+      residueStandards: Array.isArray(residueStandards) ? residueStandards : [],
+      labSamples: samplesByBatch.flat(),
+      harvestBatches: Array.isArray(harvestBatches) ? harvestBatches : [],
+      exportReleases: releasesByBatch.flat(),
+    };
+  },
+
+  async listCultivationSchedules(query?: {
+    zoneId?: string;
+    cropId?: string;
+    status?: CultivationTaskStatus;
+    type?: CultivationTaskType;
+  }): Promise<CultivationSchedule[]> {
+    return cultivationRequest<CultivationSchedule[]>(
+      "/api/cultivation-schedules" + queryString(query),
+    );
+  },
+
+  async createCultivationSchedule(
+    body: CreateCultivationScheduleRequest,
+  ): Promise<CultivationSchedule> {
+    return cultivationRequest<CultivationSchedule>(
+      "/api/cultivation-schedules",
+      {
+        method: "POST",
+
+        body: JSON.stringify(body),
+      },
+    );
+  },
+
+  async updateCultivationScheduleStatus(
+    id: string,
+
+    status: CultivationTaskStatus,
+  ): Promise<CultivationSchedule> {
+    return cultivationRequest<CultivationSchedule>(
+      `/api/cultivation-schedules/${id}/status`,
+
+      {
+        method: "PATCH",
+
+        body: JSON.stringify({ status }),
+      },
+    );
   },
 };

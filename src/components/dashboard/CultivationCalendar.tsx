@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck,
   Check,
@@ -13,35 +13,13 @@ import {
   StickyNote,
   X,
 } from "lucide-react";
-import { cropLots, farmZones } from "@/constants/durianMockData";
+import { cultivationClient, farmZoneClient } from "@/lib/cultivation/client";
+import type { CanonicalCultivationZone, CultivationSchedule, CultivationTaskStatus, CultivationTaskType } from "@/lib/cultivation/types";
 import { formatDosageLabel, formatSafetyInterval } from "@/lib/treatment-terms";
 import type { DashboardRole } from "./DashboardShell";
 
-type TaskType =
-  | "fertilizer"
-  | "pesticide"
-  | "irrigation"
-  | "pruning"
-  | "inspection";
-type TaskStatus = "planned" | "in-progress" | "done";
-
-type CultivationTask = {
-  id: string;
-  assignee: string;
-  cropId: string;
-  date: string;
-  dosage: string;
-  materialName: string;
-  notes: string;
-  safetyInterval: string;
-  status: TaskStatus;
-  time: string;
-  type: TaskType;
-  zoneId: string;
-};
-
 const taskTypes: Record<
-  TaskType,
+  CultivationTaskType,
   { label: string; icon: typeof Leaf; tone: string }
 > = {
   fertilizer: {
@@ -71,68 +49,23 @@ const taskTypes: Record<
   },
 };
 
-const statusLabels: Record<TaskStatus, string> = {
+const statusLabels: Record<CultivationTaskStatus, string> = {
   planned: "Đã lên lịch",
   "in-progress": "Đang thực hiện",
   done: "Hoàn thành",
 };
 
-const initialTasks: CultivationTask[] = [
-  {
-    id: "CAL-001",
-    assignee: "Tổ canh tác 01",
-    cropId: "DC-2026-DONA-018",
-    date: "2026-06-12",
-    dosage: "2.5 kg/cây",
-    materialName: "Phân hữu cơ vi sinh 3-2-2",
-    notes: "Rải theo tán, giữ cách gốc 40 cm, tưới nhẹ sau khi rải.",
-    safetyInterval: "0 ngày",
-    status: "planned",
-    time: "07:30",
-    type: "fertilizer",
-    zoneId: "A1",
-  },
-  {
-    id: "CAL-002",
-    assignee: "KS. Trần Hoàng Nam",
-    cropId: "DC-2026-RI6-012",
-    date: "2026-06-13",
-    dosage: "1.2 lít/ha",
-    materialName: "Bacillus subtilis",
-    notes: "Phun mặt dưới lá vào chiều mát, tránh mưa trong 6 giờ sau phun.",
-    safetyInterval: "7 ngày",
-    status: "in-progress",
-    time: "16:00",
-    type: "pesticide",
-    zoneId: "B2",
-  },
-  {
-    id: "CAL-003",
-    assignee: "Chủ vườn Nguyễn Minh",
-    cropId: "DC-2026-DONA-018",
-    date: "2026-06-14",
-    dosage: "Kiểm tra 12 trạm",
-    materialName: "Độ ẩm đất và áp lực tưới",
-    notes: "Ưu tiên các cây có độ ẩm dưới 72%.",
-    safetyInterval: "Không áp dụng",
-    status: "planned",
-    time: "06:45",
-    type: "inspection",
-    zoneId: "A2",
-  },
-];
-
-const blankTask: Omit<CultivationTask, "id" | "status"> = {
-  assignee: "KS. Trần Hoàng Nam",
-  cropId: cropLots[0]?.id ?? "",
-  date: "2026-06-15",
+const defaultDraft = {
+  assignee: "",
+  cropId: "",
+  date: new Date().toISOString().slice(0, 10),
   dosage: "",
   materialName: "",
   notes: "",
   safetyInterval: "",
   time: "07:00",
-  type: "fertilizer",
-  zoneId: farmZones[0]?.id ?? "",
+  type: "fertilizer" as CultivationTaskType,
+  zoneId: "",
 };
 
 function getDaysUntilLabel(date: string) {
@@ -155,12 +88,46 @@ function getDaysUntilLabel(date: string) {
 }
 
 export function CultivationCalendar({ role }: { role: DashboardRole }) {
-  const [tasks, setTasks] = useState<CultivationTask[]>(initialTasks);
-  const [draft, setDraft] = useState(blankTask);
+  const [tasks, setTasks] = useState<CultivationSchedule[]>([]);
+  const [zones, setZones] = useState<CanonicalCultivationZone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [draft, setDraft] = useState(defaultDraft);
   const [zoneFilter, setZoneFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [showForm, setShowForm] = useState(true);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const [schedules, fetchedZones] = await Promise.all([
+          cultivationClient.listCultivationSchedules(),
+          farmZoneClient.listZones(),
+        ]);
+        if (!cancelled) {
+          setTasks(schedules);
+          setZones(fetchedZones);
+          if (fetchedZones.length > 0 && !draft.zoneId) {
+            setDraft((prev) => ({ ...prev, zoneId: fetchedZones[0].id }));
+          }
+        }
+      } catch {
+        if (!cancelled) setLoadError("Không thể tải lịch canh tác. Vui lòng thử lại.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visibleTasks = useMemo(
     () =>
@@ -168,8 +135,8 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
         .filter((task) => zoneFilter === "all" || task.zoneId === zoneFilter)
         .filter((task) => typeFilter === "all" || task.type === typeFilter)
         .sort((left, right) =>
-          `${left.date} ${left.time}`.localeCompare(
-            `${right.date} ${right.time}`,
+          `${left.date} ${left.time ?? ""}`.localeCompare(
+            `${right.date} ${right.time ?? ""}`,
           ),
         ),
     [tasks, typeFilter, zoneFilter],
@@ -179,7 +146,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
   const completedTasks = visibleTasks
     .filter((task) => task.status === "done")
     .sort((left, right) =>
-      `${right.date} ${right.time}`.localeCompare(`${left.date} ${left.time}`),
+      `${right.date} ${right.time ?? ""}`.localeCompare(`${left.date} ${left.time ?? ""}`),
     );
 
   const summary = useMemo(
@@ -191,36 +158,53 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
     [tasks],
   );
 
-  function addTask() {
-    const scheduledAt = new Date(`${draft.date}T${draft.time}`);
+  async function addTask() {
     if (!draft.materialName.trim() || !draft.dosage.trim()) {
       setFormError("Không lưu được lịch. Vui lòng nhập tên vật tư và liều lượng.");
       return;
     }
+    if (!draft.zoneId) {
+      setFormError("Không lưu được lịch. Vui lòng chọn phân khu.");
+      return;
+    }
+    const scheduledAt = new Date(`${draft.date}T${draft.time}`);
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
       setFormError("Không lưu được lịch. Vui lòng chọn ngày và giờ sau thời gian hiện tại.");
       return;
     }
-    setTasks((current) => [
-      {
-        ...draft,
-        id: `CAL-${Date.now()}`,
-        materialName: draft.materialName.trim(),
+    setSaving(true);
+    setFormError("");
+    try {
+      const created = await cultivationClient.createCultivationSchedule({
+        assignee: draft.assignee.trim() || "Chưa phân công",
+        cropId: draft.cropId.trim() || "unknown",
         dosage: draft.dosage.trim(),
+        materialName: draft.materialName.trim(),
         notes: draft.notes.trim() || "Chưa có ghi chú bổ sung.",
         safetyInterval: draft.safetyInterval.trim() || "Không yêu cầu cách ly",
-        status: "planned",
-      },
-      ...current,
-    ]);
-    setDraft(blankTask);
-    setFormError("");
+        scheduledAt: `${draft.date}T${draft.time.length === 5 ? draft.time + ":00" : draft.time}`,
+        type: draft.type,
+        zoneId: draft.zoneId,
+      });
+      setTasks((current) => [created, ...current]);
+      setDraft((prev) => ({ ...defaultDraft, zoneId: prev.zoneId }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Lưu thất bại.";
+      setFormError(message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function updateStatus(taskId: string, status: TaskStatus) {
-    setTasks((current) =>
-      current.map((task) => (task.id === taskId ? { ...task, status } : task)),
-    );
+  async function updateStatus(taskId: string, status: CultivationTaskStatus) {
+    try {
+      const updated = await cultivationClient.updateCultivationScheduleStatus(taskId, status);
+      setTasks((current) =>
+        current.map((task) => (task.id === taskId ? updated : task)),
+      );
+    } catch {
+      // status update silently fails — leave UI unchanged
+    }
   }
 
   const actor =
@@ -230,11 +214,12 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
         ? "Kỹ sư hợp tác"
         : "Điều phối viên";
 
-  const renderTaskCard = (task: CultivationTask) => {
-    const zone = farmZones.find((item) => item.id === task.zoneId);
+  const renderTaskCard = (task: CultivationSchedule) => {
+    const zone = zones.find((item) => item.id === task.zoneId);
     const type = taskTypes[task.type];
     const Icon = type.icon;
     const daysUntil = getDaysUntilLabel(task.date);
+    const displayTime = task.time ? task.time.slice(0, 5) : "";
 
     return (
       <article
@@ -251,7 +236,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-4">
                 <b className="text-lg leading-6">
-                  {type.label} • {task.materialName}
+                  {type.label} • {task.materialName ?? ""}
                 </b>
                 <span className="rounded-full bg-[#eef3ee] px-2 py-1 text-[13px] font-bold text-[#587161]">
                   {statusLabels[task.status]}
@@ -266,14 +251,14 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               )}
             </div>
             <p className="mt-1 text-[15px] text-[#7f8c84]">
-              {task.date} lúc {task.time} • {zone?.name} • {task.cropId}
+              {task.date}{displayTime ? ` lúc ${displayTime}` : ""} • {zone?.name ?? task.zoneId} • {task.cropId}
             </p>
             <div className="mt-5 grid gap-4 text-[15px] sm:grid-cols-3">
-              <Info label="Liều lượng phun" value={formatDosageLabel(task.dosage)} />
-              <Info label="Phụ trách" value={task.assignee} />
+              <Info label="Liều lượng phun" value={formatDosageLabel(task.dosage ?? "")} />
+              <Info label="Phụ trách" value={task.assignee ?? "Chưa phân công"} />
               <Info
                 label="Thời gian cách ly an toàn"
-                value={formatSafetyInterval(task.safetyInterval)}
+                value={formatSafetyInterval(task.safetyInterval ?? "")}
               />
             </div>
             <p className="mt-4 flex gap-4 rounded-xl bg-[#f7f8f5] px-4 py-2 text-[15px] leading-4 text-[#6f7d74]">
@@ -281,7 +266,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
                 size={14}
                 className="mt-0.5 shrink-0 text-[#7b8a80]"
               />{" "}
-              {task.notes}
+              {task.notes ?? "Không có ghi chú."}
             </p>
           </div>
           <div className="flex gap-4 xl:flex-col">
@@ -390,7 +375,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               <select
                 value={draft.type}
                 onChange={(event) =>
-                  setDraft({ ...draft, type: event.target.value as TaskType })
+                  setDraft({ ...draft, type: event.target.value as CultivationTaskType })
                 }
                 className="input-control"
               >
@@ -409,27 +394,25 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
                 }
                 className="input-control"
               >
-                {farmZones.map((zone) => (
+                {zones.length === 0 && (
+                  <option value="">Đang tải phân khu…</option>
+                )}
+                {zones.map((zone) => (
                   <option key={zone.id} value={zone.id}>
                     {zone.name}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Vụ mùa">
-              <select
+            <Field label="Mã vụ mùa / lô cây">
+              <input
                 value={draft.cropId}
                 onChange={(event) =>
                   setDraft({ ...draft, cropId: event.target.value })
                 }
+                placeholder="VD: season-2026-khu-dong"
                 className="input-control"
-              >
-                {cropLots.map((crop) => (
-                  <option key={crop.id} value={crop.id}>
-                    {crop.id} • {crop.variety}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
             <Field label="Tên phân/thuốc/vật tư">
               <input
@@ -491,9 +474,10 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
           )}
           <button
             onClick={addTask}
-            className="mt-5 flex items-center gap-4 rounded-xl bg-[#2E5A44] px-5 py-4 text-[13px] font-bold text-white"
+            disabled={saving}
+            className="mt-5 flex items-center gap-4 rounded-xl bg-[#2E5A44] px-5 py-4 text-[13px] font-bold text-white disabled:bg-[#aeb8b1]"
           >
-            <CalendarCheck size={15} /> Lưu lịch canh tác
+            <CalendarCheck size={15} /> {saving ? "Đang lưu…" : "Lưu lịch canh tác"}
           </button>
         </section>
       )}
@@ -521,7 +505,7 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
               className="h-9 rounded-xl border border-[#dfe5de] bg-white px-4 text-[13px] font-bold outline-none"
             >
               <option value="all">Tất cả phân khu</option>
-              {farmZones.map((zone) => (
+              {zones.map((zone) => (
                 <option key={zone.id} value={zone.id}>
                   {zone.name}
                 </option>
@@ -542,47 +526,60 @@ export function CultivationCalendar({ role }: { role: DashboardRole }) {
           </div>
         </div>
 
-        <div className="mt-7 space-y-10">
-          <div>
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-xl font-extrabold text-[#2E5A44]">
-                Công việc sắp tới
-              </h3>
-              <span className="rounded-full bg-[#eef3ee] px-4 py-2 text-[15px] font-bold text-[#587161]">
-                {upcomingTasks.length} chưa hoàn thành
-              </span>
-            </div>
-            <div className="grid gap-7">
-              {upcomingTasks.length > 0 ? (
-                upcomingTasks.map(renderTaskCard)
-              ) : (
-                <p className="rounded-2xl bg-[#f7f8f5] px-5 py-4 text-[15px] font-semibold text-[#7f8c84]">
-                  Không có công việc chưa hoàn thành trong bộ lịch hiện tại.
-                </p>
-              )}
-            </div>
-          </div>
+        {loading && (
+          <p className="mt-7 rounded-2xl bg-[#f7f8f5] px-5 py-4 text-[15px] font-semibold text-[#7f8c84]">
+            Đang tải lịch canh tác…
+          </p>
+        )}
+        {loadError && (
+          <p className="mt-7 rounded-2xl border border-[#ead8d1] bg-[#fff6f1] px-5 py-4 text-[15px] font-bold text-[#96523c]">
+            {loadError}
+          </p>
+        )}
 
-          <div>
-            <div className="mb-5 flex items-center justify-between border-t border-[#e1e6df] pt-8">
-              <h3 className="text-[15px] font-extrabold text-[#6d7a72]">
-                Lịch sử hoàn thành
-              </h3>
-              <span className="rounded-full bg-[#f6f8f5] px-4 py-2 text-[13px] font-bold text-[#7f8c84]">
-                {completedTasks.length} đã xong
-              </span>
+        {!loading && !loadError && (
+          <div className="mt-7 space-y-10">
+            <div>
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-xl font-extrabold text-[#2E5A44]">
+                  Công việc sắp tới
+                </h3>
+                <span className="rounded-full bg-[#eef3ee] px-4 py-2 text-[15px] font-bold text-[#587161]">
+                  {upcomingTasks.length} chưa hoàn thành
+                </span>
+              </div>
+              <div className="grid gap-7">
+                {upcomingTasks.length > 0 ? (
+                  upcomingTasks.map(renderTaskCard)
+                ) : (
+                  <p className="rounded-2xl bg-[#f7f8f5] px-5 py-4 text-[15px] font-semibold text-[#7f8c84]">
+                    Không có công việc chưa hoàn thành trong bộ lịch hiện tại.
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="grid gap-7">
-              {completedTasks.length > 0 ? (
-                completedTasks.map(renderTaskCard)
-              ) : (
-                <p className="rounded-2xl bg-[#f7f8f5] px-5 py-4 text-[15px] font-semibold text-[#7f8c84]">
-                  Chưa có công việc hoàn thành trong bộ lịch hiện tại.
-                </p>
-              )}
+
+            <div>
+              <div className="mb-5 flex items-center justify-between border-t border-[#e1e6df] pt-8">
+                <h3 className="text-[15px] font-extrabold text-[#6d7a72]">
+                  Lịch sử hoàn thành
+                </h3>
+                <span className="rounded-full bg-[#f6f8f5] px-4 py-2 text-[13px] font-bold text-[#7f8c84]">
+                  {completedTasks.length} đã xong
+                </span>
+              </div>
+              <div className="grid gap-7">
+                {completedTasks.length > 0 ? (
+                  completedTasks.map(renderTaskCard)
+                ) : (
+                  <p className="rounded-2xl bg-[#f7f8f5] px-5 py-4 text-[15px] font-semibold text-[#7f8c84]">
+                    Chưa có công việc hoàn thành trong bộ lịch hiện tại.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
     </div>
   );

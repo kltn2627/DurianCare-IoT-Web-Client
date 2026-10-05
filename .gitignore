@@ -23,6 +23,7 @@ out
 *.sw?
 .agent
 .agent/*
+.claude
 
 # Local environment files
 .env
