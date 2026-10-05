@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Beaker,
@@ -27,18 +27,25 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { cultivationClient, CultivationApiError } from "@/lib/cultivation/client";
+import { cultivationClient, CultivationApiError, farmZoneClient } from "@/lib/cultivation/client";
+import { catalogOptions, initialCatalogSelection } from "@/lib/cultivation/hierarchy";
 import { formatSafetyInterval } from "@/lib/treatment-terms";
 import type {
   ActivityStatus,
   ActivityType,
   AgriculturalInput,
+  ActivityExecution,
+  ActivityInputUsage,
+  CareHistoryResponse,
   BiologicalLevel,
   ComplianceAssessment,
   CultivationActivity,
   CultivationDashboardData,
   CultivationPlan,
+  CultivationSeason,
+  FarmCatalog,
   HarvestBatch,
+  LabResidueResult,
   LabSample,
   ResidueStandard,
 } from "@/lib/cultivation/types";
@@ -53,6 +60,8 @@ import {
   riskLevelLabels,
 } from "./labels";
 import { hasCultivationPermission } from "./permissions";
+import { CompleteActivityDialog } from "./CompleteActivityDialog";
+import { groupHistoryRecords } from "./historyRecords";
 
 type ViewKey =
   | "today"
@@ -82,6 +91,12 @@ type Option = {
   hint?: string;
 };
 
+type ContextOptions = { farms: Option[]; plots: Option[]; seasons: Option[] };
+
+function emptyCalendarData(): CultivationDashboardData {
+  return { plans: [], activities: [], inputs: [], residueStandards: [], labSamples: [], harvestBatches: [], exportReleases: [] };
+}
+
 type ActivityWithPlanning = CultivationActivity & {
   plannedInputIds?: string[];
   agriculturalInputIds?: string[];
@@ -102,7 +117,7 @@ const advancedViews: Array<{ key: ViewKey; label: string; icon: typeof CalendarD
   { key: "approvals", label: "Phê duyệt", icon: ShieldAlert, permission: "CHEMICAL_APPLICATION_APPROVE" },
   { key: "inputs", label: "Vật tư", icon: Leaf, permission: "RESIDUE_STANDARD_MANAGE" },
   { key: "residue", label: "Giới hạn dư lượng", icon: Beaker, permission: "RESIDUE_STANDARD_MANAGE" },
-  { key: "lab", label: "Kiểm nghiệm", icon: FlaskConical, permission: "LAB_RESULT_MANAGE" },
+  { key: "lab", label: "Kiểm nghiệm", icon: FlaskConical, permission: "CULTIVATION_PLAN_VIEW" },
 ];
 type AdvancedViewItem = (typeof advancedViews)[number];
 
@@ -143,15 +158,6 @@ function isClosedActivity(activity: CultivationActivity) {
 
 function toInstant(value: string) {
   return value ? new Date(value).toISOString() : undefined;
-}
-
-function seasonLabel(plan: CultivationPlan) {
-  const year = plan.startDate ? new Date(plan.startDate).getFullYear() : "";
-  return year ? `Vụ mùa ${year}` : "Vụ mùa đang theo dõi";
-}
-
-function createLabelMap(ids: string[], prefix: string) {
-  return new Map(ids.map((id, index) => [id, `${prefix} ${index + 1}`]));
 }
 
 function unique<T>(items: T[]) {
@@ -396,18 +402,17 @@ function Drawer({
 export function CultivationCalendarWorkspace({ initialView = "today" }: WorkspaceProps) {
   const { user, loading: authLoading } = useAuth();
   const [view, setView] = useState<ViewKey>(normalizeInitialView(initialView));
-  const [data, setData] = useState<CultivationDashboardData>({
-    plans: [],
-    activities: [],
-    inputs: [],
-    residueStandards: [],
-    labSamples: [],
-    harvestBatches: [],
-    exportReleases: [],
-  });
-  const [careHistory, setCareHistory] = useState<CultivationActivity[]>([]);
+  const [data, setData] = useState<CultivationDashboardData>(emptyCalendarData);
+  const [farms, setFarms] = useState<FarmCatalog[]>([]);
+  const [seasons, setSeasons] = useState<CultivationSeason[]>([]);
+  const [careHistory, setCareHistory] = useState<CareHistoryResponse>({ activities: [], executions: [], inputUsages: [] });
+  const [historyError, setHistoryError] = useState(false);
   const [compliance, setCompliance] = useState<ComplianceAssessment | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [safeHarvestDate, setSafeHarvestDate] = useState<string | null>(null);
+  const [completingActivity, setCompletingActivity] = useState<CultivationActivity | null>(null);
+  const [loadingFarms, setLoadingFarms] = useState(true);
+  const [loadingSeasons, setLoadingSeasons] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<"month" | "week" | "day" | "list">("week");
@@ -415,6 +420,10 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
   const [selectedMarket, setSelectedMarket] = useState("EU");
   const [lastSyncedAt, setLastSyncedAt] = useState<string>("");
   const [context, setContext] = useState<ContextSelection>({ farmId: "", plotId: "", seasonId: "" });
+  const [reloadKey, setReloadKey] = useState(0);
+  const farmRequest = useRef(0);
+  const seasonRequest = useRef(0);
+  const dataRequest = useRef(0);
 
   const canView = hasCultivationPermission(user?.role, "CULTIVATION_PLAN_VIEW");
   const canManagePlan = hasCultivationPermission(user?.role, "CULTIVATION_PLAN_MANAGE");
@@ -422,10 +431,13 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
   const canApproveChemical = hasCultivationPermission(user?.role, "CHEMICAL_APPLICATION_APPROVE");
   const canManageResidue = hasCultivationPermission(user?.role, "RESIDUE_STANDARD_MANAGE");
   const canManageLab = hasCultivationPermission(user?.role, "LAB_RESULT_MANAGE");
+  const canCreateLabSample = user?.role === "FARMER" || canManageLab;
 
   const actorId = user?.userId ?? "";
 
-  const contextOptions = useMemo(() => buildContextOptions(data), [data]);
+  const contextOptions = useMemo<ContextOptions>(() => {
+    return catalogOptions(farms, seasons, context);
+  }, [farms, seasons, context]);
   const farmMap = useMemo(() => new Map(contextOptions.farms.map((item) => [item.id, item.label])), [contextOptions.farms]);
   const plotMap = useMemo(() => new Map(contextOptions.plots.map((item) => [item.id, item.label])), [contextOptions.plots]);
   const seasonMap = useMemo(() => new Map(contextOptions.seasons.map((item) => [item.id, item.label])), [contextOptions.seasons]);
@@ -434,9 +446,9 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
     () =>
       data.plans.filter(
         (plan) =>
-          (!context.farmId || plan.farmId === context.farmId) &&
-          (!context.plotId || plan.plotId === context.plotId) &&
-          (!context.seasonId || plan.cultivationSeasonId === context.seasonId),
+          Boolean(context.farmId && context.plotId && context.seasonId) &&
+          plan.farmId === context.farmId && plan.plotId === context.plotId &&
+          plan.cultivationSeasonId === context.seasonId,
       ),
     [context, data.plans],
   );
@@ -444,24 +456,27 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
     () =>
       data.activities.filter(
         (activity) =>
-          (!context.farmId || activity.farmId === context.farmId) &&
-          (!context.plotId || activity.plotId === context.plotId) &&
-          (!context.seasonId || activity.cultivationSeasonId === context.seasonId),
+          Boolean(context.farmId && context.plotId && context.seasonId) &&
+          activity.farmId === context.farmId && activity.plotId === context.plotId &&
+          activity.cultivationSeasonId === context.seasonId &&
+          data.plans.some((plan) => plan.id === activity.cultivationPlanId &&
+            plan.farmId === context.farmId && plan.plotId === context.plotId &&
+            plan.cultivationSeasonId === context.seasonId),
       ),
-    [context, data.activities],
+    [context, data.activities, data.plans],
   );
   const selectedBatches = useMemo(
     () =>
       data.harvestBatches.filter(
         (batch) =>
-          (!context.farmId || batch.farmId === context.farmId) &&
-          (!context.plotId || batch.plotId === context.plotId) &&
-          (!context.seasonId || batch.cultivationSeasonId === context.seasonId),
+          Boolean(context.farmId && context.plotId && context.seasonId) &&
+          batch.farmId === context.farmId && batch.plotId === context.plotId &&
+          batch.cultivationSeasonId === context.seasonId,
       ),
     [context, data.harvestBatches],
   );
   const selectedSamples = useMemo(
-    () => data.labSamples.filter((sample) => !context.seasonId || sample.cultivationSeasonId === context.seasonId),
+    () => data.labSamples.filter((sample) => Boolean(context.seasonId) && sample.cultivationSeasonId === context.seasonId),
     [context.seasonId, data.labSamples],
   );
   const metrics = useMemo(() => {
@@ -478,44 +493,168 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
   }, [selectedActivities, selectedSamples]);
   const historyActivities = useMemo(
     () =>
-      (careHistory.length ? careHistory : selectedActivities)
+      (careHistory.activities.length ? careHistory.activities : selectedActivities)
         .filter(isClosedActivity)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-    [careHistory, selectedActivities],
+    [careHistory.activities, selectedActivities],
   );
 
   const visibleAdvancedViews = advancedViews.filter((item) => !item.permission || hasCultivationPermission(user?.role, item.permission as never));
 
-  const refresh = async () => {
-    setLoading(true);
+  const refresh = () => {
     setError(null);
-    try {
-      const next = await cultivationClient.dashboard();
-      setData(next);
-      setLastSyncedAt(new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
-      const nextOptions = buildContextOptions(next);
-      setContext((current) => reconcileContext(current, nextOptions));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể tải dữ liệu lịch canh tác.");
-    } finally {
-      setLoading(false);
-    }
+    setLoadingFarms(true);
+    setReloadKey((current) => current + 1);
   };
 
   useEffect(() => {
-    if (!authLoading && canView) void refresh();
-  }, [authLoading, canView]);
+    if (authLoading || !canView) return;
+    let active = true;
+    const request = ++farmRequest.current;
+    farmZoneClient.listFarms()
+      .then((result) => {
+        if (!active || request !== farmRequest.current) return;
+        setFarms(result);
+        setContext((current) => initialCatalogSelection(result, current));
+      })
+      .catch(() => {
+        if (!active || request !== farmRequest.current) return;
+        seasonRequest.current += 1;
+        dataRequest.current += 1;
+        setFarms([]);
+        setSeasons([]);
+        setContext({ farmId: "", plotId: "", seasonId: "" });
+        setData(emptyCalendarData());
+        setError("Không thể tải dữ liệu trang trại. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (active && request === farmRequest.current) setLoadingFarms(false);
+      });
+    return () => { active = false; };
+  }, [authLoading, canView, reloadKey]);
 
   useEffect(() => {
-    if (!context.seasonId) {
-      setCareHistory([]);
-      return;
+    const request = ++seasonRequest.current;
+    const farmId = context.farmId;
+    const plotId = context.plotId;
+    let active = true;
+    if (!farmId || !plotId || authLoading || !canView) {
+      queueMicrotask(() => {
+        if (active && request === seasonRequest.current) {
+          setSeasons([]);
+          setLoadingSeasons(false);
+        }
+      });
+      return () => { active = false; };
     }
+    queueMicrotask(() => {
+      if (!active || request !== seasonRequest.current) return;
+      setLoadingSeasons(true);
+      setSeasons([]);
+      setContext((current) => current.farmId === farmId && current.plotId === plotId && current.seasonId
+        ? { ...current, seasonId: "" } : current);
+    });
+    cultivationClient.listSeasons(farmId, plotId)
+      .then((result) => {
+        if (!active || request !== seasonRequest.current) return;
+        const valid = result.filter((season) => season.farmId === farmId && season.plotId === plotId);
+        setSeasons(valid);
+        setContext((current) => {
+          if (current.farmId !== farmId || current.plotId !== plotId) return current;
+          const seasonId = valid.some((season) => season.id === current.seasonId)
+            ? current.seasonId : valid[0]?.id ?? "";
+          return seasonId === current.seasonId ? current : { ...current, seasonId };
+        });
+      })
+      .catch(() => {
+        if (active && request === seasonRequest.current) setError("Không thể tải mùa vụ của khu canh tác. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (active && request === seasonRequest.current) setLoadingSeasons(false);
+      });
+    return () => { active = false; };
+  }, [authLoading, canView, context.farmId, context.plotId, reloadKey]);
+
+  useEffect(() => {
+    const request = ++dataRequest.current;
+    let active = true;
+    if (!context.farmId || !context.plotId || !context.seasonId || loadingSeasons || authLoading || !canView) {
+      queueMicrotask(() => {
+        if (active && request === dataRequest.current) {
+          setData(emptyCalendarData());
+          setLoadingData(false);
+        }
+      });
+      return () => { active = false; };
+    }
+    const scope = { farmId: context.farmId, plotId: context.plotId, cultivationSeasonId: context.seasonId };
+    queueMicrotask(() => {
+      if (active && request === dataRequest.current) {
+        setData(emptyCalendarData());
+        setLoadingData(true);
+      }
+    });
+    cultivationClient.dashboard(scope)
+      .then((next) => {
+        if (!active || request !== dataRequest.current) return;
+        setData(next);
+        setLastSyncedAt(new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date()));
+      })
+      .catch((caught) => {
+        if (active && request === dataRequest.current) setError(caught instanceof Error ? caught.message : "Không thể tải lịch chăm sóc. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (active && request === dataRequest.current) setLoadingData(false);
+      });
+    return () => { active = false; };
+  }, [authLoading, canView, context.farmId, context.plotId, context.seasonId, loadingSeasons, reloadKey]);
+
+  const loading = loadingFarms || loadingSeasons || loadingData;
+  const ready = !loading && !error;
+
+  useEffect(() => {
+    let active = true;
+    if (!context.seasonId) {
+      queueMicrotask(() => { if (active) { setCareHistory({ activities: [], executions: [], inputUsages: [] }); setHistoryError(false); } });
+      return () => { active = false; };
+    }
+    queueMicrotask(() => { if (active) setHistoryError(false); });
+    queueMicrotask(() => { if (active) setCareHistory({ activities: [], executions: [], inputUsages: [] }); });
     cultivationClient
       .careHistory(context.seasonId)
-      .then((history) => setCareHistory(history.activities))
-      .catch(() => setCareHistory([]));
-  }, [context.seasonId]);
+      .then((history) => {
+        if (active) {
+          setHistoryError(false);
+          setCareHistory({ ...history, activities: history.activities.filter((activity) =>
+            activity.farmId === context.farmId && activity.plotId === context.plotId &&
+            activity.cultivationSeasonId === context.seasonId) });
+        }
+      })
+      .catch(() => { if (active) { setCareHistory({ activities: [], executions: [], inputUsages: [] }); setHistoryError(true); } });
+    return () => { active = false; };
+  }, [context.farmId, context.plotId, context.seasonId, reloadKey]);
+
+  useEffect(() => {
+    if (!context.seasonId) return;
+    let active = true;
+    cultivationClient.getSafeHarvestDate(context.seasonId).then((result) => {
+      if (active) setSafeHarvestDate(typeof result === "string" ? result : result?.earliestSafeHarvestDate ?? null);
+    }).catch(() => { if (active) setSafeHarvestDate(null); });
+    return () => { active = false; };
+  }, [context.seasonId, reloadKey]);
+
+  const submitCompletion = async (id: string, payload: Record<string, unknown>) => {
+    setError(null);
+    try {
+      await cultivationClient.completeActivity(id, payload);
+      setCompliance(null);
+      setNotice("Đã ghi nhật ký thực hiện.");
+      refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không thể hoàn thành công việc.");
+      throw caught;
+    }
+  };
 
   const mutate = async (action: () => Promise<unknown>, success: string, after?: () => void) => {
     setError(null);
@@ -535,25 +674,17 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
   };
 
   const handleActivityStatusChange = (id: string, action: "start" | "complete" | "skip" | "cancel") => {
+    if (action === "complete") {
+      setCompletingActivity(selectedActivities.find((activity) => activity.id === id) ?? null);
+      return;
+    }
     const actionMap = {
       start: () => cultivationClient.startActivity(id),
-      complete: () =>
-        cultivationClient.completeActivity(id, {
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          executedBy: actorId,
-          actualTreeCount: 0,
-          actualArea: 0,
-          weatherSnapshot: {},
-          evidenceFiles: [],
-          inputUsages: [],
-        }),
       skip: () => cultivationClient.skipActivity(id),
       cancel: () => cultivationClient.cancelActivity(id),
     };
     const successMap = {
       start: "Đã chuyển công việc sang đang làm.",
-      complete: "Đã cập nhật công việc hoàn thành.",
       skip: "Đã hoãn công việc.",
       cancel: "Đã hủy công việc.",
     };
@@ -585,9 +716,27 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
       <ContextBar
         context={context}
         options={contextOptions}
+        loadingFarms={loadingFarms}
+        loadingSeasons={loadingSeasons}
         onChange={(next) => {
+          setError(null);
+          if (next.farmId !== context.farmId || next.plotId !== context.plotId) {
+            seasonRequest.current += 1;
+            dataRequest.current += 1;
+            setSeasons([]);
+            setCareHistory({ activities: [], executions: [], inputUsages: [] });
+            setData(emptyCalendarData());
+            setLastSyncedAt("");
+          } else if (next.seasonId !== context.seasonId) {
+            dataRequest.current += 1;
+            setCareHistory({ activities: [], executions: [], inputUsages: [] });
+            setData(emptyCalendarData());
+            setLastSyncedAt("");
+          }
           setContext(next);
           setCompliance(null);
+          setSafeHarvestDate(null);
+          setHistoryError(false);
           setSelectedActivityId("");
         }}
       />
@@ -602,7 +751,7 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
       {notice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{notice}</div> : null}
       {loading ? <LoadingPanel /> : null}
 
-      {!loading && view === "today" ? (
+      {ready && view === "today" ? (
         <TodayTasksView
           metrics={metrics}
           inputs={data.inputs}
@@ -613,7 +762,13 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
           onStatusChange={handleActivityStatusChange}
         />
       ) : null}
-      {!loading && view === "calendar" ? (
+      {ready && view === "calendar" && !context.seasonId ? (
+        <EmptyState
+          title={context.plotId ? "Chưa có mùa vụ cho khu canh tác này" : context.farmId ? "Chưa có khu canh tác cho trang trại này" : "Chưa có trang trại"}
+          description="Chọn đầy đủ trang trại, khu canh tác và mùa vụ để xem lịch chăm sóc."
+        />
+      ) : null}
+      {ready && view === "calendar" && context.seasonId ? (
         <CalendarWeekView
           activities={selectedActivities}
           mode={calendarMode}
@@ -624,34 +779,10 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
           actorLabel={user?.profile.fullName ?? "Người thực hiện"}
           canExecute={canExecute}
           onCreate={() => setView("activities")}
-          onStatusChange={(id, action) => {
-            const actionMap = {
-              start: () => cultivationClient.startActivity(id),
-              complete: () =>
-                cultivationClient.completeActivity(id, {
-                  startedAt: new Date().toISOString(),
-                  completedAt: new Date().toISOString(),
-                  executedBy: actorId,
-                  actualTreeCount: 0,
-                  actualArea: 0,
-                  weatherSnapshot: {},
-                  evidenceFiles: [],
-                  inputUsages: [],
-                }),
-              skip: () => cultivationClient.skipActivity(id),
-              cancel: () => cultivationClient.cancelActivity(id),
-            };
-            const successMap = {
-              start: "Đã chuyển công việc sang đang làm.",
-              complete: "Đã cập nhật công việc hoàn thành.",
-              skip: "Đã hoãn công việc.",
-              cancel: "Đã hủy công việc.",
-            };
-            void mutate(actionMap[action], successMap[action]);
-          }}
+          onStatusChange={handleActivityStatusChange}
         />
       ) : null}
-      {!loading && view === "plans" ? (
+      {ready && view === "plans" ? (
         <PlanView
           plans={selectedPlans}
           context={context}
@@ -662,7 +793,7 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
           onCreate={(body, done) => mutate(() => cultivationClient.createPlan(body), "Đã tạo kế hoạch mùa vụ.", done)}
         />
       ) : null}
-      {!loading && view === "activities" ? (
+      {ready && view === "activities" ? (
         <ActivityView
           activities={selectedActivities}
           plans={selectedPlans}
@@ -672,10 +803,10 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
           actorName={user?.profile.fullName ?? "Tài khoản hiện tại"}
           plotLabel={(id) => plotMap.get(id) ?? "Khu canh tác"}
           onCreate={(body, done) => mutate(() => cultivationClient.createActivity(body), "Đã tạo công việc chăm sóc.", done)}
-          onComplete={(id, body) => mutate(() => cultivationClient.completeActivity(id, body), "Đã ghi nhật ký thực hiện.")}
+          onComplete={(activity) => setCompletingActivity(activity)}
         />
       ) : null}
-      {!loading && view === "approvals" ? (
+      {ready && view === "approvals" ? (
         <ApprovalView
           activities={selectedActivities.filter((item) => item.status === "PENDING_APPROVAL")}
           canApprove={canApproveChemical}
@@ -685,40 +816,44 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
           onReject={(id, reason) => mutate(() => cultivationClient.rejectActivity(id, actorId, reason), "Đã từ chối công việc.")}
         />
       ) : null}
-      {!loading && view === "history" ? (
-        <HistoryView activities={historyActivities} plotLabel={(id) => plotMap.get(id) ?? "Khu canh tác"} />
+      {ready && view === "history" ? (
+        historyError ? <ErrorState message="Không thể tải nhật ký chăm sóc." onRetry={refresh} /> : <HistoryView activities={historyActivities} executions={careHistory.executions} usages={careHistory.inputUsages} plotLabel={(id) => plotMap.get(id) ?? "Khu canh tác"} />
       ) : null}
-      {!loading && view === "inputs" ? (
+      {ready && view === "inputs" ? (
         <InputView
           inputs={data.inputs}
           canManage={canManageResidue}
           onCreate={(body, done) => mutate(() => cultivationClient.createAgriculturalInput(body), "Đã thêm vật tư nông nghiệp.", done)}
         />
       ) : null}
-      {!loading && view === "residue" ? (
+      {ready && view === "residue" ? (
         <ResidueView
           standards={data.residueStandards}
           canManage={canManageResidue}
           onCreate={(body, done) => mutate(() => cultivationClient.createResidueStandard(body), "Đã tạo giới hạn dư lượng.", done)}
         />
       ) : null}
-      {!loading && view === "lab" ? (
+      {ready && view === "lab" ? (
         <LabView
           samples={selectedSamples}
           batches={selectedBatches}
           context={context}
           canManage={canManageLab}
+          canCreateSample={canCreateLabSample}
           actorId={actorId}
           seasonLabel={seasonMap.get(context.seasonId) ?? "Vụ mùa"}
           onCreateSample={(body, done) => mutate(() => cultivationClient.createLabSample(body), "Đã tạo đề nghị lấy mẫu.", done)}
+          onSendSample={(id) => mutate(() => cultivationClient.sendLabSample(id), "Đã gửi mẫu đến phòng kiểm nghiệm.")}
+          onCreateResult={(body, after) => mutate(async () => { after(await cultivationClient.createLabResult(body)); }, "Backend đã tính kết quả dư lượng.")}
         />
       ) : null}
-      {!loading && view === "safety" ? (
+      {ready && view === "safety" ? (
         <SafetyView
           seasonId={context.seasonId}
           market={selectedMarket}
           batches={selectedBatches}
           assessment={compliance}
+          safeHarvestDate={safeHarvestDate}
           onMarketChange={setSelectedMarket}
           onAssess={(harvestBatchId) =>
             mutate(async () => {
@@ -729,53 +864,9 @@ export function CultivationCalendarWorkspace({ initialView = "today" }: Workspac
         />
       ) : null}
 
+      <CompleteActivityDialog activity={completingActivity} actorId={actorId} actorName={user?.profile.fullName ?? "Tài khoản hiện tại"} onClose={() => setCompletingActivity(null)} onSubmit={submitCompletion} />
     </div>
   );
-}
-
-function buildContextOptions(data: CultivationDashboardData) {
-  const plans = Array.isArray(data.plans) ? data.plans : [];
-  const activities = Array.isArray(data.activities) ? data.activities : [];
-  const harvestBatches = Array.isArray(data.harvestBatches) ? data.harvestBatches : [];
-  const labSamples = Array.isArray(data.labSamples) ? data.labSamples : [];
-  const farms = unique([
-    ...plans.map((item) => item.farmId),
-    ...activities.map((item) => item.farmId),
-    ...harvestBatches.map((item) => item.farmId),
-  ]);
-  const plots = unique([
-    ...plans.map((item) => item.plotId),
-    ...activities.map((item) => item.plotId),
-    ...harvestBatches.map((item) => item.plotId),
-  ]);
-  const seasons = unique([
-    ...plans.map((item) => item.cultivationSeasonId),
-    ...activities.map((item) => item.cultivationSeasonId),
-    ...harvestBatches.map((item) => item.cultivationSeasonId),
-    ...labSamples.map((item) => item.cultivationSeasonId),
-  ]);
-  const farmLabels = createLabelMap(farms, "Trang trại");
-  const plotLabels = createLabelMap(plots, "Khu canh tác");
-  const seasonLabels = new Map<string, string>();
-  plans.forEach((plan) => {
-    if (!seasonLabels.has(plan.cultivationSeasonId)) seasonLabels.set(plan.cultivationSeasonId, seasonLabel(plan));
-  });
-  seasons.forEach((season, index) => {
-    if (!seasonLabels.has(season)) seasonLabels.set(season, `Vụ mùa ${index + 1}`);
-  });
-
-  return {
-    farms: farms.map((id) => ({ id, label: farmLabels.get(id) ?? "Trang trại" })),
-    plots: plots.map((id) => ({ id, label: plotLabels.get(id) ?? "Khu canh tác" })),
-    seasons: seasons.map((id) => ({ id, label: seasonLabels.get(id) ?? "Vụ mùa" })),
-  };
-}
-
-function reconcileContext(current: ContextSelection, options: ReturnType<typeof buildContextOptions>): ContextSelection {
-  const farmId = options.farms.some((item) => item.id === current.farmId) ? current.farmId : options.farms[0]?.id ?? "";
-  const plotId = options.plots.some((item) => item.id === current.plotId) ? current.plotId : options.plots[0]?.id ?? "";
-  const seasonId = options.seasons.some((item) => item.id === current.seasonId) ? current.seasonId : options.seasons[0]?.id ?? "";
-  return { farmId, plotId, seasonId };
 }
 
 function Hero({
@@ -828,10 +919,14 @@ function Hero({
 function ContextBar({
   context,
   options,
+  loadingFarms,
+  loadingSeasons,
   onChange,
 }: {
   context: ContextSelection;
-  options: ReturnType<typeof buildContextOptions>;
+  options: ContextOptions;
+  loadingFarms: boolean;
+  loadingSeasons: boolean;
   onChange: (context: ContextSelection) => void;
 }) {
   return (
@@ -841,6 +936,7 @@ function ContextBar({
           label="Trang trại"
           value={context.farmId}
           options={options.farms}
+          disabled={loadingFarms}
           empty="Chưa có trang trại trong dữ liệu canh tác."
           onChange={(farmId) => onChange({ farmId, plotId: "", seasonId: "" })}
         />
@@ -849,15 +945,15 @@ function ContextBar({
           value={context.plotId}
           options={options.plots}
           empty="Chưa có khu canh tác phù hợp."
-          disabled={!context.farmId}
+          disabled={loadingFarms || !context.farmId}
           onChange={(plotId) => onChange({ ...context, plotId, seasonId: "" })}
         />
         <ContextSelect
           label="Mùa vụ"
           value={context.seasonId}
           options={options.seasons}
-          empty="Chưa có mùa vụ phù hợp."
-          disabled={!context.plotId}
+          empty={loadingSeasons ? "Đang tải mùa vụ..." : "Chưa có mùa vụ cho khu canh tác này."}
+          disabled={loadingFarms || loadingSeasons || !context.plotId}
           onChange={(seasonId) => onChange({ ...context, seasonId })}
         />
       </div>
@@ -1654,7 +1750,7 @@ function PlanView({
 }: {
   plans: CultivationPlan[];
   context: ContextSelection;
-  options: ReturnType<typeof buildContextOptions>;
+  options: ContextOptions;
   canManage: boolean;
   actorId: string;
   plotLabel: (id: string) => string;
@@ -1748,7 +1844,7 @@ function ActivityView({
   actorName: string;
   plotLabel: (id: string) => string;
   onCreate: (body: Record<string, unknown>, done: () => void) => void;
-  onComplete: (id: string, body: Record<string, unknown>) => void;
+  onComplete: (activity: CultivationActivity) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -1847,18 +1943,7 @@ function ActivityView({
             canExecute && !["COMPLETED", "CANCELLED", "SKIPPED"].includes(activity.status) ? (
               <button
                 type="button"
-                onClick={() =>
-                  onComplete(activity.id, {
-                    startedAt: new Date().toISOString(),
-                    completedAt: new Date().toISOString(),
-                    executedBy: actorId,
-                    actualTreeCount: 0,
-                    actualArea: 0,
-                    weatherSnapshot: {},
-                    evidenceFiles: [],
-                    inputUsages: [],
-                  })
-                }
+                onClick={() => onComplete(activity)}
                 className="rounded-lg bg-[#2E5A44] px-2 py-1 text-xs font-bold text-white"
               >
                 Ghi hoàn thành
@@ -1964,7 +2049,8 @@ function ApprovalView({
   );
 }
 
-function HistoryView({ activities, plotLabel }: { activities: CultivationActivity[]; plotLabel: (id: string) => string }) {
+function HistoryView({ activities, executions, usages, plotLabel }: { activities: CultivationActivity[]; executions: ActivityExecution[]; usages: ActivityInputUsage[]; plotLabel: (id: string) => string }) {
+  const { executionsByActivity, usagesByExecution } = groupHistoryRecords({ executions, inputUsages: usages });
   const completedCount = activities.filter((activity) => activity.status === "COMPLETED").length;
   const skippedCount = activities.filter((activity) => activity.status === "SKIPPED").length;
   const cancelledCount = activities.filter((activity) => activity.status === "CANCELLED").length;
@@ -1993,6 +2079,25 @@ function HistoryView({ activities, plotLabel }: { activities: CultivationActivit
                     <Pill kind={activity.status}>{activityStatusLabels[activity.status]}</Pill>
                   </div>
                   {activity.description ? <p className="mt-2 text-xs leading-5 text-neutral-600">{activity.description}</p> : null}
+                  {activity.status === "COMPLETED" ? (() => {
+                    const records = executionsByActivity.get(activity.id) ?? [];
+                    return records.length ? records.map((execution) => {
+                      const recorded = usagesByExecution.get(execution.id) ?? [];
+                      return <div key={execution.id} className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs text-neutral-700">
+                        <p>Thực hiện: {formatDateTime(execution.startedAt)} → {formatDateTime(execution.completedAt)}</p>
+                        <p>Người thực hiện: {execution.executedBy}</p>
+                        {execution.actualArea != null ? <p>Diện tích: {execution.actualArea} {execution.areaUnit || ""}</p> : null}
+                        {execution.notes ? <p>Ghi chú: {execution.notes}</p> : null}
+                        {recorded.length ? <div className="mt-2 space-y-2"><b>Vật tư đã sử dụng</b>{recorded.map((usage) => <div key={usage.id} className="rounded-lg border border-neutral-200 bg-white p-2">
+                          <b>{usage.agriculturalInputSnapshot?.tradeName || usage.agriculturalInputSnapshot?.productName || usage.agriculturalInputId}</b> · {usage.agriculturalInputSnapshot?.category || "Chưa rõ loại"} · {usage.quantityUsed} {usage.quantityUnit}
+                          {usage.batchNumber ? <p>Batch/Lot: {usage.batchNumber}</p> : null}
+                          {usage.activeIngredientSnapshots?.length ? <p>Hoạt chất: {usage.activeIngredientSnapshots.map((ingredient) => ingredient.name).join(", ")}</p> : null}
+                          {usage.agriculturalInputSnapshot?.preHarvestIntervalDays != null ? <p>PHI: {usage.agriculturalInputSnapshot.preHarvestIntervalDays} ngày</p> : null}
+                          {usage.calculatedSafeHarvestDate ? <p>Ngày an toàn dự kiến: {formatDate(usage.calculatedSafeHarvestDate)}</p> : null}
+                        </div>)}</div> : <p className="mt-2">Không có dữ liệu vật tư được ghi nhận.</p>}
+                      </div>;
+                    }) : <p className="mt-2 text-xs text-neutral-500">Chưa có dữ liệu thực hiện được ghi nhận.</p>;
+                  })() : null}
                 </div>
               </div>
             ))}
@@ -2125,26 +2230,52 @@ function LabView({
   batches,
   context,
   canManage,
+  canCreateSample,
   actorId,
   seasonLabel,
   onCreateSample,
+  onSendSample,
+  onCreateResult,
 }: {
   samples: LabSample[];
   batches: HarvestBatch[];
   context: ContextSelection;
   canManage: boolean;
+  canCreateSample: boolean;
   actorId: string;
   seasonLabel: string;
   onCreateSample: (body: Record<string, unknown>, done: () => void) => void;
+  onSendSample: (id: string) => void;
+  onCreateResult: (body: Record<string, unknown>, after: (result: LabResidueResult) => void) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ harvestBatchId: "", sampleCode: "", sampleType: "FRUIT", sampledAt: "", laboratoryName: "" });
+  const [form, setForm] = useState({ harvestBatchId: "", sampleCode: "", sampleType: "FRUIT", sampledAt: "", laboratoryName: "", expectedCodes: "" });
+  const [selectedSampleId, setSelectedSampleId] = useState("");
+  const [resultsState, setResultsState] = useState<{ sampleId: string; items: LabResidueResult[] }>({ sampleId: "", items: [] });
+  const [resultForm, setResultForm] = useState({ activeIngredientCode: "", activeIngredientName: "", measuredValue: "", unit: "mg/kg", detectionLimit: "", quantificationLimit: "" });
+  const [latestResult, setLatestResult] = useState<LabResidueResult | null>(null);
+  const selectedSample = samples.find((sample) => sample.id === selectedSampleId);
+  const results = resultsState.sampleId === selectedSampleId ? resultsState.items : [];
+  const setResults = (update: (current: LabResidueResult[]) => LabResidueResult[]) => {
+    setResultsState((current) => ({
+      sampleId: selectedSampleId,
+      items: update(current.sampleId === selectedSampleId ? current.items : []),
+    }));
+  };
+  useEffect(() => {
+    if (!selectedSampleId) return;
+    let active = true;
+    cultivationClient.listLabResults(selectedSampleId)
+      .then((value) => { if (active) setResultsState({ sampleId: selectedSampleId, items: value }); })
+      .catch(() => { if (active) setResultsState({ sampleId: selectedSampleId, items: [] }); });
+    return () => { active = false; };
+  }, [selectedSampleId, samples]);
   return (
     <>
       <Section
         title="Kiểm nghiệm dư lượng"
         description="Đề nghị lấy mẫu, theo dõi mẫu và xem trạng thái kết quả."
-        action={canManage ? <button type="button" onClick={() => setOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E5A44] px-3 text-xs font-bold text-white"><Plus size={14} />Đề nghị lấy mẫu</button> : null}
+        action={canCreateSample ? <button type="button" onClick={() => setOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E5A44] px-3 text-xs font-bold text-white"><Plus size={14} />Đề nghị lấy mẫu</button> : null}
       >
         <DataTable
           headers={["Mã yêu cầu", "Mùa vụ", "Ngày dự kiến", "Phòng kiểm nghiệm", "Trạng thái"]}
@@ -2153,6 +2284,15 @@ function LabView({
         />
         <div className="mt-4 flex flex-wrap gap-2">
           {(Object.keys(labResultLabels) as Array<keyof typeof labResultLabels>).map((status) => <Pill key={status} kind={status}>{labResultLabels[status]}</Pill>)}
+        </div>
+        <div className="mt-4 grid gap-3 rounded-2xl border border-neutral-200 p-4">
+          <Field label="Mẫu cần xem kết quả"><select className={inputClass} value={selectedSampleId} onChange={(event) => { setSelectedSampleId(event.target.value); setLatestResult(null); }}><option value="">Chọn mẫu</option>{samples.map((sample) => <option key={sample.id} value={sample.id}>{sample.sampleCode} · {sample.status}</option>)}</select></Field>
+          {selectedSample ? <><p className="text-xs text-neutral-600">Panel tối thiểu: {selectedSample.expectedActiveIngredientCodes?.join(", ") || "Chưa xác định; cần bổ sung trước khi kết luận lab"}</p>
+            {selectedSample.status === "COLLECTED" && canCreateSample ? <button type="button" onClick={() => onSendSample(selectedSample.id)} className="w-fit rounded-xl bg-neutral-800 px-3 py-2 text-xs font-bold text-white">Gửi mẫu</button> : null}
+            {results.length ? <DataTable headers={["Hoạt chất", "Giá trị đo", "MRL server", "Kết quả", "Nguồn"]} rows={results.map((result) => [result.activeIngredientCode, `${result.measuredValue ?? "Không phát hiện"} ${result.unit}`, result.applicableMrl == null ? "Không có" : `${result.applicableMrl} ${result.mrlUnit ?? ""}`, result.evaluationPolicyVersion ? result.resultStatus : "Chưa xác minh (legacy)", result.residueStandardId ?? result.applicableMrlSource ?? "Không có"])} empty="Chưa có kết quả." /> : <p className="text-xs text-neutral-500">Chưa có kết quả lab; trạng thái này không phải PASS.</p>}
+          </> : null}
+          {latestResult ? <div className="rounded-xl bg-neutral-50 p-3 text-xs text-neutral-700"><b>Kết quả do backend tính: {latestResult.resultStatus}</b><div>Đo được: {latestResult.measuredValue ?? "Không phát hiện"} {latestResult.unit}</div><div>MRL áp dụng: {latestResult.applicableMrl == null ? "Không tìm thấy" : `${latestResult.applicableMrl} ${latestResult.mrlUnit ?? ""}`}</div><div>Standard: {latestResult.residueStandardId ?? "Không có"} · {latestResult.applicableMrlSource ?? "Không có nguồn"}</div></div> : null}
+          {selectedSample?.status === "SENT" && canManage ? <form className="grid gap-2 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); onCreateResult({ labSampleId: selectedSample.id, activeIngredientCode: resultForm.activeIngredientCode.trim(), activeIngredientName: resultForm.activeIngredientName.trim(), measuredValue: Number(resultForm.measuredValue), unit: resultForm.unit.trim(), detectionLimit: resultForm.detectionLimit ? Number(resultForm.detectionLimit) : null, quantificationLimit: resultForm.quantificationLimit ? Number(resultForm.quantificationLimit) : null }, (result) => { setLatestResult(result); setResults((current) => [...current, result]); }); }}><Field label="Mã hoạt chất"><input required className={inputClass} value={resultForm.activeIngredientCode} onChange={(event) => setResultForm({ ...resultForm, activeIngredientCode: event.target.value })} /></Field><Field label="Tên hoạt chất"><input required className={inputClass} value={resultForm.activeIngredientName} onChange={(event) => setResultForm({ ...resultForm, activeIngredientName: event.target.value })} /></Field><Field label="Giá trị đo"><input required type="number" min="0" step="any" className={inputClass} value={resultForm.measuredValue} onChange={(event) => setResultForm({ ...resultForm, measuredValue: event.target.value })} /></Field><Field label="Đơn vị"><input required className={inputClass} value={resultForm.unit} onChange={(event) => setResultForm({ ...resultForm, unit: event.target.value })} /></Field><Field label="LOD"><input type="number" min="0" step="any" className={inputClass} value={resultForm.detectionLimit} onChange={(event) => setResultForm({ ...resultForm, detectionLimit: event.target.value })} /></Field><Field label="LOQ"><input type="number" min="0" step="any" className={inputClass} value={resultForm.quantificationLimit} onChange={(event) => setResultForm({ ...resultForm, quantificationLimit: event.target.value })} /></Field><button className="rounded-xl bg-[#2E5A44] px-4 py-2 text-xs font-bold text-white">Ghi kết quả đo và để backend đánh giá</button></form> : null}
         </div>
       </Section>
       <Drawer title="Đề nghị lấy mẫu" open={open} onClose={() => setOpen(false)}>
@@ -2173,6 +2313,7 @@ function LabView({
                   laboratoryName: form.laboratoryName,
                   status: "COLLECTED",
                   attachments: [],
+                  expectedActiveIngredientCodes: form.expectedCodes.split(",").map((code) => code.trim()).filter(Boolean),
                 },
                 () => setOpen(false),
               );
@@ -2190,6 +2331,7 @@ function LabView({
               <Field label="Mã yêu cầu"><input required className={inputClass} value={form.sampleCode} onChange={(e) => setForm({ ...form, sampleCode: e.target.value })} /></Field>
               <Field label="Loại mẫu"><select required className={inputClass} value={form.sampleType} onChange={(e) => setForm({ ...form, sampleType: e.target.value })}><option value="FRUIT">Trái</option><option value="LEAF">Lá</option><option value="SOIL">Đất</option><option value="WATER">Nước</option></select></Field>
             </div>
+            <Field label="Mã hoạt chất trong panel (phân cách bằng dấu phẩy)"><input className={inputClass} value={form.expectedCodes} onChange={(event) => setForm({ ...form, expectedCodes: event.target.value })} /></Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Thời điểm lấy mẫu"><input required type="datetime-local" className={inputClass} value={form.sampledAt} onChange={(e) => setForm({ ...form, sampledAt: e.target.value })} /></Field>
               <Field label="Phòng kiểm nghiệm"><input required className={inputClass} value={form.laboratoryName} onChange={(e) => setForm({ ...form, laboratoryName: e.target.value })} /></Field>
@@ -2207,6 +2349,7 @@ function SafetyView({
   market,
   batches,
   assessment,
+  safeHarvestDate,
   onMarketChange,
   onAssess,
 }: {
@@ -2214,12 +2357,14 @@ function SafetyView({
   market: string;
   batches: HarvestBatch[];
   assessment: ComplianceAssessment | null;
+  safeHarvestDate: string | null;
   onMarketChange: (value: string) => void;
   onAssess: (harvestBatchId?: string) => void;
 }) {
   const [batchId, setBatchId] = useState("");
   return (
     <Section title="An toàn thu hoạch" description="Đánh giá điều kiện thu hoạch theo mùa vụ đang chọn, không yêu cầu nhập mã kỹ thuật.">
+      <p className="mb-3 text-sm text-neutral-700">Ngày an toàn dự kiến từ vật tư đã ghi nhận: <b>{safeHarvestDate ? formatDate(safeHarvestDate) : "Chưa có ngày an toàn được tính"}</b></p>
       <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <Field label="Thị trường">
           <select className={inputClass} value={market} onChange={(e) => onMarketChange(e.target.value)}>

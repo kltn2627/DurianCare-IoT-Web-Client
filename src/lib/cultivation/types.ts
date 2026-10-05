@@ -154,6 +154,20 @@ export interface CultivationPlan {
   updatedAt: string;
 }
 
+export interface CultivationSeason {
+  id: string;
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FarmOption {
   id: string;
   name?: string | null;
@@ -165,6 +179,8 @@ export interface FarmOption {
 export type FarmZoneStatus = "ACTIVE" | "INACTIVE" | "QUARANTINED" | "ARCHIVED";
 
 export interface FarmZoneRequest {
+  agronomy?: import("./zoneAgronomy").FarmZoneAgronomy | null;
+  status?: FarmZoneStatus;
   areaSquareMeters?: number | null;
   boundaryGeoJson?: Record<string, unknown> | null;
   code?: string | null;
@@ -368,6 +384,7 @@ export interface LabSample {
   laboratoryName: string;
   laboratoryAccreditation?: string | null;
   status: LabSampleStatus;
+  expectedActiveIngredientCodes?: string[];
   attachments: string[];
   createdAt: string;
 }
@@ -383,6 +400,12 @@ export interface LabResidueResult {
   quantificationLimit?: number | null;
   applicableMrl?: number | null;
   applicableMrlSource?: string | null;
+  residueStandardId?: string | null;
+  mrlUnit?: string | null;
+  standardEffectiveFrom?: string | null;
+  standardEffectiveTo?: string | null;
+  standardSourceType?: string | null;
+  evaluationPolicyVersion?: string | null;
   resultStatus: LabResultStatus;
   verifiedBy?: string | null;
   verifiedAt?: string | null;
@@ -449,6 +472,9 @@ export interface ExportRelease {
 
 export interface TraceabilitySnapshot {
   releaseId: string;
+  status: ExportReleaseStatus;
+  recalledAt?: string | null;
+  recallReason?: string | null;
   snapshot: Record<string, unknown>;
 }
 

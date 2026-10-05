@@ -10,6 +10,7 @@ import type {
   CultivationActivity,
   CultivationDashboardData,
   CultivationPlan,
+  CultivationSeason,
   CultivationZone,
   CultivationZoneRequest,
   CanonicalCultivationZone,
@@ -28,6 +29,7 @@ import type {
   TraceabilitySnapshot,
 } from "./types";
 import { cultivationMockClient } from "./mock";
+import { filterCalendarScope } from "./hierarchy";
 
 export class CultivationApiError extends Error {
   constructor(
@@ -102,6 +104,9 @@ function unwrapArray<T>(payload: unknown): T[] {
 }
 
 function shouldUseMock(caught: unknown) {
+  if (process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_ENABLE_CULTIVATION_MOCK !== "true") {
+    return false;
+  }
   if (caught instanceof CultivationApiError) {
     return caught.status === 404 || caught.status === 501 || caught.status === 503;
   }
@@ -163,6 +168,8 @@ export const farmZoneClient = {
 };
 
 export const cultivationClient = {
+  listSeasons: (farmId: string, plotId: string) =>
+    cultivationRequest<CultivationSeason[]>(`/api/v1/cultivation-seasons${queryString({ farmId, plotId })}`),
   listFarms: async () => {
     try {
       const payload = await cultivationRequest<unknown>("/api/v1/farms");
@@ -373,6 +380,10 @@ export const cultivationClient = {
     cultivationRequest<LabSample>("/api/v1/lab-samples", { method: "POST", body: JSON.stringify(body) }),
   createLabResult: (body: Record<string, unknown>) =>
     cultivationRequest<LabResidueResult>("/api/v1/lab-results", { method: "POST", body: JSON.stringify(body) }),
+  sendLabSample: (id: string) =>
+    cultivationRequest<LabSample>(`/api/v1/lab-samples/${encodeURIComponent(id)}/send`, { method: "POST" }),
+  listLabResults: (sampleId: string) =>
+    cultivationRequest<LabResidueResult[]>(`/api/v1/lab-samples/${encodeURIComponent(sampleId)}/results`),
 
   listHarvestBatches: (query?: { cultivationSeasonId?: string; farmId?: string; plotId?: string }) =>
     cultivationRequest<HarvestBatch[]>(`/api/v1/harvest-batches${queryString(query)}`),
@@ -392,54 +403,50 @@ export const cultivationClient = {
     cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}`),
   createExportRelease: (body: Record<string, unknown>) =>
     cultivationRequest<ExportRelease>("/api/v1/export-releases", { method: "POST", body: JSON.stringify(body) }),
-  submitExportRelease: (id: string, userId: string) =>
+  submitExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/submit`, {
       method: "POST",
-      body: JSON.stringify({ userId }),
     }),
-  approveExportRelease: (id: string, userId: string) =>
+  approveExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/approve`, {
       method: "POST",
-      body: JSON.stringify({ userId }),
     }),
-  releaseExportRelease: (id: string, userId: string) =>
+  releaseExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/release`, {
       method: "POST",
-      body: JSON.stringify({ userId }),
     }),
-  recallExportRelease: (id: string, userId: string, reason: string) =>
+  recallExportRelease: (id: string, reason: string) =>
     cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/recall`, {
       method: "POST",
-      body: JSON.stringify({ userId, reason }),
+      body: JSON.stringify({ reason }),
     }),
   traceability: (id: string) =>
     cultivationRequest<TraceabilitySnapshot>(`/api/v1/export-releases/${encodeURIComponent(id)}/traceability`),
   auditLogs: (query?: { resourceType?: string; resourceId?: string }) =>
     cultivationRequest<AuditLog[]>(`/api/v1/audit-logs${queryString(query)}`),
 
-  dashboard: async (): Promise<CultivationDashboardData> => {
-    try {
-      const [plans, activities, inputs, residueStandards, labSamples, harvestBatches, exportReleases] = await Promise.all([
-        cultivationClient.listPlans(),
-        cultivationClient.listActivities(),
+  dashboard: async (scope: { farmId: string; plotId: string; cultivationSeasonId: string }): Promise<CultivationDashboardData> => {
+      const [plans, activities, inputs, residueStandards, harvestBatches] = await Promise.all([
+        cultivationClient.listPlans(scope),
+        cultivationClient.listActivities({ cultivationSeasonId: scope.cultivationSeasonId }),
         cultivationClient.listAgriculturalInputs(),
         cultivationClient.listResidueStandards(),
-        cultivationClient.listLabSamples(),
-        cultivationClient.listHarvestBatches(),
-        cultivationClient.listExportReleases(),
+        cultivationClient.listHarvestBatches(scope),
       ]);
+      const batchIds = Array.isArray(harvestBatches) ? harvestBatches.map((batch) => batch.id) : [];
+      const [samplesByBatch, releasesByBatch] = await Promise.all([
+        Promise.all(batchIds.map((harvestBatchId) => cultivationClient.listLabSamples({ harvestBatchId }))),
+        Promise.all(batchIds.map((harvestBatchId) => cultivationClient.listExportReleases({ harvestBatchId }))),
+      ]);
+      const scoped = filterCalendarScope(Array.isArray(plans) ? plans : [], Array.isArray(activities) ? activities : [], scope);
       return {
-        plans: Array.isArray(plans) ? plans : [],
-        activities: Array.isArray(activities) ? activities : [],
+        plans: scoped.plans,
+        activities: scoped.activities,
         inputs: Array.isArray(inputs) ? inputs : [],
         residueStandards: Array.isArray(residueStandards) ? residueStandards : [],
-        labSamples: Array.isArray(labSamples) ? labSamples : [],
+        labSamples: samplesByBatch.flat(),
         harvestBatches: Array.isArray(harvestBatches) ? harvestBatches : [],
-        exportReleases: Array.isArray(exportReleases) ? exportReleases : [],
+        exportReleases: releasesByBatch.flat(),
       };
-    } catch (caught) {
-      if (shouldUseMock(caught)) return cultivationMockClient.dashboard();
-      throw caught;
-    }
   },
 };
