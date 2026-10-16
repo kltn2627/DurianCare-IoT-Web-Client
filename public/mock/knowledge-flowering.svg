@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#234b37"/>
+      <stop offset="1" stop-color="#567a55"/>
+    </linearGradient>
+    <radialGradient id="sun">
+      <stop offset="0" stop-color="#f6df75" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#f6df75" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#bg)"/>
+  <circle cx="980" cy="110" r="260" fill="url(#sun)"/>
+  <path d="M0 560c190-120 360-110 540 8 210 139 423 90 660-50v202H0z" fill="#173626"/>
+  <g fill="none" stroke="#d9c35c" stroke-width="9" stroke-linecap="round">
+    <path d="M560 600c-34-181-11-343 71-489"/>
+    <path d="M611 315c-96-22-153-74-184-154"/>
+    <path d="M600 390c92-30 163-87 209-172"/>
+  </g>
+  <g fill="#f0d86f">
+    <circle cx="430" cy="154" r="24"/><circle cx="470" cy="185" r="18"/>
+    <circle cx="810" cy="211" r="23"/><circle cx="772" cy="245" r="17"/>
+    <circle cx="636" cy="111" r="20"/><circle cx="610" cy="142" r="14"/>
+  </g>
+  <text x="72" y="96" fill="#fff" font-family="Arial" font-size="28" font-weight="700" letter-spacing="4">DURIANCARE FIELD NOTE</text>
+</svg>

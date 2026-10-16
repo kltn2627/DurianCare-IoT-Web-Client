@@ -6,30 +6,94 @@
   --moss-soft: #e9f0ea;
   --durian: #eed56d;
   --durian-soft: #fbf4cf;
-  --ink: #203329;
-  --muted: #718078;
+  --text-strong: #17251d;
+  --text-body: #2f4036;
+  --text-muted: #66756c;
+  --text-subtle: #87928b;
+  --text-inverse: #f7fbf7;
+  --text-brand: #2e5a44;
+  --ink: var(--text-body);
+  --muted: var(--text-muted);
   --canvas: #f4f6f1;
   --line: #e1e7df;
+  --font-caption: .75rem;
+  --font-helper: .8125rem;
+  --font-body: .875rem;
+  --font-body-lg: .9375rem;
+  --font-title: 1rem;
+  --font-section: 1.125rem;
+  --font-page: 1.5rem;
+  --font-hero: 1.875rem;
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+html,
+body {
+  font-family: Inter, Roboto, "Noto Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
 body {
   margin: 0;
   background:
     radial-gradient(circle at 8% 5%, rgba(238, 213, 109, .16), transparent 23rem),
     var(--canvas);
-  color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-body);
+  font-size: var(--font-body);
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
+
+h1, h2, h3, h4, h5, h6, b, strong {
+  color: var(--text-strong);
+}
+
+p, li, dd {
+  color: inherit;
+}
+
+small {
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.text-app-strong { color: var(--text-strong); }
+.text-app-body { color: var(--text-body); }
+.text-app-muted { color: var(--text-muted); }
+.text-app-subtle { color: var(--text-subtle); }
+.text-app-inverse { color: var(--text-inverse); }
+.text-app-brand { color: var(--text-brand); }
+
+.input-control {
+  width: 100%;
+  height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: .875rem;
+  background: white;
+  padding: 0 .75rem;
+  color: var(--text-strong);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.4;
+  outline: none;
+}
+.input-control:focus {
+  border-color: #9bb4a3;
+  box-shadow: 0 0 0 3px rgba(46, 90, 68, .08);
+}
 
 .panel {
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: rgba(255,255,255,.94);
   box-shadow: 0 10px 35px rgba(39, 73, 54, .06);
+}
+
+.panel :where(p, span, small, td, th, label, input, select, textarea, button) {
+  line-height: 1.45;
 }
 
 .grid-pattern {
@@ -41,6 +105,80 @@ button { cursor: pointer; }
 
 .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #bac7bd; border-radius: 999px; }
+
+.prose-durian > * + * {
+  margin-top: 1.15em;
+}
+
+.prose-durian :where(h1, h2, h3) {
+  line-height: 1.25;
+  margin-top: 2em;
+}
+
+.prose-durian :where(p) {
+  color: #33443a;
+}
+
+.prose-durian :where(ul, ol) {
+  padding-left: 1.35rem;
+}
+
+.prose-durian :where(ul) {
+  list-style: disc;
+}
+
+.prose-durian :where(ol) {
+  list-style: decimal;
+}
+
+.prose-durian :where(li + li) {
+  margin-top: .45rem;
+}
+
+.prose-durian :where(blockquote) {
+  border-left: 4px solid var(--moss);
+  border-radius: 0 1rem 1rem 0;
+  background: #f3f8f4;
+  padding: 1rem 1.2rem;
+  color: #3b4d42;
+  font-weight: 650;
+}
+
+.prose-durian :where(a) {
+  color: var(--moss);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose-durian :where(a:hover) {
+  color: var(--moss-dark);
+}
+
+.prose-durian :where(table) {
+  min-width: 640px;
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.prose-durian :where(th, td) {
+  border: 1px solid #dce7de;
+  padding: .75rem .9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose-durian :where(th) {
+  background: #edf3ee;
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
+.prose-durian :where(img) {
+  max-width: 100%;
+  height: auto;
+}
 
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 rgba(94, 155, 111, .35); }
@@ -54,3 +192,4 @@ button { cursor: pointer; }
   body { background: white; }
   .panel { box-shadow: none; }
 }
+

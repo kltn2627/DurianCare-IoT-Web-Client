@@ -10,7 +10,6 @@ lerna-debug.log*
 node_modules
 .next
 out
-*.local
 
 # Editor directories and files
 .vscode/*
@@ -24,13 +23,13 @@ out
 *.sw?
 .agent
 .agent/*
+.claude
 
 # Local environment files
 .env
-.env.*
-!.env.example
-node_modules/ 
-.expo/ 
-npm-debug.log* 
-yarn-error.log* 
-.DS_Store 
+.env.local
+.env.development
+.env.production
+
+*.tsbuildinfo
+.data/

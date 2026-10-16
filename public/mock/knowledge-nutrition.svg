@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720">
+  <defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#f0dc79"/><stop offset="1" stop-color="#c5a943"/></linearGradient></defs>
+  <rect width="1200" height="720" fill="#f5f0df"/>
+  <circle cx="930" cy="140" r="300" fill="url(#g)" opacity=".75"/>
+  <path d="M0 590c240-95 460-113 690-36 194 65 350 56 510-16v182H0z" fill="#294f3b"/>
+  <path d="M525 584c4-194 6-294 12-427" fill="none" stroke="#2e5a44" stroke-width="15"/>
+  <g fill="#4f7e56">
+    <ellipse cx="430" cy="260" rx="118" ry="51" transform="rotate(28 430 260)"/>
+    <ellipse cx="645" cy="330" rx="125" ry="53" transform="rotate(-27 645 330)"/>
+    <ellipse cx="438" cy="421" rx="105" ry="44" transform="rotate(24 438 421)"/>
+  </g>
+  <g fill="#fff8d6" font-family="Arial" font-size="42" font-weight="800">
+    <text x="805" y="177">N</text><text x="910" y="245">P</text><text x="1010" y="150">K</text>
+  </g>
+  <text x="70" y="98" fill="#284735" font-family="Arial" font-size="28" font-weight="700" letter-spacing="4">NUTRITION FIELD GUIDE</text>
+</svg>
