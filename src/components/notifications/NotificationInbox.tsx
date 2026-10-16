@@ -18,6 +18,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { friendlyApiMessage } from "@/lib/feedback";
+import { Toast } from "@/components/feedback/Toast";
+import { notificationTargetUrl } from "@/lib/notification/target";
 import { notificationClient, NotificationApiError } from "@/lib/notification/client";
 import type {
   NotificationItem,
@@ -57,11 +59,6 @@ function notificationTone(type: string) {
   if (normalized.includes("SYSTEM")) return "bg-amber-50 text-amber-700";
   if (normalized.includes("AI")) return "bg-[#edf3ee] text-[#2E5A44]";
   return "bg-neutral-100 text-neutral-600";
-}
-
-function notificationTargetUrl(item: NotificationItem) {
-  const value = item.metadata?.targetUrl;
-  return typeof value === "string" && value.startsWith("/") ? value : null;
 }
 
 function NotificationSkeleton() {
@@ -195,6 +192,8 @@ export function NotificationInbox() {
   const [error, setError] = useState<string | null>(null);
   const [refreshSeed, setRefreshSeed] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -304,12 +303,12 @@ export function NotificationInbox() {
   };
 
   const markAllRead = async () => {
-    if (!window.confirm("Đánh dấu toàn bộ thông báo hiện tại là đã đọc?")) {
-      return;
-    }
+    if (busyId) return;
     setBusyId("__all__");
     try {
-      await notificationClient.markAllRead();
+      const result = await notificationClient.markAllRead();
+      setToast(result.updatedCount > 0 ? `Đã đánh dấu ${result.updatedCount} thông báo đã đọc.` : "Không còn thông báo chưa đọc.");
+      setPage(0);
       refresh();
     } catch (cause) {
       setError(
@@ -327,12 +326,13 @@ export function NotificationInbox() {
   };
 
   const removeNotification = async (id: string) => {
-    if (!window.confirm("Xoá thông báo này khỏi hộp thư?")) {
-      return;
-    }
+    if (busyId) return;
+    setPendingDelete(null);
     setBusyId(id);
     try {
       await notificationClient.delete(id);
+      setToast("Đã xóa thông báo.");
+      setPage(0);
       refresh();
     } catch (cause) {
       setError(
@@ -351,35 +351,23 @@ export function NotificationInbox() {
 
   return (
     <div className="space-y-5">
-      <section className="grid-pattern overflow-hidden rounded-[26px] bg-[#284d3a] p-6 text-white shadow-sm sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="max-w-3xl space-y-3">
-            <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-[#eed56d]">
-              <Bell size={12} />
-              Notification inbox
-            </p>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Hộp thư thông báo của DurianCare
-            </h1>
-            <p className="max-w-3xl text-[13px] leading-relaxed text-[#d0ddd4]">
-              Theo dõi cảnh báo hệ thống, OTP, nhắc việc vận hành và các cập nhật liên quan trực
-              tiếp đến phiên làm việc của bạn.
-            </p>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {pendingDelete && <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onKeyDown={event => { if (event.key === "Escape") setPendingDelete(null); }}>
+        <section role="alertdialog" aria-modal="true" aria-labelledby="delete-notification-title" className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
+          <h2 id="delete-notification-title" className="font-bold">Xóa thông báo này?</h2>
+          <p className="mt-2 text-sm text-neutral-600">Thông báo sẽ được xóa khỏi hộp thư của bạn.</p>
+          <div className="mt-5 flex justify-end gap-3">
+            <button autoFocus type="button" onClick={() => setPendingDelete(null)} className="rounded-lg border px-4 py-2 text-sm">Hủy</button>
+            <button type="button" onClick={() => void removeNotification(pendingDelete)} className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white">Xóa</button>
           </div>
-          <div className="grid min-w-[220px] grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-white/10 bg-white/[.08] px-4 py-4">
-              <small className="text-xs text-[#c8d6cc]">Tổng thông báo</small>
-              <b className="mt-1 block text-2xl">{totalLabel}</b>
-            </div>
-            <div className="rounded-2xl bg-[#eed56d] px-4 py-4 text-[#284d3a]">
-              <small className="text-xs font-semibold">Chưa đọc</small>
-              <b className="mt-1 block text-2xl">{unreadCount}</b>
-            </div>
-          </div>
-        </div>
+        </section>
+      </div>}
+      <section className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 py-4">
+        <h1 className="flex items-center gap-3 text-2xl font-bold text-neutral-900"><Bell size={24} />Thông báo</h1>
+        <span className="text-sm text-neutral-600">{loading ? "Đang tải…" : `${unreadCount} chưa đọc`}</span>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_320px]">
+      <section className="space-y-5">
         <div className="space-y-5">
           <div className="panel overflow-hidden p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -448,7 +436,7 @@ export function NotificationInbox() {
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4">
               <p className="text-xs leading-relaxed text-neutral-500">
-                Hộp thư inbox được bảo vệ qua header người dùng do lớp proxy của Web tự đính kèm.
+                {loading ? "Đang tải hộp thư…" : totalLabel}
               </p>
               <button
                 type="button"
@@ -475,7 +463,7 @@ export function NotificationInbox() {
                 <button
                   type="button"
                   onClick={markAllRead}
-                  disabled={busyId === "__all__" || unreadCount === 0}
+                  disabled={busyId !== null || unreadCount === 0 || loading}
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-xs font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
                 >
                   {busyId === "__all__" ? (
@@ -510,10 +498,10 @@ export function NotificationInbox() {
                   <NotificationCard
                     key={item.id}
                     item={item}
-                    busy={busyId === item.id}
+                    busy={busyId !== null}
                     onMarkRead={markRead}
                     onOpen={openNotification}
-                    onDelete={removeNotification}
+                    onDelete={setPendingDelete}
                   />
                 ))}
               </div>
@@ -584,69 +572,6 @@ export function NotificationInbox() {
           </section>
         </div>
 
-        <aside className="space-y-5">
-          <section className="panel p-5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-[#e9f0ea] text-[#2E5A44]">
-                <Bell size={18} />
-              </span>
-              <div>
-                <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
-                  Trạng thái hộp thư
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  Tổng hợp số lượng chưa đọc và trạng thái hiện tại.
-                </p>
-              </div>
-            </div>
-
-            <dl className="mt-5 space-y-3">
-              {[
-                ["Chưa đọc", unreadCount],
-                ["Đang xem", data?.numberOfElements ?? 0],
-                ["Tổng trang", data?.totalPages ?? 0],
-                ["Chế độ", mode === "UNREAD" ? "Chưa đọc" : "Tất cả"],
-              ].map(([label, value]) => (
-                <div
-                  key={String(label)}
-                  className="flex items-start justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3"
-                >
-                  <dt className="text-xs font-semibold text-neutral-500">{label}</dt>
-                  <dd className="max-w-[160px] text-right text-xs font-semibold text-neutral-900">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          <section className="panel p-5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-[#fbf2cb] text-[#7f6415]">
-                <CheckCheck size={18} />
-              </span>
-              <div>
-                <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
-                  Mẹo xử lý nhanh
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  Đánh dấu đã đọc để giảm số đếm trên chuông, hoặc xoá thông báo không còn giá trị.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-2">
-              {["OTP vừa gửi", "Cảnh báo IoT", "Nhắc lịch canh tác"].map((label) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-xs font-semibold text-neutral-700"
-                >
-                  {label}
-                </div>
-              ))}
-            </div>
-          </section>
-        </aside>
       </section>
     </div>
   );

@@ -11,10 +11,6 @@ const nextConfig: NextConfig = {
       // beforeFiles so these run before the api/backend/[...path] catch-all
       beforeFiles: [
         {
-          source: "/api/backend/v1/sensors/:path*",
-          destination: `${iotServiceUrl}/api/v1/sensors/:path*`,
-        },
-        {
           source: "/api/backend/v1/camera/:path*",
           destination: `${iotServiceUrl}/api/v1/camera/:path*`,
         },

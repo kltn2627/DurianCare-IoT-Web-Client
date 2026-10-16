@@ -29,8 +29,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { cultivationClient } from "@/lib/cultivation/client";
-import type { CultivationZone, FarmOption } from "@/lib/cultivation/types";
+import { loadGardenCatalog, type GardenZone } from "@/lib/cultivation/garden";
+import type { FarmOption } from "@/lib/cultivation/types";
 import { friendlyApiMessage, validateAddress, validateBio, validateDateOfBirth, validatePhoneNumber, validateProfileFullName, validateProvinceCity } from "@/lib/feedback";
 import { profileClient, ProfileApiError } from "@/lib/profile/client";
 import type { ProfileGender, ProfileRecord, ProfileUpdateRequest } from "@/lib/profile/types";
@@ -128,8 +128,9 @@ function zoneAge(plantingDate?: string | null) {
   return restMonths ? `${years} năm ${restMonths} tháng` : `${years} năm`;
 }
 
-function areaText(zone: CultivationZone) {
-  const unit = zone.areaUnit === "HECTARE" ? "ha" : "m2";
+function areaText(zone: GardenZone) {
+  if (zone.areaValue == null) return "Chưa cập nhật";
+  const unit = "m²";
   return `${zone.areaValue} ${unit}`;
 }
 
@@ -182,7 +183,7 @@ export function ProfileView() {
   const { refreshSession } = useAuth();
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
   const [farms, setFarms] = useState<FarmOption[]>([]);
-  const [zones, setZones] = useState<CultivationZone[]>([]);
+  const [zones, setZones] = useState<GardenZone[]>([]);
   const [draft, setDraft] = useState<ProfileFormState | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -236,12 +237,9 @@ export function ProfileView() {
     setGardenLoading(true);
     setGardenError(null);
     try {
-      const [nextFarms, nextZones] = await Promise.all([
-        cultivationClient.listFarms().catch(() => []),
-        cultivationClient.listCultivationZones().catch(() => []),
-      ]);
-      setFarms(nextFarms);
-      setZones(nextZones);
+      const catalog = await loadGardenCatalog();
+      setFarms(catalog.farms);
+      setZones(catalog.zones);
     } catch {
       setGardenError("Không thể tải thông tin nhà vườn lúc này.");
       setFarms([]);
@@ -433,9 +431,9 @@ export function ProfileView() {
   const currentInitials = initialsFromName(currentName);
   const farmNameById = useMemo(() => new Map(farms.map((farm) => [farm.id, farmLabel(farm)])), [farms]);
   const gardenSummary = useMemo(() => {
-    const varieties = Array.from(new Set(zones.map((zone) => zone.variety).filter(Boolean)));
+    const varieties = Array.from(new Set(zones.flatMap(zone => zone.trees.map(tree => tree.variety?.trim())).filter(Boolean)));
     const totalTrees = zones.reduce((sum, zone) => sum + (Number(zone.currentTreeCount) || 0), 0);
-    const productiveZones = zones.filter((zone) => zone.growthStage === "PRODUCTIVE").length;
+    const productiveZones = "Chưa rõ";
     return { varieties, totalTrees, productiveZones };
   }, [zones]);
 
@@ -571,7 +569,7 @@ export function ProfileView() {
           ].map(({ label, value, icon: MetricIcon }) => (
             <article key={label} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
               <MetricIcon size={18} className="text-[#2E5A44]" />
-              <b className="mt-3 block text-2xl text-neutral-950">{value}</b>
+              <b className="mt-3 block text-2xl text-neutral-950">{gardenLoading ? "..." : gardenError ? "Chưa rõ" : value}</b>
               <span className="mt-1 block text-xs font-bold text-neutral-600">{label}</span>
             </article>
           ))}

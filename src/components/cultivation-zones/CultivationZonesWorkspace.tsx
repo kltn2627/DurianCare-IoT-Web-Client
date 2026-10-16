@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, MapPinned, Plus, RefreshCw, Search, Sprout, Trees } from "lucide-react";
 
 import { CultivationApiError, farmZoneClient } from "@/lib/cultivation/client";
 import type { CanonicalCultivationZone, FarmCatalog, FarmZoneStatus } from "@/lib/cultivation/types";
 import { friendlyApiMessage } from "@/lib/feedback";
+import { enrichGardenZone, type GardenZone } from "@/lib/cultivation/garden";
 
 const statusLabels: Record<FarmZoneStatus, string> = {
   ACTIVE: "Đang hoạt động",
@@ -45,39 +46,34 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 export function CultivationZonesWorkspace() {
   const [farms, setFarms] = useState<FarmCatalog[]>([]);
-  const [zones, setZones] = useState<CanonicalCultivationZone[]>([]);
+  const [zones, setZones] = useState<GardenZone[]>([]);
   const [selectedFarmId, setSelectedFarmId] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<"" | FarmZoneStatus>("");
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const loadFarms = useCallback(async () => {
-    const result = await farmZoneClient.listFarms();
-    setFarms(result);
-    setSelectedFarmId((current) => current || (result.length === 1 ? result[0].id : ""));
-  }, []);
-
-  const loadZones = useCallback(async () => {
-    const result = await farmZoneClient.listZones({
-      farmId: selectedFarmId || undefined,
-      search: searchText.trim() || undefined,
-      status: selectedStatus || undefined,
-    });
-    setZones(result);
-  }, [searchText, selectedFarmId, selectedStatus]);
+  const requestSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadFarms(), loadZones()]);
+      const [farmResult, result] = await Promise.all([farmZoneClient.listFarms(), farmZoneClient.listZones({
+      farmId: selectedFarmId || undefined,
+      search: searchText.trim() || undefined,
+      status: selectedStatus || undefined,
+      })]);
+      const enriched = await Promise.all(result.map(enrichGardenZone));
+      if (sequence !== requestSequence.current) return;
+      setFarms(farmResult);
+      setZones(enriched);
     } catch (caught) {
-      setError(errorMessage(caught, "Không thể tải danh sách khu canh tác."));
+      if (sequence === requestSequence.current) setError(errorMessage(caught, "Không thể tải danh sách khu canh tác."));
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
-  }, [loadFarms, loadZones]);
+  }, [searchText, selectedFarmId, selectedStatus]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -105,7 +101,7 @@ export function CultivationZonesWorkspace() {
       {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
       {loading ? <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-sm font-bold text-neutral-600"><span className="inline-flex items-center gap-2"><Loader2 size={18} className="animate-spin" />Đang tải khu canh tác...</span></div> : null}
       {!loading && !error && zones.length === 0 ? <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm font-semibold text-neutral-500">Chưa có khu canh tác phù hợp với bộ lọc hiện tại.</div> : null}
-      {!loading && !error && zones.length > 0 ? <section className="grid gap-4 lg:grid-cols-2">{zones.map((zone) => <Link key={zone.id} href={`/dashboard/client/cultivation-zones/${encodeURIComponent(zone.id)}`} className="rounded-2xl border border-neutral-200 bg-white p-5 transition hover:border-[#cad9ce] hover:shadow-lg hover:shadow-[#2e5a4412]"><div className="flex items-start justify-between gap-4"><div><span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1 text-xs font-bold text-[#2E5A44]"><MapPinned size={14} />{statusLabels[zone.status]}</span><h2 className="mt-3 text-base font-extrabold text-neutral-900">{zone.name}</h2><p className="mt-1 text-sm text-neutral-500">{zone.farmName}</p></div><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]"><Sprout size={18} /></span></div><p className="mt-3 line-clamp-2 text-sm leading-6 text-neutral-600">{zone.description || "Chưa cập nhật mô tả."}</p><div className="mt-4 grid gap-3 sm:grid-cols-3"><Info label="Diện tích" value={areaLabel(zone)} /><Info label="Số cây" value="Chưa cập nhật" /><Info label="Giống" value="Chưa cập nhật" /></div><p className="mt-3 text-xs font-bold text-neutral-500">Tuổi cây: Chưa cập nhật</p></Link>)}</section> : null}
+      {!loading && !error && zones.length > 0 ? <section className="grid gap-4 lg:grid-cols-2">{zones.map((zone) => <Link key={zone.id} href={`/dashboard/client/cultivation-zones/${encodeURIComponent(zone.id)}`} className="rounded-2xl border border-neutral-200 bg-white p-5 transition hover:border-[#cad9ce] hover:shadow-lg hover:shadow-[#2e5a4412]"><div className="flex items-start justify-between gap-4"><div><span className="inline-flex items-center gap-2 rounded-full bg-[#edf3ee] px-3 py-1 text-xs font-bold text-[#2E5A44]"><MapPinned size={14} />{statusLabels[zone.status]}</span><h2 className="mt-3 text-base font-extrabold text-neutral-900">{zone.name}</h2><p className="mt-1 text-sm text-neutral-500">{zone.farmName}</p></div><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]"><Sprout size={18} /></span></div><p className="mt-3 line-clamp-2 text-sm leading-6 text-neutral-600">{zone.description || "Chưa cập nhật mô tả."}</p><div className="mt-4 grid gap-3 sm:grid-cols-3"><Info label="Diện tích" value={areaLabel(zone)} /><Info label="Số cây" value={String(zone.currentTreeCount)} /><Info label="Giống" value={zone.variety || "Chưa cập nhật"} /></div><p className="mt-3 text-xs font-bold text-neutral-500">Tuổi cây: Chưa cập nhật</p></Link>)}</section> : null}
     </div>
   );
 }

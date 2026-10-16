@@ -1,11 +1,17 @@
 export type IotTelemetryReading = {
+  air_humidity?: number | null;
+  device_id?: string;
   deviceUid: string;
   humidity: number | null;
   id: string;
   light: number | null;
   measuredAt: string | null;
   receivedAt: string | null;
+  soil_moisture?: number | null;
+  soilMoisture?: number | null;
+  status?: "DRY_WARNING" | "OPTIMAL" | "WET_WARNING" | null;
   temperature: number | null;
+  timestamp?: string | null;
   units: {
     humidity: "%";
     light: "raw";
@@ -35,6 +41,7 @@ export type IotDevice = {
   name: string;
   status: string;
   telemetryState: string;
+  telemetrySource?: "registry" | "raw-sensor";
 };
 
 export type IotDeviceSummary = Omit<IotDevice, "latestTelemetry">;
@@ -49,7 +56,7 @@ export type IotTelemetryLatestResponse = {
 };
 
 export type IotTelemetryHistoryResponse = {
-  device: IotDeviceSummary;
+  device?: IotDeviceSummary;
   range: {
     from: string;
     limit: number;
@@ -57,6 +64,19 @@ export type IotTelemetryHistoryResponse = {
     to: string;
   };
   telemetry: IotTelemetryReading[];
+};
+
+export type IotRawTelemetryHistoryResponse = {
+  count: number;
+  data: IotTelemetryReading[];
+  limit: number;
+  offset: number;
+};
+
+export type IotFarmSummary = {
+  code?: string | null;
+  id: string;
+  name?: string | null;
 };
 
 export type IotAlert = {

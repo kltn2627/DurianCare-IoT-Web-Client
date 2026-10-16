@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Calendar, Loader2, Plus, RefreshCw, X } from "lucide-react";
 import { treeClient, TreeApiError } from "@/lib/trees/client";
 import type { TreeSummary, ZoneDetail, ZoneSafetySummary } from "@/lib/trees/types";
 import { cultivationClient } from "@/lib/cultivation/client";
-import type { CultivationSeason } from "@/lib/cultivation/types";
+import type { CultivationSeason, CultivationSeasonStatus } from "@/lib/cultivation/types";
 import { TreeMapCanvas } from "./TreeMapCanvas";
 import { ZoneSafetySummaryCard } from "./ZoneSafetySummary";
 import { TreeDetailPanel } from "./TreeDetailPanel";
@@ -173,10 +174,12 @@ function ActiveSeasonBanner({
   season: CultivationSeason;
   safeHarvestDate: string | null | undefined;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const [now] = useState(() => new Date());
+  const today = now.toISOString().slice(0, 10);
+  const nowMs = now.getTime();
   const end = season.endDate ?? null;
   const daysLeft = end
-    ? Math.ceil((new Date(end).getTime() - Date.now()) / 86_400_000)
+    ? Math.ceil((new Date(end).getTime() - nowMs) / 86_400_000)
     : null;
   const endLabel = end
     ? new Date(end).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
@@ -197,8 +200,10 @@ function ActiveSeasonBanner({
     : null;
   const daysUntilSafe =
     safeHarvestDate && safeHarvestDate > today
-      ? Math.ceil((new Date(safeHarvestDate).getTime() - Date.now()) / 86_400_000)
+      ? Math.ceil((new Date(safeHarvestDate).getTime() - nowMs) / 86_400_000)
       : null;
+  const status = season.effectiveStatus ?? season.status ?? getSeasonStatus(season, today);
+  const statusLabel = seasonStatusLabels[status];
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-green-200 bg-green-50 px-5 py-4">
@@ -212,6 +217,7 @@ function ActiveSeasonBanner({
             </p>
           ) : null}
           <p className="mt-0.5 text-xs text-neutral-500">Thu hoạch dự kiến: {endLabel}</p>
+          <p className="mt-1 text-xs font-bold text-green-800">{statusLabel}</p>
           {safeHarvestDate !== undefined ? (
             isSafeNow ? (
               <p className="mt-1 text-xs font-bold text-green-700">✓ Đủ điều kiện thu hoạch (từ {safeLabel})</p>
@@ -233,6 +239,18 @@ function ActiveSeasonBanner({
   );
 }
 
+const seasonStatusLabels: Record<CultivationSeasonStatus, string> = {
+  PREPARING: "Đang chuẩn bị",
+  IN_PROGRESS: "Đang diễn ra",
+  ENDED: "Đã kết thúc",
+};
+
+function getSeasonStatus(season: CultivationSeason, today: string): CultivationSeasonStatus {
+  if (season.endDate && season.endDate < today) return "ENDED";
+  if (season.startDate > today) return "PREPARING";
+  return "IN_PROGRESS";
+}
+
 // ── ZoneTreesWorkspace ────────────────────────────────────────────────────────
 
 interface Props {
@@ -241,6 +259,7 @@ interface Props {
 }
 
 export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
+  const searchParams = useSearchParams();
   const [zone, setZone] = useState<ZoneDetail | null>(null);
   const [trees, setTrees] = useState<TreeSummary[]>([]);
   const [safety, setSafety] = useState<ZoneSafetySummary | null>(null);
@@ -256,6 +275,12 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
     let active = true;
     setLoading(true);
     setError(null);
+    setZone(null);
+    setTrees([]);
+    setSafety(null);
+    setSelectedTreeId(null);
+    setActiveSeason(null);
+    setSafeHarvestDate(undefined);
     const today = new Date().toISOString().slice(0, 10);
     Promise.all([
       treeClient.getZone(zoneId),
@@ -265,6 +290,7 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
     ])
       .then(([zoneData, treeData, safetyData, seasons]) => {
         if (!active) return;
+        if (zoneData.id !== zoneId || zoneData.farmId !== farmId) throw new Error("Khu canh tác không khớp trang trại.");
         setZone(zoneData);
         setTrees(treeData);
         if (safetyData) setSafety(safetyData);
@@ -309,7 +335,15 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
   useEffect(() => {
     return load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneId]);
+  }, [zoneId, farmId]);
+
+  useEffect(() => {
+    const requestedTreeId = searchParams.get("treeId");
+    setSelectedTreeId(current => {
+      const candidate = requestedTreeId || current;
+      return candidate && trees.some(tree => tree.id === candidate) ? candidate : null;
+    });
+  }, [searchParams, trees]);
 
   return (
     <div className="space-y-4">
@@ -342,7 +376,7 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
       </div>
 
       <Link
-        href={`/dashboard/client/farms/${encodeURIComponent(farmId)}`}
+        href="/dashboard/client/farms"
         className="inline-flex items-center gap-2 text-sm font-bold text-[#2E5A44]"
       >
         <ArrowLeft size={15} />
@@ -426,6 +460,12 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
               onClose={() => setSelectedTreeId(null)}
               onDiagnosisSaved={() => {
                 treeClient.listTrees(zoneId).then(setTrees).catch(() => {});
+                treeClient.getZoneSafety(zoneId).then((s) => { if (s) setSafety(s); }).catch(() => {});
+              }}
+              onRemoved={() => {
+                setSelectedTreeId(null);
+                treeClient.listTrees(zoneId).then(setTrees).catch(() => {});
+                treeClient.getZone(zoneId).then(setZone).catch(() => {});
                 treeClient.getZoneSafety(zoneId).then((s) => { if (s) setSafety(s); }).catch(() => {});
               }}
             />
