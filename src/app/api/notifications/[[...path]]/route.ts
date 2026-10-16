@@ -97,10 +97,11 @@ async function forward(
   body: ArrayBuffer | undefined,
 ) {
   const { path = [] } = await context.params;
+  const normalizedPath = path[0] === "notifications" ? path.slice(1) : path;
   const sourceUrl = new URL(request.url);
-  const target = `${API_BASE_URL}/api/v1/notification${path.length ? `/${path.join("/")}` : ""}${sourceUrl.search}`;
+  const target = `${API_BASE_URL}/api/v1/notification/notifications${normalizedPath.length ? `/${normalizedPath.join("/")}` : ""}${sourceUrl.search}`;
   const requestHeaders = new Headers(request.headers);
-  ["host", "cookie", "content-length", "connection"].forEach((name) =>
+  ["host", "cookie", "content-length", "connection", "origin", "referer"].forEach((name) =>
     requestHeaders.delete(name),
   );
   requestHeaders.set("authorization", `Bearer ${accessToken}`);

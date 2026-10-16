@@ -25,6 +25,7 @@ import type {
   ExportReleaseStatus,
   FarmOption,
   HarvestBatch,
+  HarvestDispatchSnapshot,
   InputStatus,
   LabResidueResult,
   LabSample,
@@ -328,8 +329,20 @@ export const cultivationClient = {
       method: "POST",
       body: JSON.stringify({ userId, reason }),
     }),
-  traceability: (id: string) =>
-    cultivationRequest<TraceabilitySnapshot>(`/api/v1/export-releases/${encodeURIComponent(id)}/traceability`),
+  inspectExportRelease: (id: string, inspection: { sourceRef: string; inspectedAt: string; phiChecked: boolean;
+    pestCheckPassed: boolean; qualityPassed: boolean; measuredBrix?: number }) =>
+    cultivationRequest<ExportRelease>(`/api/v1/export-releases/${encodeURIComponent(id)}/inspect`, {
+      method: "POST", body: JSON.stringify(inspection),
+    }),
+  getHarvestDispatch: (batchId: string) =>
+    cultivationRequest<HarvestDispatchSnapshot>(`/api/v1/harvest-batches/${encodeURIComponent(batchId)}/dispatch`),
+  dispatchSummary: (farmId: string) =>
+    cultivationRequest<{status: "NO_VERIFIED_DATA" | "OPERATOR_CONFIRMED_RECORDS"; quantitiesByUnit: Record<string, unknown> | null}>(`/api/v1/harvest-batches/dispatch-summary${queryString({farmId})}`),
+  traceability: async (id: string) => {
+    const result = await cultivationRequest<TraceabilitySnapshot>(`/api/v1/export-releases/${encodeURIComponent(id)}/traceability`);
+    if (result?.releaseId !== id || !result.snapshot) throw new CultivationApiError("Hồ sơ truy xuất không khớp lựa chọn.", 502);
+    return result;
+  },
   auditLogs: (query?: { resourceType?: string; resourceId?: string }) =>
     cultivationRequest<AuditLog[]>(`/api/v1/audit-logs${queryString(query)}`),
 

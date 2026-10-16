@@ -1,7 +1,7 @@
 "use client";
+import { FarmerInspectionDialog } from "@/components/dashboard/FarmerInspectionDialog";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ExternalLink,
@@ -14,23 +14,57 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { cropLots } from "@/constants/durianMockData";
 import {
   cultivationClient,
   CultivationApiError,
 } from "@/lib/cultivation/client";
-import type { ExportRelease, HarvestBatch } from "@/lib/cultivation/types";
+import type { ExportRelease, HarvestBatch, HarvestDispatchSnapshot } from "@/lib/cultivation/types";
 import {
   exportStatusLabels,
   formatDateTime,
   riskLevelLabels,
 } from "@/features/cultivation-calendar/labels";
 import { hasCultivationPermission } from "@/features/cultivation-calendar/permissions";
+import { selectTraceabilityRelease } from "@/lib/cultivation/releaseSelection";
+import { batchDisplayName, displayQuantity, isSyntheticBatch, isSyntheticRelease, releaseDisplayName } from "@/lib/cultivation/presentation";
 
 type ViewKey = "qr" | "harvest" | "export" | "traceability";
 
 const inputClass =
   "h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 text-xs text-neutral-900 outline-none transition focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4414]";
+
+const releaseEligibleBatchStatuses = new Set(["APPROVED", "HARVESTED"]);
+
+function isReleaseEligibleBatch(batch: HarvestBatch) {
+  return releaseEligibleBatchStatuses.has(batch.status);
+}
+
+function batchOptionLabel(batch: HarvestBatch) {
+  return [
+    batch.batchCode,
+    batch.cultivationSeasonId,
+    batch.plotId,
+    formatDateTime(batch.harvestedAt),
+    batch.expectedDestinationMarket,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function batchMatchesSearch(batch: HarvestBatch, search: string) {
+  const haystack = [
+    batch.id,
+    batch.batchCode,
+    batch.cultivationSeasonId,
+    batch.farmId,
+    batch.plotId,
+    batch.expectedDestinationMarket,
+    batch.status,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(search.trim().toLowerCase());
+}
 
 function Field({
   label,
@@ -82,7 +116,7 @@ function DataTable({
     return (
       <EmptyState
         title={empty}
-        description="Dữ liệu sẽ xuất hiện sau khi backend có bản ghi phù hợp."
+        description="Dữ liệu sẽ xuất hiện sau khi hệ thống có bản ghi phù hợp."
       />
     );
   return (
@@ -119,14 +153,20 @@ function DataTable({
 export function CropQrBuilder() {
   const { user } = useAuth();
   const [view, setView] = useState<ViewKey>("qr");
-  const [selectedCrop, setSelectedCrop] = useState<
-    (typeof cropLots)[number] | null
-  >(null);
+  const [seasonNames, setSeasonNames] = useState<Record<string, string>>({});
+  const [selectedQrRelease, setSelectedQrRelease] =
+    useState<ExportRelease | null>(null);
   const [batches, setBatches] = useState<HarvestBatch[]>([]);
   const [releases, setReleases] = useState<ExportRelease[]>([]);
+  const [dispatches, setDispatches] = useState<Record<string, HarvestDispatchSnapshot | null>>({});
+  const [dispatchError, setDispatchError] = useState(false);
+  const [verifiedData, setVerifiedData] = useState<"loading" | "none" | "available" | "error">("loading");
+  const [batchSearch, setBatchSearch] = useState("");
   const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(
     null,
   );
+  const [traceabilityReleaseId, setTraceabilityReleaseId] = useState<string | null>(null);
+  const snapshotSequence = useRef(0);
   const [releaseForm, setReleaseForm] = useState({
     harvestBatchId: "",
     targetMarketCode: "",
@@ -135,6 +175,7 @@ export function CropQrBuilder() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [inspectionReleaseId, setInspectionReleaseId] = useState<string | null>(null);
 
   const actorId = user?.userId ?? "";
   const canApproveExport = hasCultivationPermission(
@@ -144,13 +185,29 @@ export function CropQrBuilder() {
   const canReviewExport =
     hasCultivationPermission(user?.role, "EXPORT_RELEASE_REVIEW") ||
     canApproveExport;
-  const safeBatches = Array.isArray(batches) ? batches : [];
-  const safeReleases = Array.isArray(releases) ? releases : [];
-  const selectedRelease = safeReleases[0] ?? null;
+  const safeBatches = useMemo(
+    () => (Array.isArray(batches) ? batches : []),
+    [batches],
+  );
+  const safeReleases = useMemo(
+    () => (Array.isArray(releases) ? releases : []),
+    [releases],
+  );
+  const selectedRelease = selectTraceabilityRelease(safeReleases, traceabilityReleaseId);
+  const releasedQrReleases = safeReleases.filter(
+    (release) => release.status === "RELEASED",
+  );
+  const eligibleBatches = safeBatches.filter(batch => !isSyntheticBatch(batch) && isReleaseEligibleBatch(batch));
+  const visibleEligibleBatches = eligibleBatches.filter((batch) =>
+    batchMatchesSearch(batch, batchSearch),
+  );
+  const selectedBatch = safeBatches.find(
+    (batch) => batch.id === releaseForm.harvestBatchId,
+  );
 
   const metrics = useMemo(() => {
     const ready = safeReleases.filter((release) =>
-      ["APPROVED", "RELEASED"].includes(release.status),
+      ["APPROVED", "INSPECTED_PASSED", "RELEASED"].includes(release.status) && !isSyntheticRelease(release),
     ).length;
     const blocked = safeReleases.filter(
       (release) => release.status === "BLOCKED",
@@ -166,14 +223,30 @@ export function CropQrBuilder() {
     setError(null);
     try {
       const [nextBatches, nextReleases] = await Promise.all([
-        cultivationClient.listHarvestBatches().catch(() => []),
-        cultivationClient.listExportReleases().catch(() => []),
+        cultivationClient.listHarvestBatches(),
+        cultivationClient.listExportReleases(),
       ]);
       const normalizedBatches = Array.isArray(nextBatches) ? nextBatches : [];
       const normalizedReleases = Array.isArray(nextReleases) ? nextReleases : [];
       setBatches(normalizedBatches);
       setReleases(normalizedReleases);
-      const firstBatch = normalizedBatches[0];
+      const catalogs = await Promise.allSettled([...new Set(normalizedBatches.map(batch => batch.farmId))].map(farmId => cultivationClient.listSeasons({farmId})));
+      setSeasonNames(Object.fromEntries(catalogs.flatMap(result => result.status === "fulfilled" ? result.value.map(season => [season.id, season.name]) : [])));
+      const dispatchResults = await Promise.allSettled(normalizedReleases.filter(release => release.status === "RELEASED").map(async release => {
+        try { return [release.harvestBatchId, await cultivationClient.getHarvestDispatch(release.harvestBatchId)] as const; }
+        catch (error) {
+          if (error instanceof CultivationApiError && error.status === 404) return [release.harvestBatchId, null] as const;
+          throw error;
+        }
+      }));
+      setDispatchError(dispatchResults.some(result => result.status === "rejected"));
+      setDispatches(Object.fromEntries(dispatchResults.flatMap(result => result.status === "fulfilled" ? [result.value] : [])));
+      try {
+        const summaries = await Promise.all([...new Set(normalizedBatches.map(batch => batch.farmId))].map(farmId => cultivationClient.dispatchSummary(farmId)));
+        if (summaries.some(summary => !["NO_VERIFIED_DATA", "OPERATOR_CONFIRMED_RECORDS"].includes(summary.status))) throw new Error("Invalid dispatch summary");
+        setVerifiedData(summaries.some(summary => summary.status === "OPERATOR_CONFIRMED_RECORDS") ? "available" : "none");
+      } catch { setVerifiedData("error"); }
+      const firstBatch = normalizedBatches.find(batch => isReleaseEligibleBatch(batch) && !isSyntheticBatch(batch));
       if (firstBatch && !releaseForm.harvestBatchId) {
         setReleaseForm((current) => ({
           ...current,
@@ -227,7 +300,7 @@ export function CropQrBuilder() {
               </h2>
               <p className="mt-1 text-xs leading-5 text-neutral-500">
                 Quản lý lô thu hoạch, hồ sơ xuất xưởng và snapshot truy xuất
-                công khai.
+                theo quyền truy cập nông trại.
               </p>
             </div>
           </div>
@@ -248,7 +321,7 @@ export function CropQrBuilder() {
 
       <div className="flex gap-2 overflow-x-auto rounded-2xl border border-neutral-200 bg-white p-2 scrollbar-thin">
         {[
-          ["qr", "QR công khai", QrCode],
+          ["qr", "QR truy xuất", QrCode],
           ["harvest", "Lô thu hoạch", PackageCheck],
           ["export", "Xuất xưởng", Truck],
           ["traceability", "Truy xuất", ShieldCheck],
@@ -278,53 +351,66 @@ export function CropQrBuilder() {
           {notice}
         </div>
       ) : null}
+      {dispatchError ? <p role="alert" className="text-sm text-red-700">Không thể tải đầy đủ hồ sơ giao vận. Hãy tải lại dữ liệu.</p> : null}
+      {verifiedData !== "none" ? <p role="status" className="text-sm text-neutral-600">{verifiedData === "error" ? "Không tải được báo cáo xuất xưởng đã xác minh. Vui lòng thử lại." : verifiedData === "available" ? "Có hồ sơ xuất xưởng được người có quyền xác nhận." : "Đang tải báo cáo xuất xưởng đã xác minh…"}</p> : null}
 
       {view === "qr" ? (
         <div className="panel p-5 sm:p-7">
-          <div className="grid gap-5 lg:grid-cols-2">
-            {cropLots.map((crop) => (
+          {releasedQrReleases.length ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              {releasedQrReleases.map((release) => {
+                const batch = safeBatches.find(
+                  (item) => item.id === release.harvestBatchId,
+                );
+                return (
               <article
-                key={crop.id}
+                key={release.id}
                 className="rounded-2xl border border-[#e2e7e0] p-5"
               >
                 <div className="flex items-start justify-between gap-7">
                   <span>
                     <small className="text-xs font-bold tracking-[1px] text-[#849087]">
-                      Mã vụ mùa
+                      Hồ sơ xuất xưởng
                     </small>
-                    <b className="mt-1 block text-sm">{crop.id}</b>
+                    <b className="mt-1 block text-sm">
+                      {releaseDisplayName(release)}
+                    </b>
                   </span>
                   <span className="rounded-full bg-[#e9f2ea] px-2.5 py-1 text-xs font-bold text-[#3e7353]">
-                    {crop.status}
+                    {exportStatusLabels[release.status]}
                   </span>
                 </div>
                 <div className="mt-5 grid grid-cols-3 gap-4 rounded-xl bg-[#f7f8f5] p-4 text-xs">
                   <span>
-                    <small className="block text-[#849087]">Giống</small>
-                    <b className="mt-1 block">{crop.variety}</b>
+                    <small className="block text-[#849087]">Mã lô</small>
+                    <b className="mt-1 block">{batch ? batchDisplayName(batch, releases) : "Chưa tải thông tin lô"}</b>
                   </span>
                   <span>
-                    <small className="block text-[#849087]">Phân khu</small>
-                    <b className="mt-1 block">{crop.zone}</b>
+                    <small className="block text-[#849087]">Mùa vụ</small>
+                    <b className="mt-1 block">{batch ? seasonNames[batch.cultivationSeasonId] ?? "Chưa tải tên mùa vụ" : "Chưa tải"}</b>
                   </span>
                   <span>
                     <small className="block text-[#849087]">Thu hoạch</small>
-                    <b className="mt-1 block">{crop.harvestAt}</b>
+                    <b className="mt-1 block">{formatDateTime(batch?.harvestedAt)}</b>
                   </span>
                 </div>
+                {dispatches[release.harvestBatchId] ? <p className="mt-3 text-sm text-neutral-700">Giao vận: {dispatches[release.harvestBatchId]?.status === "DELIVERED" ? "Đã giao hàng" : dispatches[release.harvestBatchId]?.status === "DISPATCHED" ? "Đã xuất xưởng" : "Bản nháp"} · {displayQuantity(dispatches[release.harvestBatchId]!.evidence.shippedQuantity, dispatches[release.harvestBatchId]!.evidence.quantityUnit)}</p> : <p className="mt-3 text-sm text-neutral-500">Chưa tải được hồ sơ giao vận.</p>}
                 <button
-                  onClick={() => setSelectedCrop(crop)}
-                  disabled={
-                    !crop.status.includes("Sẵn sàng") &&
-                    !crop.status.includes("Sẵn sàng")
-                  }
+                  onClick={() => setSelectedQrRelease(release)}
                   className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-[#2E5A44] py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#abb6ae]"
                 >
                   <QrCode size={15} /> Mở QR truy xuất
                 </button>
               </article>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              title="Chưa có QR truy xuất"
+              description="QR chỉ hiển thị cho hồ sơ xuất xưởng đã phát hành. Hồ sơ đang duyệt hoặc chưa đủ điều kiện được tách riêng khỏi trạng thái mùa vụ."
+            />
+          )}
         </div>
       ) : null}
 
@@ -355,10 +441,10 @@ export function CropQrBuilder() {
               "Trạng thái",
             ]}
             rows={safeBatches.map((batch) => [
-              batch.batchCode,
-              batch.cultivationSeasonId,
+              batchDisplayName(batch, releases),
+              seasonNames[batch.cultivationSeasonId] ?? "Chưa tải tên mùa vụ",
               formatDateTime(batch.harvestedAt),
-              `${batch.quantity} ${batch.quantityUnit}`,
+              displayQuantity(batch.quantity, batch.quantityUnit),
               batch.expectedDestinationMarket,
               riskLevelLabels[batch.chemicalRiskLevel],
               batch.status,
@@ -395,19 +481,58 @@ export function CropQrBuilder() {
                 }}
                 className="mt-4 grid gap-3"
               >
-                <Field label="Lô thu hoạch ID">
+                <Field label="Tìm lô thu hoạch">
                   <input
+                    className={inputClass}
+                    placeholder="Tìm theo mã lô, season, farm/khu hoặc thị trường"
+                    value={batchSearch}
+                    onChange={(e) => setBatchSearch(e.target.value)}
+                  />
+                </Field>
+                <Field label="Lô thu hoạch đủ điều kiện">
+                  <select
                     required
                     className={inputClass}
                     value={releaseForm.harvestBatchId}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const batch = eligibleBatches.find(
+                        (item) => item.id === e.target.value,
+                      );
                       setReleaseForm({
                         ...releaseForm,
                         harvestBatchId: e.target.value,
-                      })
-                    }
-                  />
+                        targetMarketCode:
+                          batch?.expectedDestinationMarket ??
+                          releaseForm.targetMarketCode,
+                      });
+                    }}
+                    disabled={!eligibleBatches.length}
+                  >
+                    <option value="">
+                      {eligibleBatches.length
+                        ? "Chọn lô thu hoạch"
+                        : "Không có lô APPROVED/HARVESTED"}
+                    </option>
+                    {visibleEligibleBatches.map((batch) => (
+                      <option key={batch.id} value={batch.id}>
+                        {batchOptionLabel(batch)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-xs leading-5 text-neutral-500">
+                    Chỉ gửi ID lô đã tồn tại trong hệ thống. Lô nháp, bị chặn hoặc đã hủy
+                    không được dùng để tạo hồ sơ xuất xưởng.
+                  </p>
                 </Field>
+                {selectedBatch ? (
+                  <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
+                    <b className="block text-neutral-800">
+                      {selectedBatch.batchCode}
+                    </b>
+                    Season {selectedBatch.cultivationSeasonId} · Khu{" "}
+                    {selectedBatch.plotId} · Trạng thái {selectedBatch.status}
+                  </div>
+                ) : null}
                 <Field label="Thị trường">
                   <input
                     required
@@ -433,7 +558,16 @@ export function CropQrBuilder() {
                     }
                   />
                 </Field>
-                <button className="rounded-xl bg-[#2E5A44] px-4 py-2 text-xs font-bold text-white">
+                {!eligibleBatches.length ? (
+                  <EmptyState
+                    title="Chưa có lô đủ điều kiện"
+                    description="Hãy tạo hoặc đăng ký lô thu hoạch hợp lệ trong tab Lô thu hoạch. Hệ thống sẽ chặn lô nháp, bị chặn hoặc đã hủy."
+                  />
+                ) : null}
+                <button
+                  disabled={!releaseForm.harvestBatchId || !eligibleBatches.length}
+                  className="rounded-xl bg-[#2E5A44] px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   Tạo hồ sơ
                 </button>
               </form>
@@ -449,12 +583,13 @@ export function CropQrBuilder() {
                 "Thao tác",
               ]}
               rows={safeReleases.map((release) => [
-                release.releaseCode,
-                release.harvestBatchId,
+                releaseDisplayName(release),
+                safeBatches.find(batch => batch.id === release.harvestBatchId) ? batchDisplayName(safeBatches.find(batch => batch.id === release.harvestBatchId)!, releases) : "Chưa tải thông tin lô",
                 release.targetMarketCode,
                 exportStatusLabels[release.status],
                 <span key={release.id} className="flex flex-wrap gap-2">
                   <button
+                    disabled={isSyntheticRelease(release) || release.status !== "DRAFT"}
                     onClick={() =>
                       void mutate(
                         () =>
@@ -469,25 +604,18 @@ export function CropQrBuilder() {
                   >
                     Gửi duyệt
                   </button>
-                  {canApproveExport ? (
+                  {canApproveExport && !isSyntheticRelease(release) ? (
                     <button
-                      onClick={() =>
-                        void mutate(
-                          () =>
-                            cultivationClient.approveExportRelease(
-                              release.id,
-                              actorId,
-                            ),
-                          "Đã phê duyệt.",
-                        )
-                      }
+                      disabled={!["DRAFT","UNDER_REVIEW","INSPECTION_PENDING","NOT_ELIGIBLE","BLOCKED"].includes(release.status)}
+                      onClick={() => setInspectionReleaseId(release.id)}
                       className="rounded-lg bg-[#2E5A44] px-2 py-1 font-bold text-white"
                     >
-                      Duyệt
+                      Tự kiểm tra
                     </button>
                   ) : null}
-                  {canApproveExport ? (
+                  {canApproveExport && !isSyntheticRelease(release) ? (
                     <button
+                      disabled={!["APPROVED","INSPECTED_PASSED"].includes(release.status)}
                       onClick={() =>
                         void mutate(
                           () =>
@@ -517,7 +645,7 @@ export function CropQrBuilder() {
             <div>
               <h3 className="text-sm font-bold">Snapshot truy xuất</h3>
               <p className="mt-1 text-xs text-neutral-500">
-                Snapshot phát hành được hiển thị riêng trong Vụ mùa & QR.
+                {selectedRelease ? releaseDisplayName(selectedRelease) : "Chưa chọn hồ sơ"}
               </p>
             </div>
             <button
@@ -525,9 +653,13 @@ export function CropQrBuilder() {
               onClick={() =>
                 selectedRelease
                   ? void mutate(async () => {
+                      const sequence = ++snapshotSequence.current;
+                      setSnapshot(null);
                       const result = await cultivationClient.traceability(
                         selectedRelease.id,
                       );
+                      if (sequence !== snapshotSequence.current) return;
+                      if (result.releaseId !== selectedRelease.id) throw new Error("Hồ sơ truy xuất trả về không khớp lựa chọn. Vui lòng tải lại.");
                       setSnapshot(result.snapshot);
                     }, "Đã tải snapshot truy xuất.")
                   : undefined
@@ -538,19 +670,19 @@ export function CropQrBuilder() {
             </button>
           </div>
           {snapshot ? (
-            <pre className="max-h-[520px] overflow-auto rounded-2xl bg-neutral-950 p-4 text-xs leading-5 text-neutral-100 scrollbar-thin">
+            <details><summary className="cursor-pointer text-sm">Thông tin kỹ thuật và nguồn dữ liệu</summary><pre className="mt-3 max-h-[520px] overflow-auto rounded border border-neutral-200 p-4 text-xs leading-5 scrollbar-thin">
               {JSON.stringify(snapshot, null, 2)}
-            </pre>
+            </pre></details>
           ) : (
             <EmptyState
               title="Chưa tải snapshot"
-              description="Chọn hồ sơ xuất xưởng đầu tiên trong danh sách hoặc tạo hồ sơ mới rồi tải snapshot."
+              description="Chọn hồ sơ qua QR hoặc tải snapshot của hồ sơ đang chọn."
             />
           )}
         </div>
       ) : null}
 
-      {selectedCrop ? (
+      {selectedQrRelease ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#183226aa] p-5 backdrop-blur-sm">
           <div className="w-full max-w-[440px] rounded-[24px] bg-white p-8 shadow-2xl">
             <div className="flex items-start justify-between">
@@ -563,7 +695,7 @@ export function CropQrBuilder() {
                 </h3>
               </div>
               <button
-                onClick={() => setSelectedCrop(null)}
+                onClick={() => setSelectedQrRelease(null)}
                 className="grid size-9 place-items-center rounded-xl bg-[#f2f4f1]"
               >
                 <X size={18} />
@@ -571,28 +703,36 @@ export function CropQrBuilder() {
             </div>
             <div className="mx-auto my-6 w-fit rounded-2xl border border-[#e3e8e1] bg-white p-5 shadow-sm">
               <QRCodeSVG
-                value={`/traceability/${selectedCrop.id}`}
+                value={`${typeof window === "undefined" ? "" : window.location.origin}/api/backend/v1/export-releases/${encodeURIComponent(selectedQrRelease.id)}/traceability`}
                 size={190}
                 fgColor="#244B37"
                 level="H"
               />
             </div>
             <div className="rounded-xl bg-[#f7f8f5] p-5 text-center">
-              <b className="text-sm">{selectedCrop.id}</b>
+              <b className="text-sm">{releaseDisplayName(selectedQrRelease)}</b>
               <p className="mt-1 text-sm text-[#7d8981]">
-                {selectedCrop.variety} - {selectedCrop.zone} -{" "}
-                {selectedCrop.trees} cây
+                {exportStatusLabels[selectedQrRelease.status]}
               </p>
+              <details className="mt-3 text-xs"><summary>Thông tin kỹ thuật</summary><p className="break-all">{selectedQrRelease.releaseCode}<br />{selectedQrRelease.harvestBatchId}</p></details>
             </div>
-            <Link
-              href={`/traceability/${selectedCrop.id}`}
+            <button
+              type="button"
+              onClick={() => {
+                snapshotSequence.current += 1;
+                setTraceabilityReleaseId(selectedQrRelease.id);
+                setSnapshot(null);
+                setView("traceability");
+                setSelectedQrRelease(null);
+              }}
               className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-[#EED56D] py-4 text-xs font-bold text-[#2E5A44]"
             >
-              <ExternalLink size={15} /> Mở trang truy xuất công khai
-            </Link>
+              <ExternalLink size={15} /> Xem snapshot đã xác thực
+            </button>
           </div>
         </div>
       ) : null}
+      {inspectionReleaseId ? <FarmerInspectionDialog releaseId={inspectionReleaseId} onClose={()=>setInspectionReleaseId(null)} onSaved={refresh}/> : null}
     </section>
   );
 }

@@ -840,7 +840,7 @@ export function CameraSection() {
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#dfe5de] py-14 text-sm text-gray-400">
             <Camera size={30} className="mb-2 opacity-30" />
             <p>Chưa có ảnh nào được chụp.</p>
-            <p className="mt-0.5 text-xs">Nhấn "Chụp hình ngay" để bắt đầu.</p>
+            <p className="mt-0.5 text-xs">Nhấn &quot;Chụp hình ngay&quot; để bắt đầu.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

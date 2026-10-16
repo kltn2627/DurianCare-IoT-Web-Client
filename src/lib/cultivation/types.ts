@@ -42,6 +42,9 @@ export type BiologicalLevel =
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "UNKNOWN";
 
 export type ExportReleaseStatus =
+  | "INSPECTION_PENDING"
+  | "NOT_ELIGIBLE"
+  | "INSPECTED_PASSED"
   | "DRAFT"
   | "UNDER_REVIEW"
   | "WAITING_FOR_LAB_RESULT"
@@ -390,6 +393,7 @@ export interface LabResidueResult {
 }
 
 export interface HarvestBatch {
+  dataOrigin?: "OPERATIONAL" | "DEMO_SYNTHETIC";
   id: string;
   batchCode: string;
   cultivationSeasonId: string;
@@ -430,7 +434,19 @@ export interface CareHistoryResponse {
   inputUsages: ActivityInputUsage[];
 }
 
+export interface HarvestDispatchSnapshot {
+  id: string;
+  exportReleaseId: string;
+  farmId: string;
+  plotId: string;
+  cultivationSeasonId: string;
+  status: "DRAFT" | "DISPATCHED" | "DELIVERED";
+  evidence: { shippedQuantity: number; quantityUnit: string; shippedAt: string; destination: string };
+  delivery?: { sourceRef: string; deliveredAt: string } | null;
+}
+
 export interface ExportRelease {
+  dataOrigin?: "OPERATIONAL" | "DEMO_SYNTHETIC";
   id: string;
   releaseCode: string;
   harvestBatchId: string;
@@ -470,6 +486,7 @@ export interface ApiError {
 }
 
 export interface CultivationSeason {
+  productionStatus?: "IN_PROGRESS" | "HARVESTED" | "COMPLETED";
   id: string;
   farmId: string;
   plotId: string;
@@ -480,8 +497,12 @@ export interface CultivationSeason {
   endDate?: string | null;
   createdBy: string;
   createdAt?: string | null;
+  effectiveStatus?: CultivationSeasonStatus | null;
+  status?: CultivationSeasonStatus | null;
   updatedAt?: string | null;
 }
+
+export type CultivationSeasonStatus = "PREPARING" | "IN_PROGRESS" | "ENDED";
 
 export interface SafeHarvestDateResponse {
   cultivationSeasonId?: string;

@@ -63,7 +63,10 @@ async function requestVoid(path: string, init?: RequestInit): Promise<void> {
     cache: "no-store",
   });
 
-  if (response.ok) return;
+  if (response.ok) {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("duriancare:notifications-changed"));
+    return;
+  }
 
   const text = await response.text();
   const payload = text ? safeJson(text) : null;
@@ -104,10 +107,16 @@ export const notificationClient = {
       `/api/notifications/notifications/${encodeURIComponent(id)}/read`,
       { method: "PATCH" },
     ),
-  markAllRead: () =>
-    requestVoid("/api/notifications/notifications/read-all", {
+  markAllRead: async () => {
+    const result = await requestJson<{ updatedCount: number }>("/api/notifications/notifications/read-all", {
       method: "PATCH",
-    }),
+    });
+    if (!result || !Number.isSafeInteger(result.updatedCount) || result.updatedCount < 0) {
+      throw new NotificationApiError("Kết quả cập nhật không hợp lệ.", 502);
+    }
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("duriancare:notifications-changed"));
+    return result;
+  },
   delete: (id: string) =>
     requestVoid(`/api/notifications/notifications/${encodeURIComponent(id)}`, {
       method: "DELETE",

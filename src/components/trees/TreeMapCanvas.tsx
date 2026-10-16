@@ -1,6 +1,7 @@
 "use client";
 
 import type { TreeSummary } from "@/lib/trees/types";
+import { partitionMapTrees } from "@/lib/trees/map";
 
 const HEALTH_COLORS: Record<string, string> = {
   HEALTHY: "#22c55e",
@@ -34,10 +35,7 @@ export function TreeMapCanvas({
   selectedTreeId,
   onTreeClick,
 }: TreeMapCanvasProps) {
-  const positionedTrees = trees.filter(
-    (t) => t.positionX != null && t.positionY != null,
-  );
-  const unpositionedCount = trees.length - positionedTrees.length;
+  const { positioned: positionedTrees, unpositionedCount } = partitionMapTrees(trees);
 
   return (
     <div className="space-y-3">
@@ -102,6 +100,13 @@ export function TreeMapCanvas({
                 onClick={() => onTreeClick?.(tree)}
                 className="cursor-pointer"
                 role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onTreeClick?.(tree);
+                  }
+                }}
                 aria-label={`Cây ${tree.treeCode}`}
               >
                 {isSelected ? (
@@ -133,7 +138,7 @@ export function TreeMapCanvas({
         {positionedTrees.length === 0 ? (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm font-semibold text-neutral-400">
             <span>Chưa có vị trí cây nào được gán</span>
-            <span className="text-xs font-normal">Thêm cây với positionX / positionY để hiển thị trên bản đồ.</span>
+            <span className="text-xs font-normal">Chưa có tọa độ hợp lệ.</span>
           </div>
         ) : null}
       </div>
