@@ -53,12 +53,15 @@ export const cameraClient = {
     ),
 
   // Returns a blob URL for use in <img src={}> — caller is responsible for revoking it.
-  fetchSnapshotBlob: async (deviceId: string): Promise<string> => {
+  fetchSnapshotBlob: async (deviceId: string, snapshotPath?: string): Promise<string> => {
+    const expectedPath = `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`;
+    if (snapshotPath && snapshotPath !== expectedPath) throw new CameraApiError("Đường dẫn camera không hợp lệ", 502);
     const response = await apiFetch(
-      `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`,
+      snapshotPath ?? expectedPath,
     );
     if (!response.ok) throw new CameraApiError("Snapshot không khả dụng", response.status);
     const blob = await response.blob();
+    if (blob.type.split(";")[0] !== "image/jpeg" || blob.size < 4) throw new CameraApiError("Ảnh camera không hợp lệ", 502);
     return URL.createObjectURL(blob);
   },
 
@@ -113,9 +116,9 @@ export const cameraClient = {
     try {
       const response = await apiFetch(
         `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`,
-        { method: "HEAD" },
+        { method: "GET" },
       );
-      return response.status < 500;
+      return response.ok && response.headers.get("content-type")?.split(";")[0] === "image/jpeg" && (await response.blob()).size >= 4;
     } catch {
       return false;
     }

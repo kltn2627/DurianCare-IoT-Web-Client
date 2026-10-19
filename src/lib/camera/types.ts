@@ -62,6 +62,12 @@ export interface ScheduleSlotInput {
 }
 
 export interface CameraDevice {
+  cameraId: string;
+  status: "ONLINE" | "OFFLINE" | "UNKNOWN";
+  lastSeenAt: string | null;
+  endpointVersion: string;
+  snapshotUrl: string;
+  streamAvailable: boolean;
   id: string;
   device_id: string;
   mac_address: string | null;
