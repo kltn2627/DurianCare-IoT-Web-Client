@@ -1,0 +1,58 @@
+name: Web CI
+
+# PRs into dev/main are the gate; pushes to dev/main re-check the merged result.
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Next.js 16 requires Node >= 20.9; Node 24 matches the validated local toolchain.
+      - name: Set up Node.js 24 with npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # .next is not committed; generate typed-route declarations so tsc checks them.
+      - name: Generate Next.js route types
+        run: npx next typegen
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test -- --ci
+
+      # Build only; no deployment. No secrets are needed: backend URLs are read
+      # at request time and default to local development values.
+      - name: Production build
+        run: npm run build
