@@ -45,7 +45,9 @@ it("does not bypass the authenticated catch-all proxy for sensor reads", async (
   expect(rewrites).toHaveProperty("beforeFiles");
   if (!Array.isArray(rewrites)) {
     expect(rewrites.beforeFiles?.some(rule => rule.source.includes("sensors"))).toBe(false);
-    expect(rewrites.beforeFiles?.some(rule => rule.source.includes("camera"))).toBe(true);
+    // Camera reads also need the Gateway identity (IoT cameraAccess is farm-scoped); a direct
+    // rewrite to the IoT service carried no identity and returned 401 (verified 2026-10-18).
+    expect(rewrites.beforeFiles?.some(rule => rule.source.includes("camera"))).toBe(false);
   }
 });
 
