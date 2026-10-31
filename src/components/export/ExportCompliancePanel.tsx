@@ -347,7 +347,7 @@ function BatchManagementSection() {
         </div>
       )}
       {batches.length === 0 && (
-        <p className="text-[13px] text-[#7e8b83]">Chưa có lô nào được tạo. Thêm dữ liệu demo qua migration V6.</p>
+        <p className="text-[13px] text-[#7e8b83]">Chưa có lô nào được tạo. Hãy tạo lô thu hoạch hợp lệ từ quy trình mùa vụ trước khi đánh giá xuất khẩu.</p>
       )}
       <div className="space-y-2">
         {batches.map((batch) => (
@@ -741,7 +741,7 @@ export function ExportCompliancePanel() {
       {!result && !loading && !error && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#dfe5de] py-16 text-center">
           <ShieldCheck size={36} className="mb-3 opacity-20" />
-          <p className="text-[14px] font-semibold text-[#536259]">Chọn thiết bị, thị trường và nhấn "Đánh giá ngay"</p>
+          <p className="text-[14px] font-semibold text-[#536259]">Chọn thiết bị, thị trường và nhấn &quot;Đánh giá ngay&quot;</p>
           <p className="mt-1 text-[12px] text-[#7e8b83]">Hệ thống sẽ phân tích dữ liệu IoT + lịch sử bệnh camera + danh mục hoạt chất để tính điểm sẵn sàng.</p>
         </div>
       )}

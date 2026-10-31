@@ -27,6 +27,7 @@ import type {
   ExportReleaseStatus,
   FarmOption,
   HarvestBatch,
+  HarvestDispatchSnapshot,
   InputStatus,
   LabResidueResult,
   LabSample,
@@ -521,26 +522,56 @@ export const cultivationClient = {
       `/api/v1/cultivation-seasons/${encodeURIComponent(cultivationSeasonId)}/safe-harvest-date`,
     ),
 
-  createTreeYieldObservation: (treeId: string, body: {
-    seasonId: string; zoneId: string; fruitCount: number; averageFruitWeightKgOverride?: number | null; observedAt?: string; note?: string;
-  }) => cultivationRequest<TreeYieldObservation>(`/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations`, {
-    method: "POST", body: JSON.stringify(body),
-  }),
+  createTreeYieldObservation: (
+    treeId: string,
+    body: {
+      seasonId: string;
+      zoneId: string;
+      fruitCount: number;
+      averageFruitWeightKgOverride?: number | null;
+      observedAt?: string;
+      note?: string;
+    },
+  ) =>
+    cultivationRequest<TreeYieldObservation>(
+      `/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
 
   listTreeYieldObservations: (treeId: string, seasonId: string) =>
-    cultivationRequest<TreeYieldObservation[]>(`/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations${queryString({ seasonId })}`),
+    cultivationRequest<TreeYieldObservation[]>(
+      `/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations${queryString({ seasonId })}`,
+    ),
 
   getYieldForecast: (seasonId: string, zoneId: string) =>
-    cultivationRequest<ZoneYieldForecast>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast`),
+    cultivationRequest<ZoneYieldForecast>(
+      `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast`,
+    ),
 
-  updateYieldForecastSettings: (seasonId: string, zoneId: string, body: {
-    defaultAverageFruitWeightKg?: number | null; expectedPricePerKg?: number | null; currencyCode?: string | null;
-  }) => cultivationRequest<unknown>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast-settings`, {
-    method: "PUT", body: JSON.stringify(body),
-  }),
+  updateYieldForecastSettings: (
+    seasonId: string,
+    zoneId: string,
+    body: {
+      defaultAverageFruitWeightKg?: number | null;
+      expectedPricePerKg?: number | null;
+      currencyCode?: string | null;
+    },
+  ) =>
+    cultivationRequest<unknown>(
+      `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast-settings`,
+      {
+        method: "PUT",
+        body: JSON.stringify(body),
+      },
+    ),
 
   getSeasonYieldHistory: (seasonId: string, zoneId: string) =>
-    cultivationRequest<SeasonYieldHistory[]>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-history`),
+    cultivationRequest<SeasonYieldHistory[]>(
+      `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-history`,
+    ),
 
   assessCompliance: (
     cultivationSeasonId: string,
@@ -675,28 +706,23 @@ export const cultivationClient = {
       body: JSON.stringify(body),
     }),
 
+  // Export-release lifecycle from the current branch.
   submitExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(
       `/api/v1/export-releases/${encodeURIComponent(id)}/submit`,
-      {
-        method: "POST",
-      },
+      { method: "POST" },
     ),
 
   approveExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(
       `/api/v1/export-releases/${encodeURIComponent(id)}/approve`,
-      {
-        method: "POST",
-      },
+      { method: "POST" },
     ),
 
   releaseExportRelease: (id: string) =>
     cultivationRequest<ExportRelease>(
       `/api/v1/export-releases/${encodeURIComponent(id)}/release`,
-      {
-        method: "POST",
-      },
+      { method: "POST" },
     ),
 
   recallExportRelease: (id: string, reason: string) =>
@@ -704,15 +730,51 @@ export const cultivationClient = {
       `/api/v1/export-releases/${encodeURIComponent(id)}/recall`,
       {
         method: "POST",
-
         body: JSON.stringify({ reason }),
       },
     ),
 
-  traceability: (id: string) =>
-    cultivationRequest<TraceabilitySnapshot>(
-      `/api/v1/export-releases/${encodeURIComponent(id)}/traceability`,
+  // Release inspection and delivery APIs introduced on dev.
+  inspectExportRelease: (
+    id: string,
+    inspection: {
+      sourceRef: string;
+      inspectedAt: string;
+      phiChecked: boolean;
+      pestCheckPassed: boolean;
+      qualityPassed: boolean;
+      measuredBrix?: number;
+    },
+  ) =>
+    cultivationRequest<ExportRelease>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/inspect`,
+      { method: "POST", body: JSON.stringify(inspection) },
     ),
+
+  getHarvestDispatch: (batchId: string) =>
+    cultivationRequest<HarvestDispatchSnapshot>(
+      `/api/v1/harvest-batches/${encodeURIComponent(batchId)}/dispatch`,
+    ),
+
+  dispatchSummary: (farmId: string) =>
+    cultivationRequest<{
+      status: "NO_VERIFIED_DATA" | "OPERATOR_CONFIRMED_RECORDS";
+      quantitiesByUnit: Record<string, unknown> | null;
+    }>(`/api/v1/harvest-batches/dispatch-summary${queryString({ farmId })}`),
+
+  // Prefer the dev version's validation; keep a single traceability method.
+  traceability: async (id: string): Promise<TraceabilitySnapshot> => {
+    const result = await cultivationRequest<TraceabilitySnapshot>(
+      `/api/v1/export-releases/${encodeURIComponent(id)}/traceability`,
+    );
+    if (result?.releaseId !== id || !result.snapshot) {
+      throw new CultivationApiError(
+        "Hồ sơ truy xuất không khớp lựa chọn.",
+        502,
+      );
+    }
+    return result;
+  },
 
   auditLogs: (query?: { resourceType?: string; resourceId?: string }) =>
     cultivationRequest<AuditLog[]>(`/api/v1/audit-logs${queryString(query)}`),

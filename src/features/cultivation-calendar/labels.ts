@@ -60,6 +60,9 @@ export const riskLevelLabels: Record<RiskLevel, string> = {
 };
 
 export const exportStatusLabels: Record<ExportReleaseStatus, string> = {
+  INSPECTION_PENDING: "Chờ tự kiểm tra",
+  NOT_ELIGIBLE: "Chưa đủ điều kiện",
+  INSPECTED_PASSED: "Nông dân kiểm tra đạt",
   DRAFT: "Nháp",
   UNDER_REVIEW: "Đang duyệt",
   WAITING_FOR_LAB_RESULT: "Chờ xét nghiệm",

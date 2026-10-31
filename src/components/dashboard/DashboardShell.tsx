@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
@@ -240,7 +241,7 @@ export function DashboardShell({
 
   useEffect(() => {
     let active = true;
-    notificationClient
+    const refreshNotifications = () => notificationClient
       .count()
       .then((result) => {
         if (active) setNotificationCount(result.count);
@@ -248,9 +249,14 @@ export function DashboardShell({
       .catch(() => {
         if (active) setNotificationCount(null);
       });
+    void refreshNotifications();
+    window.addEventListener("duriancare:notifications-changed", refreshNotifications);
+    const timer = window.setInterval(refreshNotifications, 15000);
 
     return () => {
       active = false;
+      window.removeEventListener("duriancare:notifications-changed", refreshNotifications);
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -459,18 +465,7 @@ export function DashboardShell({
             >
               <Search size={23} />
             </Link>
-            <Link
-              href="/notifications"
-              className="relative inline-flex size-14 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-700 transition hover:bg-neutral-50"
-              aria-label="Thông báo"
-            >
-              <Bell size={23} />
-              {notificationCount != null && notificationCount > 0 ? (
-                <span className="absolute right-2.5 top-2.5 min-w-5 rounded-full bg-[#EED56D] px-1 py-0.5 text-xs font-extrabold leading-none text-[#2E5A44]">
-                  {notificationCount > 99 ? "99+" : notificationCount}
-                </span>
-              ) : null}
-            </Link>
+            <NotificationBell count={notificationCount} />
             {profileButton}
           </div>
         </header>
@@ -508,6 +503,7 @@ export function DashboardShell({
             >
               <Search size={21} />
             </Link>
+            <NotificationBell count={notificationCount} />
             {profileButton}
           </div>
         </header>

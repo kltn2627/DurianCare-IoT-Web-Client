@@ -20,6 +20,8 @@ const rolePermissions: Record<AuthRole, CultivationPermission[]> = {
     "CULTIVATION_ACTIVITY_EXECUTE",
     "CHEMICAL_APPLICATION_REQUEST",
     "HARVEST_BATCH_MANAGE",
+    "EXPORT_RELEASE_REVIEW",
+    "EXPORT_RELEASE_APPROVE",
   ],
   EXPERT: [
     "CULTIVATION_PLAN_VIEW",

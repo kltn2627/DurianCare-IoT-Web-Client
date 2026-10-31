@@ -15,10 +15,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { StatCards } from "@/components/dashboard/StatCards";
-import { dashboardStats } from "@/constants/durianMockData";
+import { OwnerDashboardLive } from "@/components/dashboard/OwnerDashboardLive";
 import { AUTH_COOKIES, readSession } from "@/lib/auth/server";
-import type { IotDevice } from "@/lib/iot/types";
+import { loadOwnerOverview, SIGNED_OUT_OVERVIEW, type OwnerOverview } from "@/lib/dashboard/ownerOverview";
 
 export const metadata: Metadata = { title: "Dashboard chủ trang trại" };
 
@@ -94,40 +93,16 @@ export default async function ClientDashboardPage() {
   const cookieStore = await cookies();
   const session = readSession(cookieStore);
   const userName = session?.profile.fullName?.trim() || "nhà vườn";
-  const iotSnapshot = await readIotSnapshot(cookieStore);
+  const overview = await readOwnerOverview(cookieStore);
 
   return (
     <DashboardShell role="OWNER" userName={userName}>
       <div className="space-y-8">
-        <section className="grid-pattern overflow-hidden rounded-[24px] bg-[#294f3b] p-8 text-white shadow-xl shadow-[#2e5a4418] lg:flex lg:items-center lg:justify-between lg:p-10">
-          <div>
-            <p className="flex items-center gap-4 text-sm font-extrabold tracking-[1.5px] text-[#EED56D]">
-              <i className="live-dot size-1.5 rounded-full bg-[#EED56D]" />{" "}
-              TRANG TRẠI MINH PHÁT • 06/06/2026
-            </p>
-            <h1 className="mt-4 text-2xl font-extrabold !text-white sm:text-3xl">
-              Chào buổi sáng, {userName}.
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-5 text-[#d2ded5]">
-              {iotSnapshot.description}
-            </p>
-          </div>
-          <div className="mt-8 grid grid-cols-2 gap-7 lg:mt-0">
-            <div className="rounded-2xl border border-white/10 bg-white/[.08] px-7 py-5">
-              <small className="text-sm text-[#c8d6cc]">
-                Telemetry mới nhất
-              </small>
-              <b className="mt-1 block text-xl">{iotSnapshot.temperature}</b>
-            </div>
-            <div className="rounded-2xl bg-[#EED56D] px-7 py-5 text-[#294f3b]">
-              <small className="text-sm font-semibold">Thiết bị IoT</small>
-              <b className="mt-1 block text-xl">{iotSnapshot.deviceCount}</b>
-              <small className="mt-1 block text-xs font-bold">{iotSnapshot.connectivity}</small>
-            </div>
-          </div>
-        </section>
-
-        <StatCards items={dashboardStats.owner} />
+        <OwnerDashboardLive
+          initialNowIso={new Date().toISOString()}
+          initialOverview={overview}
+          userName={userName}
+        />
 
         <section className="grid gap-8 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {featureLinks.map(({ href, title, subtitle, icon: Icon }) => (
@@ -170,46 +145,16 @@ export default async function ClientDashboardPage() {
   );
 }
 
-async function readIotSnapshot(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+async function readOwnerOverview(cookieStore: Awaited<ReturnType<typeof cookies>>): Promise<OwnerOverview> {
   const accessToken = cookieStore.get(AUTH_COOKIES.accessToken)?.value;
-  if (!accessToken) {
-    return {
-      description: "Đăng nhập để xem telemetry IoT theo farm/khu được cấp quyền.",
-      connectivity: "UNKNOWN",
-      deviceCount: "--",
-      temperature: "--",
-    };
-  }
-  try {
-    const backendBase = (process.env.DURIANCARE_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
-    const response = await fetch(`${backendBase}/api/iot/devices`, {
+  if (!accessToken) return SIGNED_OUT_OVERVIEW;
+  const backendBase = (process.env.DURIANCARE_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+  return loadOwnerOverview(async (path) => {
+    const response = await fetch(`${backendBase}${path}`, {
       cache: "no-store",
       headers: { authorization: `Bearer ${accessToken}` },
     });
-    if (!response.ok) throw new Error("Unable to load IoT devices");
-    const body = (await response.json()) as { devices: IotDevice[] };
-    const device = body.devices.find((item) => item.latestTelemetry) ?? body.devices[0];
-    const telemetry = device?.latestTelemetry ?? null;
-    return {
-      description: device
-        ? `IoT đang đọc từ ${device.name}. Kết nối: ${device.connectivityStatus ?? "UNKNOWN"}.`
-        : "Chưa có device registry nào thuộc phạm vi farm/khu bạn được quyền xem.",
-      connectivity: device?.connectivityStatus ?? "UNKNOWN",
-      deviceCount: String(body.devices.length).padStart(2, "0"),
-      temperature: telemetry?.temperature === null || telemetry?.temperature === undefined
-        ? "--"
-        : `${formatNumber(telemetry.temperature)}°C`,
-    };
-  } catch {
-    return {
-      description: "Không thể tải telemetry IoT lúc này. Web không dùng giá trị mẫu.",
-      connectivity: "UNKNOWN",
-      deviceCount: "--",
-      temperature: "--",
-    };
-  }
-}
-
-function formatNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  });
 }

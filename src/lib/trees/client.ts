@@ -1,6 +1,9 @@
 import { apiFetch } from "@/lib/auth/client";
+import { treeErrorMessage } from "./errors";
 import type {
+  AcceptCareRecommendationRequest,
   CarePlanStatus,
+  CareRecommendationRequest,
   CreateCarePlanRequest,
   CreateFarmRequest,
   CreateTreeRequest,
@@ -12,10 +15,13 @@ import type {
   RecoveryEvaluationResponse,
   SaveDiagnosisRequest,
   TreeCarePlan,
+  TreeCareRecommendation,
+  TreeCareTask,
   TreeDetail,
   TreeDiagnosis,
   TreeHealthStatus,
   TreeSummary,
+  UpdateCareRecommendationRequest,
   UpdateTreeRequest,
   ZoneDetail,
   ZoneSafetySummary,
@@ -42,7 +48,7 @@ async function treeRequest<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
     cache: "no-store",
-  });
+  }).catch(() => { throw new TreeApiError(treeErrorMessage(0, ""), 0); });
   const text = await response.text();
   const payload = text ? safeJson(text) : null;
   if (!response.ok) {
@@ -50,7 +56,7 @@ async function treeRequest<T>(path: string, init?: RequestInit): Promise<T> {
       payload && typeof payload === "object" && "message" in payload
         ? String((payload as { message: unknown }).message)
         : response.statusText || "Yêu cầu không thành công.";
-    throw new TreeApiError(message, response.status, payload);
+    throw new TreeApiError(treeErrorMessage(response.status, message), response.status, payload);
   }
   return payload as T;
 }
@@ -123,6 +129,11 @@ export const treeClient = {
       body: JSON.stringify(body),
     }),
 
+  removeTree: (treeId: string) =>
+    treeRequest<TreeDetail>(`/api/trees/${encodeURIComponent(treeId)}`, {
+      method: "DELETE",
+    }),
+
   // ── Diagnoses ──────────────────────────────────────────────────────────────
 
   listDiagnoses: (treeId: string, page = 0, size = 20) =>
@@ -158,11 +169,37 @@ export const treeClient = {
       body: JSON.stringify(body),
     }),
 
+  createCareRecommendation: (treeId: string, body?: CareRecommendationRequest) =>
+    treeRequest<TreeCareRecommendation>(`/api/trees/${encodeURIComponent(treeId)}/care-recommendation`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+
+  getLatestCareRecommendation: (treeId: string) =>
+    treeRequest<TreeCareRecommendation>(
+      `/api/trees/${encodeURIComponent(treeId)}/care-recommendation/latest`,
+    ),
+
+  updateCareRecommendation: (treeId: string, recommendationId: string, body: UpdateCareRecommendationRequest) =>
+    treeRequest<TreeCareRecommendation>(
+      `/api/trees/${encodeURIComponent(treeId)}/care-recommendation/${encodeURIComponent(recommendationId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+
+  acceptCareRecommendation: (treeId: string, recommendationId: string, body?: AcceptCareRecommendationRequest) =>
+    treeRequest<TreeCarePlan>(
+      `/api/trees/${encodeURIComponent(treeId)}/care-recommendation/${encodeURIComponent(recommendationId)}/accept`,
+      { method: "POST", body: JSON.stringify(body ?? {}) },
+    ),
+
   updateCarePlanStatus: (planId: string, status: CarePlanStatus) =>
     treeRequest<TreeCarePlan>(`/api/care-plans/${encodeURIComponent(planId)}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  listCarePlanTasks: (planId: string) =>
+    treeRequest<TreeCareTask[]>(`/api/care-plans/${encodeURIComponent(planId)}/tasks`),
 
   evaluateRecovery: (treeId: string) =>
     treeRequest<RecoveryEvaluationResponse>(

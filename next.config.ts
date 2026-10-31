@@ -10,14 +10,9 @@ const nextConfig: NextConfig = {
     return {
       // beforeFiles so these run before the api/backend/[...path] catch-all
       beforeFiles: [
-        {
-          source: "/api/backend/v1/sensors/:path*",
-          destination: `${iotServiceUrl}/api/v1/sensors/:path*`,
-        },
-        {
-          source: "/api/backend/v1/camera/:path*",
-          destination: `${iotServiceUrl}/api/v1/camera/:path*`,
-        },
+        // Camera routes are NOT rewritten: they must go through the authenticated
+        // /api/backend proxy -> Gateway (JWT -> identity) -> IoT farm-scoped cameraAccess.
+        // A direct rewrite to the IoT service carried no identity and returned 401.
         {
           source: "/api/backend/v1/export-assessment/:path*",
           destination: `${iotServiceUrl}/api/v1/export-assessment/:path*`,

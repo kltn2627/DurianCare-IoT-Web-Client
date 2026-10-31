@@ -23,14 +23,11 @@ import {
   X,
 } from "lucide-react";
 import { cameraClient } from "@/lib/camera/client";
+import { captureImageSrc } from "@/lib/camera/imageSrc";
 import type { AiDiagnosisResult, AiStatus, CameraCapture, CameraDevice, RiskLevel } from "@/lib/camera/types";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-// Fallback list — used when the backend has no registered camera_devices yet.
-const FALLBACK_DEVICES = [
-  { id: "ESP32-CAM-001", label: "ESP32-CAM 001 (Vườn chính)" },
-];
 
 // Giới hạn khung giờ ban ngày (6h–16h) — ban đêm thiếu sáng, ảnh không dùng được
 const TIME_SLOTS = [
@@ -351,16 +348,28 @@ function DiagnosisCard({ diag, aiStatus, diseaseDetected, confidenceScore }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CameraSection() {
-  const [deviceId, setDeviceId] = useState(FALLBACK_DEVICES[0].id);
+  const [deviceId, setDeviceId] = useState("");
+  const [registryError, setRegistryError] = useState<string | null>(null);
 
   // ── Device registry ───────────────────────────────────────────────────────
   const [registeredDevices, setRegisteredDevices] = useState<CameraDevice[]>([]);
   useEffect(() => {
-    cameraClient.listDevices()
-      .then((r) => {
-        if (r.devices.length > 0) setRegisteredDevices(r.devices);
-      })
-      .catch(() => { /* backend may not have V9 yet — fall back to static list */ });
+    let active = true, busy = false;
+    const poll = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const r = await cameraClient.listDevices();
+        if (!active) return;
+        setRegisteredDevices(r.devices);
+        setRegistryError(null);
+        setDeviceId(current => r.devices.some(device => device.device_id === current) ? current : r.devices[0]?.device_id ?? "");
+      } catch { if (active) setRegistryError("Không tải được trạng thái camera. Vui lòng thử lại."); }
+      finally { busy = false; }
+    };
+    void poll();
+    const timer = setInterval(poll, 8_000);
+    return () => { active = false; clearInterval(timer); };
   }, []);
 
   // Effective device list: registered if available, fallback otherwise
@@ -371,7 +380,7 @@ export function CameraSection() {
         online: d.online,
         lastSeen: d.last_seen,
       }))
-    : FALLBACK_DEVICES.map((d) => ({ ...d, online: undefined, lastSeen: undefined }));
+    : [];
 
   const selectedDevice = registeredDevices.find((d) => d.device_id === deviceId);
 
@@ -382,12 +391,16 @@ export function CameraSection() {
   const snapshotTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
   const blobUrlRef     = useRef<string | null>(null);
   const inFlightRef    = useRef(false);  // guard: at most one snapshot request in flight
+  const snapshotGeneration = useRef(0);
+  const endpointVersion = selectedDevice?.endpointVersion ?? "";
 
   const refreshSnapshot = useCallback(async () => {
-    if (inFlightRef.current) return;  // skip — previous request still pending
+    if (inFlightRef.current || !deviceId) return;
+    const generation = snapshotGeneration.current;
     inFlightRef.current = true;
     try {
-      const url = await cameraClient.fetchSnapshotBlob(deviceId);
+      const url = await cameraClient.fetchSnapshotBlob(deviceId, selectedDevice?.snapshotUrl);
+      if (generation !== snapshotGeneration.current) { URL.revokeObjectURL(url); return; }
       setSnapshotUrl((prev) => {
         if (prev && prev === blobUrlRef.current) URL.revokeObjectURL(prev);
         blobUrlRef.current = url;
@@ -395,26 +408,29 @@ export function CameraSection() {
       });
       setPreviewError(null);
     } catch {
-      setPreviewError("Không thể kết nối ESP32-CAM. Kiểm tra địa chỉ IP và kết nối mạng.");
+      if (generation !== snapshotGeneration.current) return;
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      setSnapshotUrl(null);
+      setPreviewError("Không tải được ảnh camera. Kiểm tra trạng thái đăng ký và kết nối mạng.");
     } finally {
-      inFlightRef.current = false;
-      setPreviewLoading(false);
+      if (generation === snapshotGeneration.current) { inFlightRef.current = false; setPreviewLoading(false); }
     }
-  }, [deviceId]);
+  }, [deviceId, selectedDevice?.snapshotUrl]);
 
-  // Poll at 8 s — slower than the 6 s ESP32-CAM timeout so only one connection
-  // is ever open at a time, even if a request stalls near the limit.
+  // Poll snapshots with an in-flight guard and invalidate old camera responses.
   useEffect(() => {
+    snapshotGeneration.current += 1;
     setPreviewLoading(true);
     setSnapshotUrl(null);
     inFlightRef.current = false;
     void refreshSnapshot();
     snapshotTimer.current = setInterval(refreshSnapshot, 8_000);
     return () => {
+      snapshotGeneration.current += 1;
       if (snapshotTimer.current) clearInterval(snapshotTimer.current);
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     };
-  }, [refreshSnapshot]);
+  }, [refreshSnapshot, endpointVersion]);
 
   // ── Capture now ───────────────────────────────────────────────────────────
   type CaptureStep = "idle" | "capturing" | "analyzing";
@@ -424,6 +440,7 @@ export function CameraSection() {
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleCaptureNow = async () => {
+    const generation = snapshotGeneration.current;
     setCaptureStep("capturing");
     setCaptureResult(null);
     setCaptureError(null);
@@ -433,6 +450,7 @@ export function CameraSection() {
 
     try {
       const capture = await cameraClient.captureNow(deviceId);
+      if (generation !== snapshotGeneration.current) return;
       setCaptureResult(capture);
       setEnlarged(capture);   // Auto-open diagnosis modal
       void fetchHistory();
@@ -451,9 +469,12 @@ export function CameraSection() {
   const [enlarged, setEnlarged]     = useState<CameraCapture | null>(null);
 
   const fetchHistory = useCallback(async () => {
+    const generation = snapshotGeneration.current;
     setHistLoading(true);
     try {
+      if (!deviceId) { setHistory([]); return; }
       const result = await cameraClient.history({ device_id: deviceId, limit: 12 });
+      if (generation !== snapshotGeneration.current) return;
       setHistory(result.data);
     } catch {
       // gallery errors are non-critical
@@ -609,12 +630,12 @@ export function CameraSection() {
         {/* Live stream preview + capture controls */}
         <div className="overflow-hidden rounded-2xl border border-[#e8ece7] bg-white">
           <div className="flex items-center justify-between border-b border-[#e8ece7] px-4 py-2.5">
-            <span className="text-[12px] font-semibold text-[#536259]">Xem trực tiếp</span>
+            <span className="text-[12px] font-semibold text-[#536259]">Ảnh camera định kỳ</span>
             <div className="flex items-center gap-2">
               {!previewError && !previewLoading && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf4ec] px-2.5 py-1 text-[10px] font-bold text-[#37704f]">
                   <span className="inline-block size-1.5 animate-pulse rounded-full bg-[#4b9666]" />
-                  LIVE · 3s
+                  Snapshot · 8s
                 </span>
               )}
               <button
@@ -628,7 +649,9 @@ export function CameraSection() {
           </div>
 
           <div className="relative bg-black" style={{ aspectRatio: "4/3" }}>
-            {previewLoading && !snapshotUrl && (
+            {registryError ? <p role="alert" className="p-4 text-sm text-white">{registryError}</p> : null}
+            {!deviceId ? <p className="p-4 text-sm text-white">Chưa có camera được cấp quyền.</p> : null}
+            {previewLoading && !snapshotUrl && deviceId && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 size={24} className="animate-spin text-gray-400" />
               </div>
@@ -691,7 +714,7 @@ export function CameraSection() {
             )}
             <button
               onClick={handleCaptureNow}
-              disabled={isCapturing}
+              disabled={isCapturing || !deviceId || selectedDevice?.status !== "ONLINE"}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2E5A44] py-2.5 text-[13px] font-semibold text-white transition-all hover:bg-[#264d3b] active:scale-[0.98] disabled:opacity-60"
             >
               {captureStep === "capturing" ? (
@@ -840,7 +863,7 @@ export function CameraSection() {
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#dfe5de] py-14 text-sm text-gray-400">
             <Camera size={30} className="mb-2 opacity-30" />
             <p>Chưa có ảnh nào được chụp.</p>
-            <p className="mt-0.5 text-xs">Nhấn "Chụp hình ngay" để bắt đầu.</p>
+            <p className="mt-0.5 text-xs">Nhấn &quot;Chụp hình ngay&quot; để bắt đầu.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -852,7 +875,7 @@ export function CameraSection() {
               >
                 <div className="relative overflow-hidden bg-gray-100" style={{ aspectRatio: "4/3" }}>
                   <img
-                    src={cap.image_url}
+                    src={captureImageSrc(cap.image_url) ?? cap.image_url}
                     alt={`Ảnh chụp ${cap.id}`}
                     className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                     loading="lazy"
@@ -907,7 +930,7 @@ export function CameraSection() {
             {/* Image */}
             <div className="shrink-0 bg-black">
               <img
-                src={enlarged.image_url}
+                src={captureImageSrc(enlarged.image_url) ?? enlarged.image_url}
                 alt="Ảnh phóng to"
                 className="max-h-[40vh] w-full object-contain"
               />
@@ -954,14 +977,14 @@ export function CameraSection() {
             <div className="space-y-4 p-5">
               <p className="text-[12px] leading-relaxed text-[#536259]">
                 Nhập URL mới của ESP32-CAM sau khi đổi mạng Wi-Fi hoặc 4G.{" "}
-                <span className="font-mono text-[#2E5A44]">Ví dụ: http://192.168.1.137</span>
+                <span className="font-mono text-[#2E5A44]">Ví dụ: http://camera.local</span>
               </p>
 
               <input
                 type="url"
                 value={configUrl}
                 onChange={(e) => { setConfigUrl(e.target.value); setConfigPingResult(null); setConfigError(null); }}
-                placeholder="http://192.168.1.xxx"
+                placeholder="http://camera.local"
                 className="w-full rounded-xl border border-[#dfe5de] px-3 py-2.5 text-[13px] outline-none focus:border-[#2E5A44] focus:ring-1 focus:ring-[#2E5A44]/20"
               />
 
