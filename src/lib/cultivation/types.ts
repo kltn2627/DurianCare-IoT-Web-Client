@@ -75,8 +75,17 @@ export type LabResultStatus =
   | "BELOW_LIMIT_OF_QUANTIFICATION"
   | "NO_STANDARD_FOUND"
   | "PENDING_REVIEW";
-export type LabSampleStatus = "COLLECTED" | "SENT" | "RESULT_RECORDED" | "CANCELLED";
-export type HarvestBatchStatus = "DRAFT" | "BLOCKED" | "APPROVED" | "HARVESTED" | "CANCELLED";
+export type LabSampleStatus =
+  | "COLLECTED"
+  | "SENT"
+  | "RESULT_RECORDED"
+  | "CANCELLED";
+export type HarvestBatchStatus =
+  | "DRAFT"
+  | "BLOCKED"
+  | "APPROVED"
+  | "HARVESTED"
+  | "CANCELLED";
 export type PlanStatus = "DRAFT" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 export type CultivationZoneAreaUnit = "SQUARE_METER" | "HECTARE";
 export type CultivationZoneCropType = "DURIAN" | "OTHER";
@@ -127,6 +136,14 @@ export interface AgriculturalInputSnapshot {
   activeIngredients: ActiveIngredientSnapshot[];
   allowedMarketCodes: string[];
   prohibitedMarketCodes: string[];
+  /** Verification state captured when the material was actually used. */
+  verificationStatus?: InputStatus | null;
+  userRecordedMetadata?: {
+    recordedBy?: string | null;
+    source?: string | null;
+    ocrConfidence?: number | null;
+    recordedAt?: string | null;
+  } | null;
 }
 
 export interface CultivationPlanTemplate {
@@ -157,6 +174,34 @@ export interface CultivationPlan {
   updatedAt: string;
 }
 
+export interface CultivationSeason {
+  id: string;
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  productionStatus?: "IN_PROGRESS" | "HARVESTED" | "COMPLETED";
+  effectiveStatus?: CultivationSeasonStatus | null;
+  status?: CultivationSeasonStatus | null;
+}
+
+export interface CreateCultivationSeasonRequest {
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
+}
+
 export interface FarmOption {
   id: string;
   name?: string | null;
@@ -168,6 +213,8 @@ export interface FarmOption {
 export type FarmZoneStatus = "ACTIVE" | "INACTIVE" | "QUARANTINED" | "ARCHIVED";
 
 export interface FarmZoneRequest {
+  agronomy?: import("./zoneAgronomy").FarmZoneAgronomy | null;
+  status?: FarmZoneStatus;
   areaSquareMeters?: number | null;
   boundaryGeoJson?: Record<string, unknown> | null;
   code?: string | null;
@@ -371,6 +418,7 @@ export interface LabSample {
   laboratoryName: string;
   laboratoryAccreditation?: string | null;
   status: LabSampleStatus;
+  expectedActiveIngredientCodes?: string[];
   attachments: string[];
   createdAt: string;
 }
@@ -386,6 +434,12 @@ export interface LabResidueResult {
   quantificationLimit?: number | null;
   applicableMrl?: number | null;
   applicableMrlSource?: string | null;
+  residueStandardId?: string | null;
+  mrlUnit?: string | null;
+  standardEffectiveFrom?: string | null;
+  standardEffectiveTo?: string | null;
+  standardSourceType?: string | null;
+  evaluationPolicyVersion?: string | null;
   resultStatus: LabResultStatus;
   verifiedBy?: string | null;
   verifiedAt?: string | null;
@@ -434,6 +488,68 @@ export interface CareHistoryResponse {
   inputUsages: ActivityInputUsage[];
 }
 
+export interface TreeYieldObservation {
+  id: string;
+  treeId: string;
+  farmId: string;
+  zoneId: string;
+  seasonId: string;
+  fruitCount: number;
+  averageFruitWeightKgOverride?: number | null;
+  observedAt: string;
+  recordedBy: string;
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ZoneYieldForecast {
+  seasonId: string;
+  zoneId: string;
+  totalTrees: number;
+  observedTrees: number;
+  unobservedTrees: number;
+  unforecastableObservedTrees: number;
+  forecastableTrees: number;
+  totalFruitCount: number;
+  estimatedYieldKg: number;
+  defaultAverageFruitWeightKg?: number | null;
+  expectedPricePerKg?: number | null;
+  currencyCode?: string | null;
+  estimatedRevenue?: number | null;
+  estimatedProfit?: number | null;
+  historyAvailable: boolean;
+  previousSeasonActualYieldKg?: number | null;
+  historicalAverageYieldKg?: number | null;
+  historicalAverageFruitWeightKg?: number | null;
+  suggestedAverageFruitWeightKg?: number | null;
+  differenceFromHistoricalAveragePercent?: number | null;
+  /** One authoritative, latest observation per tree from the forecast endpoint. */
+  trees?: Array<{
+    treeId: string;
+    treeCode: string;
+    fruitCount?: number | null;
+    averageFruitWeightKgUsed?: number | null;
+    averageWeightSource?: string | null;
+    estimatedYieldKg?: number | null;
+    lastObservedAt?: string | null;
+    forecastable: boolean;
+  }>;
+}
+
+export interface SeasonYieldHistory {
+  seasonId: string;
+  seasonName: string;
+  zoneId: string;
+  actualFruitCount?: number | null;
+  actualYieldKg?: number | null;
+  actualAverageFruitWeightKg?: number | null;
+  actualAverageSellingPricePerKg?: number | null;
+  actualRevenue?: number | null;
+  finalHarvestDate?: string | null;
+  dataType: "ACTUAL";
+}
+
 export interface HarvestDispatchSnapshot {
   id: string;
   exportReleaseId: string;
@@ -465,6 +581,9 @@ export interface ExportRelease {
 
 export interface TraceabilitySnapshot {
   releaseId: string;
+  status: ExportReleaseStatus;
+  recalledAt?: string | null;
+  recallReason?: string | null;
   snapshot: Record<string, unknown>;
 }
 
@@ -485,22 +604,7 @@ export interface ApiError {
   message: string;
 }
 
-export interface CultivationSeason {
-  productionStatus?: "IN_PROGRESS" | "HARVESTED" | "COMPLETED";
-  id: string;
-  farmId: string;
-  plotId: string;
-  name: string;
-  crop?: string | null;
-  variety?: string | null;
-  startDate: string;
-  endDate?: string | null;
-  createdBy: string;
-  createdAt?: string | null;
-  effectiveStatus?: CultivationSeasonStatus | null;
-  status?: CultivationSeasonStatus | null;
-  updatedAt?: string | null;
-}
+
 
 export type CultivationSeasonStatus = "PREPARING" | "IN_PROGRESS" | "ENDED";
 
@@ -519,7 +623,12 @@ export type CultivationDashboardData = {
   exportReleases: ExportRelease[];
 };
 
-export type CultivationTaskType = "fertilizer" | "pesticide" | "irrigation" | "pruning" | "inspection";
+export type CultivationTaskType =
+  | "fertilizer"
+  | "pesticide"
+  | "irrigation"
+  | "pruning"
+  | "inspection";
 export type CultivationTaskStatus = "planned" | "in-progress" | "done";
 
 export interface CultivationSchedule {
