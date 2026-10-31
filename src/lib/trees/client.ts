@@ -14,6 +14,7 @@ import type {
   TreeCarePlan,
   TreeDetail,
   TreeDiagnosis,
+  TreeHealthStatus,
   TreeSummary,
   UpdateTreeRequest,
   ZoneDetail,
@@ -140,7 +141,7 @@ export const treeClient = {
       `/api/trees/${encodeURIComponent(treeId)}/diagnoses/latest`,
     ),
 
-  updateHealthStatus: (treeId: string, healthStatus: "TREATING" | "RECOVERED") =>
+  updateHealthStatus: (treeId: string, healthStatus: TreeHealthStatus) =>
     treeRequest<TreeDetail>(
       `/api/trees/${encodeURIComponent(treeId)}/health-status`,
       { method: "PATCH", body: JSON.stringify({ healthStatus }) },

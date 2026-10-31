@@ -133,6 +133,14 @@ export interface AgriculturalInputSnapshot {
   activeIngredients: ActiveIngredientSnapshot[];
   allowedMarketCodes: string[];
   prohibitedMarketCodes: string[];
+  /** Verification state captured when the material was actually used. */
+  verificationStatus?: InputStatus | null;
+  userRecordedMetadata?: {
+    recordedBy?: string | null;
+    source?: string | null;
+    ocrConfidence?: number | null;
+    recordedAt?: string | null;
+  } | null;
 }
 
 export interface CultivationPlanTemplate {
@@ -175,6 +183,17 @@ export interface CultivationSeason {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateCultivationSeasonRequest {
+  farmId: string;
+  plotId: string;
+  name: string;
+  crop?: string | null;
+  variety?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  createdBy: string;
 }
 
 export interface FarmOption {
@@ -460,6 +479,68 @@ export interface CareHistoryResponse {
   activities: CultivationActivity[];
   executions: ActivityExecution[];
   inputUsages: ActivityInputUsage[];
+}
+
+export interface TreeYieldObservation {
+  id: string;
+  treeId: string;
+  farmId: string;
+  zoneId: string;
+  seasonId: string;
+  fruitCount: number;
+  averageFruitWeightKgOverride?: number | null;
+  observedAt: string;
+  recordedBy: string;
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ZoneYieldForecast {
+  seasonId: string;
+  zoneId: string;
+  totalTrees: number;
+  observedTrees: number;
+  unobservedTrees: number;
+  unforecastableObservedTrees: number;
+  forecastableTrees: number;
+  totalFruitCount: number;
+  estimatedYieldKg: number;
+  defaultAverageFruitWeightKg?: number | null;
+  expectedPricePerKg?: number | null;
+  currencyCode?: string | null;
+  estimatedRevenue?: number | null;
+  estimatedProfit?: number | null;
+  historyAvailable: boolean;
+  previousSeasonActualYieldKg?: number | null;
+  historicalAverageYieldKg?: number | null;
+  historicalAverageFruitWeightKg?: number | null;
+  suggestedAverageFruitWeightKg?: number | null;
+  differenceFromHistoricalAveragePercent?: number | null;
+  /** One authoritative, latest observation per tree from the forecast endpoint. */
+  trees?: Array<{
+    treeId: string;
+    treeCode: string;
+    fruitCount?: number | null;
+    averageFruitWeightKgUsed?: number | null;
+    averageWeightSource?: string | null;
+    estimatedYieldKg?: number | null;
+    lastObservedAt?: string | null;
+    forecastable: boolean;
+  }>;
+}
+
+export interface SeasonYieldHistory {
+  seasonId: string;
+  seasonName: string;
+  zoneId: string;
+  actualFruitCount?: number | null;
+  actualYieldKg?: number | null;
+  actualAverageFruitWeightKg?: number | null;
+  actualAverageSellingPricePerKg?: number | null;
+  actualRevenue?: number | null;
+  finalHarvestDate?: string | null;
+  dataType: "ACTUAL";
 }
 
 export interface ExportRelease {

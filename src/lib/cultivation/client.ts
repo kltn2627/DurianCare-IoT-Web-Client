@@ -8,6 +8,7 @@ import type {
   BiologicalLevel,
   CareHistoryResponse,
   ComplianceAssessment,
+  CreateCultivationSeasonRequest,
   CreateCultivationScheduleRequest,
   CultivationActivity,
   CultivationDashboardData,
@@ -32,6 +33,9 @@ import type {
   ResidueStandard,
   SafeHarvestDateResponse,
   TraceabilitySnapshot,
+  TreeYieldObservation,
+  ZoneYieldForecast,
+  SeasonYieldHistory,
 } from "./types";
 
 import { cultivationMockClient } from "./mock";
@@ -496,6 +500,12 @@ export const cultivationClient = {
     );
   },
 
+  createSeason: (body: CreateCultivationSeasonRequest) =>
+    cultivationRequest<CultivationSeason>("/api/v1/cultivation-seasons", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   careHistory: (seasonId: string) =>
     cultivationRequest<CareHistoryResponse>(
       `/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/care-history`,
@@ -510,6 +520,27 @@ export const cultivationClient = {
     cultivationRequest<SafeHarvestDateResponse | string | null>(
       `/api/v1/cultivation-seasons/${encodeURIComponent(cultivationSeasonId)}/safe-harvest-date`,
     ),
+
+  createTreeYieldObservation: (treeId: string, body: {
+    seasonId: string; zoneId: string; fruitCount: number; averageFruitWeightKgOverride?: number | null; observedAt?: string; note?: string;
+  }) => cultivationRequest<TreeYieldObservation>(`/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations`, {
+    method: "POST", body: JSON.stringify(body),
+  }),
+
+  listTreeYieldObservations: (treeId: string, seasonId: string) =>
+    cultivationRequest<TreeYieldObservation[]>(`/api/v1/trees/${encodeURIComponent(treeId)}/yield-observations${queryString({ seasonId })}`),
+
+  getYieldForecast: (seasonId: string, zoneId: string) =>
+    cultivationRequest<ZoneYieldForecast>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast`),
+
+  updateYieldForecastSettings: (seasonId: string, zoneId: string, body: {
+    defaultAverageFruitWeightKg?: number | null; expectedPricePerKg?: number | null; currencyCode?: string | null;
+  }) => cultivationRequest<unknown>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-forecast-settings`, {
+    method: "PUT", body: JSON.stringify(body),
+  }),
+
+  getSeasonYieldHistory: (seasonId: string, zoneId: string) =>
+    cultivationRequest<SeasonYieldHistory[]>(`/api/v1/cultivation-seasons/${encodeURIComponent(seasonId)}/zones/${encodeURIComponent(zoneId)}/yield-history`),
 
   assessCompliance: (
     cultivationSeasonId: string,

@@ -2054,6 +2054,31 @@ function HistoryView({ activities, executions, usages, plotLabel }: { activities
   const completedCount = activities.filter((activity) => activity.status === "COMPLETED").length;
   const skippedCount = activities.filter((activity) => activity.status === "SKIPPED").length;
   const cancelledCount = activities.filter((activity) => activity.status === "CANCELLED").length;
+  const [materialQuery, setMaterialQuery] = useState("");
+  const [materialCategory, setMaterialCategory] = useState("ALL");
+  const [materialSort, setMaterialSort] = useState<"newest" | "oldest">("newest");
+  const [materialPage, setMaterialPage] = useState(0);
+  const materialRows = useMemo(() => usages.flatMap((usage) => {
+    const execution = executions.find((item) => item.id === usage.activityExecutionId);
+    const activity = execution ? activities.find((item) => item.id === execution.cultivationActivityId) : undefined;
+    if (!execution || !activity) return [];
+    const material = usage.agriculturalInputSnapshot;
+    return [{ usage, execution, activity, material }];
+  }), [activities, executions, usages]);
+  const categories = useMemo(() => [...new Set(materialRows.map((row) => row.material?.category).filter(Boolean))].sort(), [materialRows]);
+  const filteredMaterialRows = useMemo(() => materialRows
+    .filter((row) => {
+      const label = row.material?.tradeName || row.material?.productName || row.usage.agriculturalInputId;
+      return (!materialQuery.trim() || label.toLocaleLowerCase().includes(materialQuery.trim().toLocaleLowerCase()))
+        && (materialCategory === "ALL" || row.material?.category === materialCategory);
+    })
+    .sort((left, right) => materialSort === "newest"
+      ? Date.parse(right.execution.completedAt) - Date.parse(left.execution.completedAt)
+      : Date.parse(left.execution.completedAt) - Date.parse(right.execution.completedAt)), [materialCategory, materialQuery, materialRows, materialSort]);
+  const materialPageSize = 10;
+  const materialPageCount = Math.max(1, Math.ceil(filteredMaterialRows.length / materialPageSize));
+  const safeMaterialPage = Math.min(materialPage, materialPageCount - 1);
+  const displayedMaterialRows = filteredMaterialRows.slice(safeMaterialPage * materialPageSize, (safeMaterialPage + 1) * materialPageSize);
 
   return (
     <Section title="Nhật ký chăm sóc" description="Chỉ lưu các công việc đã có kết quả: hoàn thành, hoãn hoặc hủy. Các việc đang mở được xử lý ở tab Công việc.">
@@ -2063,6 +2088,30 @@ function HistoryView({ activities, executions, usages, plotLabel }: { activities
             <MiniMetric label="Hoàn thành" value={completedCount} />
             <MiniMetric label="Hoãn" value={skippedCount} />
             <MiniMetric label="Hủy" value={cancelledCount} />
+          </div>
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-neutral-950">Vật tư đã sử dụng</h3>
+                <p className="mt-1 text-xs text-neutral-500">Chỉ hiển thị ActivityInputUsage đã được lưu cùng lần thực hiện công việc.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <input aria-label="Lọc theo tên vật tư" className="rounded-lg border border-neutral-200 px-2 py-1.5 text-xs" onChange={(event) => { setMaterialQuery(event.target.value); setMaterialPage(0); }} placeholder="Tên vật tư" value={materialQuery} />
+                <select aria-label="Lọc theo loại vật tư" className="rounded-lg border border-neutral-200 px-2 py-1.5 text-xs" onChange={(event) => { setMaterialCategory(event.target.value); setMaterialPage(0); }} value={materialCategory}>
+                  <option value="ALL">Tất cả loại</option>
+                  {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <select aria-label="Sắp xếp lịch sử vật tư" className="rounded-lg border border-neutral-200 px-2 py-1.5 text-xs" onChange={(event) => setMaterialSort(event.target.value as "newest" | "oldest")} value={materialSort}>
+                  <option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option>
+                </select>
+              </div>
+            </div>
+            {displayedMaterialRows.length ? <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead className="border-y border-neutral-200 bg-neutral-50 text-neutral-500"><tr>{["Ngày", "Công việc", "Khu", "Vật tư", "Loại", "Trạng thái", "SL", "Hoạt chất", "Nồng độ", "Lô", "Thu hoạch an toàn", "Người thực hiện"].map((header) => <th className="whitespace-nowrap px-3 py-2 font-semibold" key={header}>{header}</th>)}</tr></thead><tbody>{displayedMaterialRows.map(({ usage, execution, activity, material }) => {
+              const verified = material?.verificationStatus !== "DRAFT" && !material?.userRecordedMetadata;
+              const ingredients = usage.activeIngredientSnapshots?.length ? usage.activeIngredientSnapshots : material?.activeIngredients ?? [];
+              return <tr className="border-b border-neutral-100 align-top text-neutral-700" key={usage.id}><td className="whitespace-nowrap px-3 py-2">{formatDateTime(execution.completedAt)}</td><td className="px-3 py-2"><b>{activity.title}</b><br /><span className="text-neutral-500">{activityTypeLabels[activity.activityType]}</span></td><td className="whitespace-nowrap px-3 py-2">{plotLabel(activity.plotId)}</td><td className="px-3 py-2">{material?.tradeName || material?.productName || usage.agriculturalInputId}</td><td className="px-3 py-2">{material?.category || "Chưa rõ"}</td><td className="px-3 py-2"><span className={verified ? "rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700" : "rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700"}>{verified ? "VERIFIED" : "USER_RECORDED"}</span></td><td className="whitespace-nowrap px-3 py-2">{usage.quantityUsed} {usage.quantityUnit}</td><td className="px-3 py-2">{ingredients.length ? ingredients.map((ingredient) => ingredient.name).filter(Boolean).join(", ") : "Chưa xác minh"}</td><td className="px-3 py-2">{ingredients.length ? ingredients.map((ingredient) => ingredient.concentration == null ? null : `${ingredient.concentration}${ingredient.concentrationUnit ? ` ${ingredient.concentrationUnit}` : ""}`).filter(Boolean).join(", ") || "Chưa rõ" : "Chưa rõ"}</td><td className="px-3 py-2">{usage.batchNumber || "—"}</td><td className="whitespace-nowrap px-3 py-2">{usage.calculatedSafeHarvestDate ? formatDate(usage.calculatedSafeHarvestDate) : "Chưa có"}</td><td className="px-3 py-2">{execution.executedBy}</td></tr>;
+            })}</tbody></table></div> : <p className="rounded-xl bg-neutral-50 p-4 text-center text-xs text-neutral-500">Không có vật tư phù hợp bộ lọc.</p>}
+            {filteredMaterialRows.length > materialPageSize ? <div className="mt-3 flex items-center justify-end gap-2 text-xs"><button aria-label="Trang trước" className="rounded-lg border border-neutral-200 px-2 py-1 disabled:opacity-40" disabled={safeMaterialPage === 0} onClick={() => setMaterialPage((page) => Math.max(0, page - 1))}>Trước</button><span>{safeMaterialPage + 1}/{materialPageCount}</span><button aria-label="Trang sau" className="rounded-lg border border-neutral-200 px-2 py-1 disabled:opacity-40" disabled={safeMaterialPage >= materialPageCount - 1} onClick={() => setMaterialPage((page) => Math.min(materialPageCount - 1, page + 1))}>Sau</button></div> : null}
           </div>
           <div className="space-y-3">
             {activities.map((activity) => (
