@@ -1,92 +1,95 @@
-# Deploy Web Client lên Netlify (kèm CI/CD GitHub)
+# Deploy Web Client lên Netlify (CI/CD bằng GitHub Actions)
 
-## 1. Cách hệ thống chạy
+Site hiện có: project **`leafy-tulumba-63cf69`**, domain **https://duriancare.io.vn**, Project ID (Site ID) `f16e2d39-72a3-46e9-addf-6159fe0b339a`.
+
+## 1. Luồng CI/CD
 
 ```
-GitHub (kltn2627/DurianCare-IoT-Web-Client)
-  ├─ Pull request vào dev/main ──► GitHub Actions "Web CI" (.github/workflows/ci.yml)
-  │                                lint → typecheck → test → build  (cổng chặn merge)
-  └─ Push/merge vào main ────────► Netlify tự build + deploy Production
-     Pull request ───────────────► Netlify tạo Deploy Preview (URL riêng cho từng PR)
+Pull request vào dev/main ─► GitHub Actions "Web CI" (.github/workflows/ci.yml)
+                              job verify: lint → typecheck → test → build
+                              job deploy: Deploy Preview  https://pr-<số>--leafy-tulumba-63cf69.netlify.app
+Push/merge vào main ───────► job verify → job deploy --prod ─► https://duriancare.io.vn
 ```
 
-- **CI**: GitHub Actions kiểm tra mọi PR. Workflow đã có sẵn và không cần secret.
-- **CD**: Netlify kết nối thẳng với repo GitHub. Mỗi lần `main` thay đổi, Netlify build theo `netlify.toml` rồi deploy.
-- Không cần token Netlify trong GitHub, vì Netlify tự lấy code qua GitHub App.
+- Job **deploy** chỉ chạy khi **verify xanh**, nên code lỗi không lên Production.
+- Job deploy dùng `netlify-cli` để build bằng Next.js runtime của Netlify, đọc biến môi trường từ Netlify (mục 3), rồi upload.
+- Khi chưa có 2 secret ở mục 2, job deploy chỉ in thông báo và bỏ qua. CI không bị đỏ.
+- PR từ fork không có secret nên không deploy, để tránh lộ token.
 
-> **Điều kiện bắt buộc:** Web trên Netlify gọi Backend từ **server của Netlify**, không phải từ máy bạn.
-> `http://localhost:8080` sẽ **không** hoạt động. Gateway (và Chat Service) phải có URL **HTTPS công khai**, ví dụ:
-> - Backend deploy lên VPS hoặc cloud, hoặc
-> - tạm thời mở Gateway bằng tunnel: `cloudflared tunnel --url http://localhost:8080` (Cloudflare Quick Tunnel), hoặc `ngrok http 8080`.
->
-> URL tunnel miễn phí đổi sau mỗi lần chạy lại, nên phải cập nhật biến môi trường và deploy lại.
+## 2. Bạn tự làm: tạo Secrets trên GitHub
 
-## 2. Tạo site trên Netlify (làm một lần)
+### 2.1. Lấy Netlify Personal Access Token
+1. Netlify → avatar góc phải → **User settings → Applications → Personal access tokens → New access token**.
+2. **Description:** `github-actions-duriancare-web`. Chọn **Expiration** (ví dụ 1 năm).
+3. Bấm **Generate token** và **copy ngay**, vì token chỉ hiện một lần. Không dán token vào chat, code hay issue.
 
-1. Đăng nhập <https://app.netlify.com> bằng GitHub.
-2. Chọn **Add new project → Import an existing project → GitHub**.
-3. Cấp quyền Netlify GitHub App cho tổ chức `kltn2627` (chỉ cần repo `DurianCare-IoT-Web-Client`).
-4. Chọn repo **DurianCare-IoT-Web-Client**:
-   - **Branch to deploy:** `main`
-   - **Base directory:** để trống
-   - **Build command / Publish directory:** để mặc định, vì Netlify đọc từ `netlify.toml` (`npm run build`, `.next`)
-5. Trước khi bấm **Deploy**, mở **Add environment variables** và nhập các biến ở mục 3. Có thể nhập sau trong **Project configuration → Environment variables**.
-6. Bấm **Deploy**. Xem log trong **Deploys**. Lần đầu mất khoảng 3–5 phút.
-7. Tùy chọn: đổi tên site trong **Project configuration → General → Project details → Change project name**, để có URL dạng `https://duriancare.netlify.app`.
+### 2.2. Thêm 2 secret vào repo `kltn2627/DurianCare-IoT-Web-Client`
+GitHub → repo → **Settings → Secrets and variables → Actions → tab Secrets → New repository secret**:
 
-## 3. Biến môi trường trên Netlify
+| Name | Secret |
+|---|---|
+| `NETLIFY_AUTH_TOKEN` | token vừa tạo ở 2.1 |
+| `NETLIFY_SITE_ID` | `f16e2d39-72a3-46e9-addf-6159fe0b339a` |
 
-Vào **Project configuration → Environment variables → Add a variable → Add a single variable**.
-Với mỗi biến: **Scopes** = *All scopes* (gói miễn phí chỉ có lựa chọn này); **Values** = *Same value for all deploy contexts*. Không tick *Contains secret values*, vì không biến nào ở đây là secret.
+Tên phải viết đúng hoa thường như trên. Repo nằm trong organization, nên cần quyền **Admin** của repo mới thấy mục Secrets.
 
-Site hiện có: project `leafy-tulumba-63cf69`, domain `https://duriancare.io.vn`, deploy từ nhánh `main`. Đã đặt sẵn `NEXT_PUBLIC_WEB_BASE_URL=https://duriancare.io.vn`.
-Biến `NEXT_PUBLIC_*` được nhúng vào bundle lúc build, nên **sau khi đổi phải deploy lại** (**Deploys → Trigger deploy → Deploy project without cache**).
+### 2.3. Tắt build phía Netlify để không bị deploy hai lần
+Sau khi thêm secret, Netlify đang **tự build mỗi lần push** (Git integration). Nếu giữ nguyên, mỗi lần merge sẽ có hai bản build. Để GitHub Actions là nơi deploy duy nhất:
 
-| Biến | Bắt buộc | Giá trị ví dụ | Dùng ở đâu |
-|---|---|---|---|
-| `DURIANCARE_API_URL` | **Có** | `https://api.duriancare.example.com` | URL công khai của API Gateway (cổng 8080). Mọi route `/api/*` của Next.js proxy qua đây. Không có `/` ở cuối. |
-| `IOT_SERVICE_URL` | Có, nếu dùng trang xuất khẩu/truy xuất công khai | `https://iot.duriancare.example.com` | Rewrite `/api/backend/v1/public/*` và `/api/backend/v1/export-assessment/*` trong `next.config.ts`. |
-| `CHAT_SERVICE_URL` | Có, nếu dùng chat | `https://chat.duriancare.example.com` | Proxy `/api/chat/*` phía server. |
-| `DURIANCARE_CHAT_SERVICE_URL` | Không | như trên | Tên dự phòng, chỉ dùng khi không có `CHAT_SERVICE_URL`. Chỉ cần một trong hai. |
-| `NEXT_PUBLIC_CHAT_SOCKET_URL` | Có, nếu dùng chat realtime | `https://chat.duriancare.example.com` | Socket.IO chạy **trên trình duyệt**, nên phải là URL HTTPS mà trình duyệt truy cập được. |
-| `NEXT_PUBLIC_WEB_BASE_URL` | Nên có | `https://duriancare.netlify.app` | Tạo link trong mã QR của cây và lô xuất khẩu. Nếu bỏ trống, app lấy origin hiện tại. |
-| `NEXT_PUBLIC_DEFAULT_IOT_DEVICE_ID` | Không | `esp32-01` | Thiết bị mặc định của biểu đồ cảm biến. |
-| `NEXT_PUBLIC_ENABLE_CULTIVATION_MOCK` | Không | `false` | Chỉ đặt `true` khi demo bằng dữ liệu giả. **Production để `false` hoặc không tạo.** |
+Netlify → project → **Project configuration → Developer settings → Build settings → Configure → Build status: Stopped builds → Save**.
 
-`NODE_VERSION=24` và `NEXT_TELEMETRY_DISABLED=1` đã có trong `netlify.toml`, không cần tạo trên giao diện.
+Repo vẫn liên kết với Netlify, chỉ là Netlify không tự build nữa. Nếu muốn quay lại cách cũ, chọn **Active builds** và xóa 2 secret.
 
-Quy tắc an toàn:
-- **Không** đặt secret (JWT secret, mật khẩu DB, API key) vào biến `NEXT_PUBLIC_*`, vì chúng hiện công khai trong JavaScript.
-- Web Client không cần JWT secret hay mật khẩu DB. Các giá trị đó chỉ nằm ở Backend.
-- Không commit file `.env`; file này đã có trong `.gitignore`.
+### 2.4. Kiểm tra
+- Mở một PR vào `dev` → tab **Actions** → workflow **Web CI** → job **Deploy to Netlify** → phần **Summary** có link preview.
+- Merge vào `main` → job deploy chạy với `--prod` → https://duriancare.io.vn được cập nhật.
+- Chạy tay: **Actions → Web CI → Run workflow → branch `main`**.
 
-Có thể nhập bằng CLI thay cho giao diện, sau khi chạy `npx netlify-cli login` và `npx netlify-cli link`:
+### 2.5. Bảo vệ nhánh (khuyến nghị)
+**Settings → Branches → Add branch ruleset** cho `main` và `dev`:
+- *Require a pull request before merging*
+- *Require status checks to pass* → chọn **Lint, typecheck, test and build**
+
+## 3. Biến môi trường trên Netlify (đã thiết lập)
+
+Đặt tại **Project configuration → Environment variables**: *All scopes*, cùng một giá trị cho mọi deploy context. Không biến nào là secret.
+
+| Biến | Giá trị hiện tại | Ý nghĩa |
+|---|---|---|
+| `DURIANCARE_API_URL` | URL Cloudflare Tunnel của Gateway (cổng 8080) | Mọi route `/api/*` của Next.js proxy tới đây (server-side). |
+| `IOT_SERVICE_URL` | URL tunnel của IoT Service (3001) | Rewrite `/api/backend/v1/public/*`, `/api/backend/v1/export-assessment/*`. |
+| `CHAT_SERVICE_URL` | URL tunnel của Chat Service (3002) | Proxy `/api/chat/*` (server-side). |
+| `NEXT_PUBLIC_CHAT_SOCKET_URL` | như `CHAT_SERVICE_URL` | Socket.IO chạy trên trình duyệt. |
+| `NEXT_PUBLIC_WEB_BASE_URL` | `https://duriancare.io.vn` | Gốc của link trong mã QR cây và lô xuất khẩu. |
+| `NEXT_PUBLIC_DEFAULT_IOT_DEVICE_ID` | `esp32-01` | Thiết bị mặc định của biểu đồ cảm biến. |
+| `NEXT_PUBLIC_ENABLE_CULTIVATION_MOCK` | `false` | Tắt dữ liệu giả. |
+
+`NODE_VERSION=24` và `NEXT_TELEMETRY_DISABLED=1` nằm trong `netlify.toml`.
+
+Biến `NEXT_PUBLIC_*` được nhúng vào JavaScript lúc build:
+- Đổi giá trị thì phải build lại: chạy lại workflow, hoặc dùng **Deploys → Trigger deploy** nếu còn để Netlify build.
+- Không bao giờ đặt secret vào biến `NEXT_PUBLIC_*`.
+
+## 4. Cloudflare Quick Tunnel: khi URL thay đổi
+
+Backend chạy trên laptop và được mở ra Internet bằng Cloudflare Quick Tunnel. **URL `*.trycloudflare.com` đổi mỗi lần chạy lại tunnel**, và tunnel chỉ sống khi máy, Docker và lệnh tunnel còn chạy.
+
+Chạy lại tunnel (mỗi lệnh trong một terminal riêng):
 
 ```bash
-npx netlify-cli env:set DURIANCARE_API_URL https://api.duriancare.example.com
+"/c/Program Files (x86)/cloudflared/cloudflared.exe" tunnel --no-autoupdate --url http://localhost:8080
+"/c/Program Files (x86)/cloudflared/cloudflared.exe" tunnel --no-autoupdate --url http://localhost:3001
+"/c/Program Files (x86)/cloudflared/cloudflared.exe" tunnel --no-autoupdate --url http://localhost:3002
 ```
 
-## 4. Backend phải cho phép domain Netlify
+Mỗi lệnh in ra một URL `https://<tên>.trycloudflare.com`. Cập nhật 4 biến `DURIANCARE_API_URL`, `IOT_SERVICE_URL`, `CHAT_SERVICE_URL`, `NEXT_PUBLIC_CHAT_SOCKET_URL` trên Netlify, rồi build lại (mục 3).
 
-- Cookie đăng nhập do route `/api/auth/*` của Next.js đặt trên domain Netlify, nên trình duyệt không gọi thẳng Gateway (trừ Socket.IO chat).
-- Với chat realtime, Chat Service cần cho phép CORS và Socket.IO origin `https://<tên-site>.netlify.app`.
-- Nếu Gateway chạy sau tunnel, cần bật HTTPS, vì Netlify chặn mixed content khi trình duyệt gọi `http://`.
+Muốn URL cố định (ví dụ `api.duriancare.io.vn`): chuyển nameserver của `duriancare.io.vn` từ Long Vân sang Cloudflare và tạo **Named Tunnel**, hoặc deploy Backend lên server có HTTPS.
 
-## 5. Bảo vệ nhánh trên GitHub (khuyến nghị)
+## 5. Kiểm tra sau deploy
 
-Repo → **Settings → Branches → Add branch ruleset** (hoặc *Branch protection rule*) cho `main` và `dev`:
-- **Require a pull request before merging**
-- **Require status checks to pass** → chọn **Lint, typecheck, test and build** (job của *Web CI*)
-- (Tùy chọn) thêm check **netlify/…/deploy-preview** để PR chỉ merge khi Deploy Preview build thành công.
-
-## 6. Quy trình phát hành
-
-1. Làm việc trên nhánh tính năng → mở PR vào `dev` → CI xanh → merge.
-2. Mở PR `dev` → `main` → CI xanh, Deploy Preview xanh, kiểm tra trên URL preview → merge.
-3. Netlify tự deploy `main` lên Production. Nếu cần rollback: **Deploys** → chọn bản cũ → **Publish deploy**.
-
-## 7. Kiểm tra sau khi deploy
-
-- Mở `https://<tên-site>.netlify.app/login` → đăng nhập. Nếu thất bại, kiểm tra `DURIANCARE_API_URL` và việc Gateway có truy cập được từ Internet hay không (`curl https://<gateway>/actuator/health`).
-- **Logs → Functions** trên Netlify hiển thị lỗi proxy phía server (timeout, 502).
-- Quét QR của một cây: link phải bắt đầu bằng `NEXT_PUBLIC_WEB_BASE_URL`.
+- `https://duriancare.io.vn/login` → đăng nhập.
+  - Lỗi **503 "Không thể kết nối đến DurianCare Gateway"**: tunnel đã tắt hoặc URL đã đổi.
+  - Lỗi **401**: Backend vẫn kết nối được; kiểm tra lại tài khoản.
+- Netlify → **Logs → Functions** để xem lỗi proxy phía server.
+- Rollback: Netlify → **Deploys** → chọn bản cũ → **Publish deploy**.

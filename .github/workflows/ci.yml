@@ -52,7 +52,71 @@ jobs:
       - name: Unit tests
         run: npm test -- --ci
 
-      # Build only; no deployment. No secrets are needed: backend URLs are read
-      # at request time and default to local development values.
+      # Verification build only; the deploy job below builds again with the
+      # Netlify runtime and the site's environment variables.
       - name: Production build
         run: npm run build
+
+  deploy:
+    name: Deploy to Netlify
+    # Runs only after the verify job passes. Pushes to main go to production;
+    # pull requests into dev/main get a preview URL. Fork PRs have no secrets and skip.
+    needs: verify
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+    steps:
+      - name: Check Netlify secrets
+        id: secrets
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::notice::NETLIFY_AUTH_TOKEN / NETLIFY_SITE_ID are not set; skipping deploy (see docs/NETLIFY_DEPLOY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide deploy target
+        if: steps.secrets.outputs.ready == 'true'
+        id: target
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "args=--prod" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo "args=--alias=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "args=--prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=--alias=${GITHUB_REF_NAME//[^a-zA-Z0-9-]/-}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24 with npm cache
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies (lockfile)
+        if: steps.secrets.outputs.ready == 'true'
+        run: npm ci
+
+      # netlify-cli builds by default, reading the site's environment variables from Netlify,
+      # with the Next.js runtime - the same result as a Netlify-side build.
+      - name: Build and deploy
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          npx --yes netlify-cli@27.16.1 deploy ${{ steps.target.outputs.args }} --message "${GITHUB_EVENT_NAME} ${GITHUB_SHA::7}" --json > deploy.json
+          # Build logs may precede the JSON; fall back to the last netlify.app URL.
+          url=$(jq -r '.deploy_url // .url' deploy.json 2>/dev/null || grep -o 'https://[^" ]*netlify.app' deploy.json | tail -1)
+          echo "Deployed: $url"
+          echo "### Netlify deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"
