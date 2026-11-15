@@ -6,6 +6,7 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  Cpu,
   BookOpen,
   Bot,
   Camera,
@@ -102,6 +103,7 @@ const adminNav: NavItem[] = [
     icon: MessageCircle,
   },
   { href: "/dashboard/admin/knowledge", label: "Kiến thức", icon: BookOpen },
+  { href: "/dashboard/admin/devices", label: "Thiết bị IoT", icon: Cpu },
   {
     href: "/dashboard/admin/calendar",
     label: "Lịch điều trị",

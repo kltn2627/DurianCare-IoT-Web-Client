@@ -1,25 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { soilSensorNote } from "@/lib/iot/soil";
 import { Activity, Droplets, RefreshCw, SunMedium, ThermometerSun } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { iotClient } from "@/lib/iot/client";
 import type { IotDevice, IotTelemetryReading } from "@/lib/iot/types";
-import { chartReadings, formatTimeLabel, historyQueryForRange } from "@/lib/iot/ranges";
-import { completeTelemetryHistory, loadDashboardHistory } from "@/lib/iot/history";
+import { currentMonthKey, formatTimeLabel, historyQueryForRange, seasonMonthOptions } from "@/lib/iot/ranges";
+import { completeTelemetryHistory, loadBucketedHistory, loadDashboardHistory } from "@/lib/iot/history";
+import { SYNTHETIC_LABEL, pointSourceLabel } from "@/lib/iot/provenance";
+import { EMPTY_SERIES, bucketLabel, seriesFromBuckets, seriesFromReadings, type SensorSeries, type SoilStatusCounts } from "@/lib/iot/series";
 import { IotDeviceRegistration } from "@/components/iot/IotDeviceRegistration";
+import { IotDevicePanel } from "@/components/iot/IotDevicePanel";
 
 const POLL_INTERVAL_MS = 8000;
+const SIM = "mô phỏng";
 const FALLBACK_DEVICE_ID = process.env.NEXT_PUBLIC_DEFAULT_IOT_DEVICE_ID ?? "esp32-01";
 const CONNECTION_LABELS: Record<string, string> = {
   ONLINE: "Đang kết nối", STALE: "Dữ liệu đã cũ", OFFLINE: "Mất kết nối", INACTIVE: "Ngừng hoạt động", MAINTENANCE: "Đang bảo trì",
 };
 export const SENSOR_RANGE_OPTIONS = [
-  { key: "today", label: "Hôm nay", limit: 1000 },
-  { key: "24h", label: "24 Giờ qua", limit: 1000 },
-  { key: "7d", label: "7 Ngày qua", limit: 1000 },
-  { key: "month", label: "Tháng này", limit: 1000 },
-  { key: "season", label: "Toàn vụ mùa", limit: 1000 },
+  { key: "today", label: "Hôm nay", limit: 1000, resolution: "raw" },
+  { key: "24h", label: "24 Giờ qua", limit: 1000, resolution: "raw" },
+  { key: "7d", label: "7 Ngày qua", limit: 1000, resolution: "raw" },
+  // Long ranges exceed the raw-row cap, so they read server-side per-source time buckets.
+  { key: "month", label: "Theo tháng", limit: 1000, resolution: "bucketed" },
+  { key: "season", label: "Toàn vụ mùa", limit: 1000, resolution: "bucketed" },
 ] as const;
 type TimeRangeKey = (typeof SENSOR_RANGE_OPTIONS)[number]["key"];
 export type SensorChartMode = "area" | "bar" | "line";
@@ -42,24 +48,27 @@ export function SensorCharts() {
   const [climateMode, setClimateMode] = useState<SensorChartMode>("area");
   const [soilMode, setSoilMode] = useState<SensorChartMode>("bar");
   const [latest, setLatest] = useState<IotTelemetryReading | null>(null);
-  const [history, setHistory] = useState<IotTelemetryReading[]>([]);
-  const [seasonHistory, setSeasonHistory] = useState<IotTelemetryReading[]>([]);
-  const [incompleteHistory, setIncompleteHistory] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonthKey());
+  const [history, setHistory] = useState<SensorSeries>(EMPTY_SERIES);
+  const [seasonHistory, setSeasonHistory] = useState<SensorSeries>(EMPTY_SERIES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectedDevice = useMemo(
     () => devices.find((device) => device.id === selectedDeviceId) ?? devices[0] ?? null,
     [devices, selectedDeviceId],
   );
-  const chartData = chartReadings(history).map((reading) => ({
-    airHumidity: reading.humidity ?? reading.air_humidity ?? null,
+  const chartData = history.points.map((point) => ({
+    ...point,
     dryThreshold: 60,
-    soilMoisture: reading.soilMoisture ?? reading.soil_moisture ?? null,
-    temperature: reading.temperature,
-    time: reading.measuredAt ? formatTimeLabel(reading.measuredAt, timeRange) : "--",
+    time: formatTimeLabel(point.at, timeRange, history.bucketSeconds),
     wetThreshold: 85,
   }));
-  const statusData = useMemo(() => statusDistribution(seasonHistory), [seasonHistory]);
+  const hasSyntheticSeries = chartData.some((point) => point.syntheticCount > 0);
+  // Bucketed views hold explicit empty slots; bridging them would draw measurements that do not exist.
+  const keepGaps = history.resolution === "bucketed";
+  const statusData = useMemo(() => statusDistribution(seasonHistory.statusCounts), [seasonHistory]);
+  const incompleteHistory = history.incomplete || seasonHistory.incomplete;
+  const monthOptions = useMemo(() => seasonMonthOptions(), []);
 
   const loadDevices = useCallback(async () => {
     setLoading(true);
@@ -76,15 +85,14 @@ export function SensorCharts() {
       );
       if (nextDevices.length === 0) {
         setLatest(null);
-        setHistory([]);
+        setHistory(EMPTY_SERIES);
       }
     } catch (loadError) {
       setDevices([]);
       setSelectedDeviceId("");
       setLatest(null);
-      setHistory([]);
-      setSeasonHistory([]);
-      setIncompleteHistory(false);
+      setHistory(EMPTY_SERIES);
+      setSeasonHistory(EMPTY_SERIES);
       setError(messageFromError(loadError));
     } finally {
       setLoading(false);
@@ -100,15 +108,23 @@ export function SensorCharts() {
     if (options.showLoading !== false) {
       setLoading(true);
       setLatest(null);
-      setHistory([]);
-      setSeasonHistory([]);
+      setHistory(EMPTY_SERIES);
+      setSeasonHistory(EMPTY_SERIES);
     }
     setError(null);
     try {
       const now = new Date();
-      const fetchHistory = (range: TimeRangeKey) => isRawSensorFallback
-        ? completeTelemetryHistory(device.deviceUid, historyQueryForRange(range, now)).then(readings => ({ readings, incomplete: false }))
-        : loadDashboardHistory(device.deviceUid, historyQueryForRange(range, now));
+      const fetchHistory = async (range: TimeRangeKey): Promise<SensorSeries> => {
+        const query = historyQueryForRange(range, now, range === "month" ? selectedMonth : undefined);
+        if (SENSOR_RANGE_OPTIONS.find((option) => option.key === range)?.resolution === "bucketed") {
+          const bucketed = await loadBucketedHistory(device, query);
+          if (bucketed) return seriesFromBuckets(bucketed.buckets, bucketed.range.bucketSeconds);
+        }
+        const raw = isRawSensorFallback
+          ? { readings: await completeTelemetryHistory(device.deviceUid, query), incomplete: false }
+          : await loadDashboardHistory(device.deviceUid, query);
+        return seriesFromReadings(raw.readings, raw.incomplete);
+      };
       const selectedHistory = fetchHistory(timeRange);
       const [latestResponse, historyResponse, seasonResponse] = await Promise.all([
         isRawSensorFallback ? iotClient.rawLatestTelemetry(device.deviceUid)
@@ -119,20 +135,18 @@ export function SensorCharts() {
       ]);
       if (sequence !== requestSequence.current) return;
       setLatest(latestResponse);
-      setHistory(historyResponse.readings);
-      setSeasonHistory(seasonResponse.readings);
-      setIncompleteHistory(historyResponse.incomplete || seasonResponse.incomplete);
+      setHistory(historyResponse);
+      setSeasonHistory(seasonResponse);
     } catch (loadError) {
       if (sequence !== requestSequence.current) return;
       setLatest(null);
-      setHistory([]);
-      setSeasonHistory([]);
-      setIncompleteHistory(false);
+      setHistory(EMPTY_SERIES);
+      setSeasonHistory(EMPTY_SERIES);
       setError(messageFromError(loadError));
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
     }
-  }, [devices, timeRange]);
+  }, [devices, selectedMonth, timeRange]);
 
   const refresh = useCallback(async () => {
     await loadDevices();
@@ -200,6 +214,16 @@ export function SensorCharts() {
             {option.label}
           </button>
         ))}
+        {timeRange === "month" ? (
+          <select
+            aria-label="Chọn tháng"
+            value={selectedMonth}
+            onChange={(event) => setSelectedMonth(event.target.value)}
+            className="h-9 rounded-xl border border-[#2E5A44] bg-white px-4 text-[13px] font-bold text-[#2E5A44] outline-none"
+          >
+            {monthOptions.map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
+          </select>
+        ) : null}
       </div>
 
       {error ? <p className="mt-5 rounded-2xl bg-[#fff6db] px-4 py-3 text-[13px] font-bold text-[#6d5619]">{error}</p> : null}
@@ -212,8 +236,11 @@ export function SensorCharts() {
       <div className="mt-7 grid gap-7 md:grid-cols-3">
         <GaugeCard icon={ThermometerSun} label="Nhiệt độ hiện tại" max={40} min={20} unit="°C" value={latest?.temperature ?? null} />
         <GaugeCard icon={Droplets} label="Độ ẩm không khí" max={100} min={0} unit="%" value={latest?.humidity ?? latest?.air_humidity ?? null} />
-        <GaugeCard icon={SunMedium} label="Độ ẩm đất" max={100} min={0} unit="%" value={latest?.soilMoisture ?? latest?.soil_moisture ?? null} warning={latest?.status ?? null} />
+        <GaugeCard icon={SunMedium} label="Độ ẩm đất" max={100} min={0} unit="%" value={latest?.soilMoisture ?? latest?.soil_moisture ?? null} warning={latest?.status ?? null}
+          note={soilSensorNote(latest?.soilStatus)} />
       </div>
+
+      {selectedDevice?.telemetrySource === "registry" ? <IotDevicePanel key={selectedDevice.id} deviceId={selectedDevice.id} /> : null}
 
       <div className="mt-8 grid gap-10 xl:grid-cols-[1.2fr_1fr]">
         <div className="min-w-0">
@@ -226,9 +253,11 @@ export function SensorCharts() {
                   <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#7d8a82" }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#7d8a82" }} />
                   <Legend wrapperStyle={{ fontSize: 12, fontWeight: 700 }} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} />
-                  <Area connectNulls type="monotone" dataKey="airHumidity" name="Độ ẩm không khí %" stroke="#4b9666" fill="#dceadd" strokeWidth={2} />
-                  <Area connectNulls type="monotone" dataKey="temperature" name="Nhiệt độ °C" stroke="#D6A928" fill="#fbf5d8" strokeWidth={3} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} labelFormatter={climateTooltipLabel} />
+                  <Area connectNulls={!keepGaps} type="monotone" dataKey="airHumidity" name="Độ ẩm không khí %" stroke="#4b9666" fill="#dceadd" strokeWidth={2} dot={keepGaps ? { r: 2 } : false} />
+                  <Area connectNulls={!keepGaps} type="monotone" dataKey="temperature" name="Nhiệt độ °C" stroke="#D6A928" fill="#fbf5d8" strokeWidth={3} dot={keepGaps ? { r: 2 } : false} />
+                  {hasSyntheticSeries ? <Area type="monotone" dataKey="syntheticAirHumidity" name={`Độ ẩm không khí % (${SIM})`} stroke="#8fb39a" fill="none" strokeDasharray="6 4" strokeWidth={2} /> : null}
+                  {hasSyntheticSeries ? <Area type="monotone" dataKey="syntheticTemperature" name={`Nhiệt độ °C (${SIM})`} stroke="#b9a35c" fill="none" strokeDasharray="6 4" strokeWidth={2} /> : null}
                 </AreaChart>
               </ResponsiveContainer>
             ) : null}
@@ -240,22 +269,34 @@ export function SensorCharts() {
                   <YAxis yAxisId="temperature" orientation="left" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#a47c12" }} />
                   <YAxis yAxisId="humidity" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#4b9666" }} />
                   <Legend wrapperStyle={{ fontSize: 12, fontWeight: 700 }} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} />
-                  <Line yAxisId="temperature" connectNulls type="monotone" dataKey="temperature" name="Nhiệt độ °C" stroke="#D6A928" strokeWidth={3} dot={{ r: 2 }} />
-                  <Line yAxisId="humidity" connectNulls type="monotone" dataKey="airHumidity" name="Độ ẩm không khí %" stroke="#4b9666" strokeWidth={3} dot={{ r: 2 }} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} labelFormatter={climateTooltipLabel} />
+                  <Line yAxisId="temperature" connectNulls={!keepGaps} type="monotone" dataKey="temperature" name="Nhiệt độ °C" stroke="#D6A928" strokeWidth={3} dot={{ r: 2 }} />
+                  <Line yAxisId="humidity" connectNulls={!keepGaps} type="monotone" dataKey="airHumidity" name="Độ ẩm không khí %" stroke="#4b9666" strokeWidth={3} dot={{ r: 2 }} />
+                  {hasSyntheticSeries ? <Line yAxisId="temperature" type="monotone" dataKey="syntheticTemperature" name={`Nhiệt độ °C (${SIM})`} stroke="#b9a35c" strokeDasharray="6 4" strokeWidth={2} dot={false} /> : null}
+                  {hasSyntheticSeries ? <Line yAxisId="humidity" type="monotone" dataKey="syntheticAirHumidity" name={`Độ ẩm không khí % (${SIM})`} stroke="#8fb39a" strokeDasharray="6 4" strokeWidth={2} dot={false} /> : null}
                 </LineChart>
               </ResponsiveContainer>
             ) : null}
             {chartData.length > 1 && climateMode === "bar" ? (
               <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 700, height: 300 }}>
                 <BarChart data={chartData} margin={{ left: -18, right: 10 }}>
+                  <defs>
+                    <pattern id="synthetic-hatch-temperature" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                      <rect width="6" height="6" fill="#fbf5d8" /><line x1="0" y1="0" x2="0" y2="6" stroke="#b9a35c" strokeWidth="2" />
+                    </pattern>
+                    <pattern id="synthetic-hatch-humidity" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                      <rect width="6" height="6" fill="#dceadd" /><line x1="0" y1="0" x2="0" y2="6" stroke="#8fb39a" strokeWidth="2" />
+                    </pattern>
+                  </defs>
                   <CartesianGrid stroke="#e8ece7" strokeDasharray="4 4" vertical={false} />
                   <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#7d8a82" }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#7d8a82" }} />
                   <Legend wrapperStyle={{ fontSize: 12, fontWeight: 700 }} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} labelFormatter={climateTooltipLabel} />
                   <Bar dataKey="temperature" name="Nhiệt độ °C" fill="#D6A928" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="airHumidity" name="Độ ẩm không khí %" fill="#4b9666" radius={[4, 4, 0, 0]} />
+                  {hasSyntheticSeries ? <Bar dataKey="syntheticTemperature" name={`Nhiệt độ °C (${SIM})`} fill="url(#synthetic-hatch-temperature)" stroke="#b9a35c" radius={[4, 4, 0, 0]} /> : null}
+                  {hasSyntheticSeries ? <Bar dataKey="syntheticAirHumidity" name={`Độ ẩm không khí % (${SIM})`} fill="url(#synthetic-hatch-humidity)" stroke="#8fb39a" radius={[4, 4, 0, 0]} /> : null}
                 </BarChart>
               </ResponsiveContainer>
             ) : null}
@@ -287,7 +328,7 @@ export function SensorCharts() {
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} />
                   <ReferenceLine y={60} stroke="#D6A928" strokeDasharray="5 5" label={{ value: "Khô <60%", fill: "#8a6810", fontSize: 11 }} />
                   <ReferenceLine y={85} stroke="#477681" strokeDasharray="5 5" label={{ value: "Úng >85%", fill: "#477681", fontSize: 11 }} />
-                  <Area connectNulls type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#78966A" fill="#dceadd" strokeWidth={3} />
+                  <Area connectNulls={!keepGaps} type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#78966A" fill="#dceadd" strokeWidth={3} dot={keepGaps ? { r: 2 } : false} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : null}
@@ -300,7 +341,7 @@ export function SensorCharts() {
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #dfe6df", fontSize: 14 }} />
                   <ReferenceLine y={60} stroke="#D6A928" strokeDasharray="5 5" label={{ value: "Khô <60%", fill: "#8a6810", fontSize: 11 }} />
                   <ReferenceLine y={85} stroke="#477681" strokeDasharray="5 5" label={{ value: "Úng >85%", fill: "#477681", fontSize: 11 }} />
-                  <Line connectNulls type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#78966A" strokeWidth={3} dot={{ r: 2 }} />
+                  <Line connectNulls={!keepGaps} type="monotone" dataKey="soilMoisture" name="Độ ẩm đất %" stroke="#78966A" strokeWidth={3} dot={{ r: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : null}
@@ -328,12 +369,14 @@ export function SensorCharts() {
         </div>
         <div className="grid content-start gap-3 rounded-2xl border border-[#edf1ec] bg-white p-5">
           <h3 className="text-[13px] font-bold text-[#263a2f]">Tóm tắt dữ liệu đang xem</h3>
-          <SummaryRow label="Số mẫu trong dải" value={`${history.length}`} />
-          {chartData.length < history.length ? <SummaryRow label="Mẫu thực tế đại diện trên biểu đồ" value={`${chartData.length}`} /> : null}
+          <SummaryRow label="Số mẫu trong dải" value={`${history.sampleCount}`} />
+          {history.syntheticCount > 0 ? <SummaryRow label={`Trong đó ${SYNTHETIC_LABEL.toLowerCase()}`} value={`${history.syntheticCount} mẫu`} /> : null}
+          {history.resolution === "bucketed" && history.bucketSeconds
+            ? <SummaryRow label="Điểm trên biểu đồ" value={`${chartData.length} (trung bình mỗi ${bucketLabel(history.bucketSeconds)})`} />
+            : chartData.length < history.sampleCount ? <SummaryRow label="Mẫu thực tế đại diện trên biểu đồ" value={`${chartData.length}`} /> : null}
           {incompleteHistory ? <p role="status" className="text-sm text-amber-800">Lịch sử bị giới hạn ở 1.000 mẫu; chưa tải được phần còn lại. Biểu đồ và phân bố chỉ tính các mẫu đã tải.</p> : null}
-          <SummaryRow label="Mẫu đã tải từ tháng 6/2026" value={`${seasonHistory.length} mẫu`} />
+          <SummaryRow label="Mẫu từ tháng 6/2026" value={`${seasonHistory.sampleCount} mẫu`} />
           <SummaryRow label="Thiết bị" value={selectedDevice?.deviceUid ?? "--"} />
-          <SummaryRow label="Nguồn" value={selectedDevice?.telemetrySource === "raw-sensor" ? "Telemetry fallback" : "Registry API"} />
         </div>
       </div>
     </section>
@@ -403,6 +446,7 @@ function GaugeCard({
   unit,
   value,
   warning,
+  note,
 }: {
   icon: typeof ThermometerSun;
   label: string;
@@ -411,6 +455,8 @@ function GaugeCard({
   unit: string;
   value: number | null;
   warning?: string | null;
+  /** Shown instead of "--" when the device reported why there is no valid value. */
+  note?: string | null;
 }) {
   const percent = value === null ? 0 : clamp(((value - min) / (max - min)) * 100, 0, 100);
   const color = warning === "DRY_WARNING" || warning === "WET_WARNING"
@@ -425,6 +471,7 @@ function GaugeCard({
           <span className="grid size-9 place-items-center rounded-xl bg-[#edf3ee] text-[#2E5A44]"><Icon size={18} /></span>
           <small className="mt-4 block text-[14px] font-bold text-[#536259]">{label}</small>
           <b className="mt-1 block text-xl text-[#263a2f]">{value === null ? "--" : `${formatValue(value)} ${unit}`}</b>
+          {value === null && note ? <span className="mt-1 block text-[12px] font-semibold text-amber-800">{note}</span> : null}
         </div>
         <div
           className="grid size-20 place-items-center rounded-full"
@@ -464,16 +511,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function statusDistribution(readings: IotTelemetryReading[]) {
-  const totals = {
-    DRY_WARNING: 0,
-    OPTIMAL: 0,
-    WET_WARNING: 0,
-  };
-  readings.forEach((reading) => {
-    const status = reading.status ?? statusFromSoil(reading.soilMoisture ?? reading.soil_moisture ?? null);
-    if (status) totals[status] += 1;
-  });
+function statusDistribution(totals: SoilStatusCounts) {
   return [
     { color: STATUS_COLORS.OPTIMAL, name: "OPTIMAL", value: totals.OPTIMAL },
     { color: STATUS_COLORS.DRY_WARNING, name: "DRY_WARNING", value: totals.DRY_WARNING },
@@ -481,13 +519,14 @@ function statusDistribution(readings: IotTelemetryReading[]) {
   ];
 }
 
-function statusFromSoil(soilMoisture: number | null) {
-  if (soilMoisture === null) return null;
-  if (soilMoisture < 60) return "DRY_WARNING";
-  if (soilMoisture > 85) return "WET_WARNING";
-  return "OPTIMAL";
-}
-
 function messageFromError(error: unknown) {
   return error instanceof Error ? error.message : "Không thể tải dữ liệu IoT.";
+}
+
+/** Every climate tooltip states whether the point was measured, simulated history, or both (kept apart). */
+function climateTooltipLabel(
+  label: unknown,
+  payload: ReadonlyArray<{ payload?: { measuredCount?: number; syntheticCount?: number } }> | undefined,
+) {
+  return `${String(label)} · ${pointSourceLabel(payload?.[0]?.payload)}`;
 }

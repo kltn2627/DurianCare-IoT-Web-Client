@@ -637,9 +637,6 @@ export function ProfileView() {
             <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-5 text-center lg:col-span-2">
               <MapPinned className="mx-auto text-neutral-300" size={26} />
               <b className="mt-3 block text-sm text-neutral-900">Chưa có khu đất nào</b>
-              <p className="mx-auto mt-1 max-w-xl text-[13px] leading-6 text-neutral-500">
-                Khi tạo khu canh tác, trang này sẽ hiển thị giống sầu riêng, số cây, tuổi cây và diện tích từng khu.
-              </p>
             </div>
           )}
         </div>
@@ -806,9 +803,7 @@ export function ProfileView() {
 
           {editing ? (
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-5">
-              <p className="text-xs leading-relaxed text-neutral-500">
-                Họ và tên, địa chỉ và giới thiệu sẽ được kiểm tra trước khi gửi lên backend.
-              </p>
+              <span />
               <div className="flex items-center gap-2">
                 <button
                   type="button"

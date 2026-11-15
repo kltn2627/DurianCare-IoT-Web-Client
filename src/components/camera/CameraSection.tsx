@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cameraStatusView, snapshotDelayMs } from "@/lib/camera/status";
 import {
   AlertCircle,
   AlertTriangle,
@@ -383,54 +384,78 @@ export function CameraSection() {
     : [];
 
   const selectedDevice = registeredDevices.find((d) => d.device_id === deviceId);
+  const statusView = cameraStatusView(selectedDevice);
+  const canPreview = statusView.canPreview;
 
   // ── Live snapshot ─────────────────────────────────────────────────────────
+  // Requested only while the registry says ONLINE (fresh heartbeat + successful self-test), through the
+  // backend proxy (never the camera's private LAN address). Failures back off 8 s -> 60 s; an image is
+  // never kept after a failure, and every image shows when it was taken.
   const [snapshotUrl, setSnapshotUrl]       = useState<string | null>(null);
+  const [snapshotAt, setSnapshotAt]         = useState<Date | null>(null);
   const [previewError, setPreviewError]     = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
-  const snapshotTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const snapshotTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const blobUrlRef     = useRef<string | null>(null);
   const inFlightRef    = useRef(false);  // guard: at most one snapshot request in flight
+  const failuresRef    = useRef(0);
   const snapshotGeneration = useRef(0);
   const endpointVersion = selectedDevice?.endpointVersion ?? "";
 
-  const refreshSnapshot = useCallback(async () => {
-    if (inFlightRef.current || !deviceId) return;
+  const clearSnapshot = useCallback(() => {
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+    setSnapshotUrl(null);
+    setSnapshotAt(null);
+  }, []);
+
+  const refreshSnapshot = useCallback(async (): Promise<boolean> => {
+    if (inFlightRef.current || !deviceId) return false;
     const generation = snapshotGeneration.current;
     inFlightRef.current = true;
     try {
       const url = await cameraClient.fetchSnapshotBlob(deviceId, selectedDevice?.snapshotUrl);
-      if (generation !== snapshotGeneration.current) { URL.revokeObjectURL(url); return; }
+      if (generation !== snapshotGeneration.current) { URL.revokeObjectURL(url); return false; }
       setSnapshotUrl((prev) => {
         if (prev && prev === blobUrlRef.current) URL.revokeObjectURL(prev);
         blobUrlRef.current = url;
         return url;
       });
+      setSnapshotAt(new Date());
       setPreviewError(null);
+      failuresRef.current = 0;
+      return true;
     } catch {
-      if (generation !== snapshotGeneration.current) return;
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-      setSnapshotUrl(null);
-      setPreviewError("Không tải được ảnh camera. Kiểm tra trạng thái đăng ký và kết nối mạng.");
+      if (generation !== snapshotGeneration.current) return false;
+      clearSnapshot();
+      failuresRef.current += 1;
+      setPreviewError("Không tải được ảnh camera. Hệ thống sẽ tự thử lại.");
+      return false;
     } finally {
       if (generation === snapshotGeneration.current) { inFlightRef.current = false; setPreviewLoading(false); }
     }
-  }, [deviceId, selectedDevice?.snapshotUrl]);
+  }, [deviceId, selectedDevice?.snapshotUrl, clearSnapshot]);
 
-  // Poll snapshots with an in-flight guard and invalidate old camera responses.
   useEffect(() => {
     snapshotGeneration.current += 1;
-    setPreviewLoading(true);
-    setSnapshotUrl(null);
+    const generation = snapshotGeneration.current;
     inFlightRef.current = false;
-    void refreshSnapshot();
-    snapshotTimer.current = setInterval(refreshSnapshot, 8_000);
+    failuresRef.current = 0;
+    clearSnapshot();
+    setPreviewError(null);
+    if (!canPreview) { setPreviewLoading(false); return; }
+    setPreviewLoading(true);
+    const loop = async () => {
+      await refreshSnapshot();
+      if (generation !== snapshotGeneration.current) return;
+      snapshotTimer.current = setTimeout(loop, snapshotDelayMs(failuresRef.current));
+    };
+    void loop();
     return () => {
       snapshotGeneration.current += 1;
-      if (snapshotTimer.current) clearInterval(snapshotTimer.current);
+      if (snapshotTimer.current) clearTimeout(snapshotTimer.current);
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     };
-  }, [refreshSnapshot, endpointVersion]);
+  }, [refreshSnapshot, endpointVersion, canPreview, clearSnapshot]);
 
   // ── Capture now ───────────────────────────────────────────────────────────
   type CaptureStep = "idle" | "capturing" | "analyzing";
@@ -612,13 +637,19 @@ export function CameraSection() {
             ))}
           </select>
           {selectedDevice != null && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-              selectedDevice.online
-                ? "bg-green-100 text-green-700"
+            <span title={selectedDevice.lastSeenAt ? `Tín hiệu cuối: ${new Date(selectedDevice.lastSeenAt).toLocaleString("vi-VN")}` : undefined}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              statusView.tone === "online" ? "bg-green-100 text-green-700"
+                : statusView.tone === "degraded" ? "bg-amber-100 text-amber-800"
                 : "bg-red-100 text-red-600"
             }`}>
-              <span className={`inline-block size-1.5 rounded-full ${selectedDevice.online ? "bg-green-500 animate-pulse" : "bg-red-400"}`} />
-              {selectedDevice.online ? "Online" : "Offline"}
+              <span className={`inline-block size-1.5 rounded-full ${statusView.tone === "online" ? "bg-green-500" : statusView.tone === "degraded" ? "bg-amber-500" : "bg-red-400"}`} />
+              {statusView.label}
+            </span>
+          )}
+          {selectedDevice?.lastSeenAt && (
+            <span className="text-[10px] text-[#7e8b83]">
+              Tín hiệu cuối {new Date(selectedDevice.lastSeenAt).toLocaleTimeString("vi-VN")}
             </span>
           )}
         </div>
@@ -632,10 +663,10 @@ export function CameraSection() {
           <div className="flex items-center justify-between border-b border-[#e8ece7] px-4 py-2.5">
             <span className="text-[12px] font-semibold text-[#536259]">Ảnh camera định kỳ</span>
             <div className="flex items-center gap-2">
-              {!previewError && !previewLoading && (
+              {snapshotAt && !previewError && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf4ec] px-2.5 py-1 text-[10px] font-bold text-[#37704f]">
-                  <span className="inline-block size-1.5 animate-pulse rounded-full bg-[#4b9666]" />
-                  Snapshot · 8s
+                  <span className="inline-block size-1.5 rounded-full bg-[#4b9666]" />
+                  Ảnh lúc {snapshotAt.toLocaleTimeString("vi-VN")}
                 </span>
               )}
               <button
@@ -651,17 +682,25 @@ export function CameraSection() {
           <div className="relative bg-black" style={{ aspectRatio: "4/3" }}>
             {registryError ? <p role="alert" className="p-4 text-sm text-white">{registryError}</p> : null}
             {!deviceId ? <p className="p-4 text-sm text-white">Chưa có camera được cấp quyền.</p> : null}
-            {previewLoading && !snapshotUrl && deviceId && (
+            {deviceId && !canPreview && !registryError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-gray-300">
+                <CameraOff size={32} className="opacity-60" />
+                <p className="font-semibold">Camera {statusView.label.toLowerCase()}</p>
+                {statusView.message && <p className="text-xs leading-relaxed text-gray-400">{statusView.message}</p>}
+                <p className="text-[11px] text-gray-500">Trạng thái tự cập nhật mỗi 8 giây.</p>
+              </div>
+            )}
+            {canPreview && previewLoading && !snapshotUrl && deviceId && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 size={24} className="animate-spin text-gray-400" />
               </div>
             )}
-            {previewError ? (
+            {canPreview && previewError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-gray-400">
                 <CameraOff size={32} className="opacity-60" />
                 <p className="text-xs leading-relaxed">{previewError}</p>
                 <button
-                  onClick={() => void refreshSnapshot()}
+                  onClick={() => { failuresRef.current = 0; void refreshSnapshot(); }}
                   className="rounded-lg bg-white/10 px-4 py-1.5 text-xs font-semibold hover:bg-white/20"
                 >
                   Thử kết nối lại
@@ -706,10 +745,10 @@ export function CameraSection() {
 
           {/* Capture controls */}
           <div className="space-y-2 p-3">
-            {selectedDevice != null && !selectedDevice.online && (
-              <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-[12px] text-red-600">
+            {selectedDevice != null && !canPreview && (
+              <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] ${statusView.tone === "degraded" ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-600"}`}>
                 <CameraOff size={14} className="shrink-0" />
-                Camera đang offline. Chụp hình sẽ thất bại cho đến khi camera kết nối lại.
+                Chưa thể chụp hình: camera {statusView.label.toLowerCase()}.
               </div>
             )}
             <button

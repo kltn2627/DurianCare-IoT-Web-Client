@@ -233,8 +233,7 @@ export function SearchWorkspace({
                 Tìm kiếm tri thức và dữ liệu vận hành
               </h1>
               <p className="mt-3 max-w-3xl text-[13px] leading-relaxed text-[#d0ddd4]">
-                Tra cứu bài viết, hồ sơ bệnh hại và nội dung vận hành đã được backend chuẩn
-                hóa. Hỗ trợ phân trang, sắp xếp và lọc theo loại tài liệu.
+                Tra cứu bài viết, hồ sơ bệnh hại và nội dung vận hành. Hỗ trợ phân trang, sắp xếp và lọc theo loại tài liệu.
               </p>
             </div>
             <Link
@@ -572,9 +571,6 @@ export function SearchWorkspace({
                   <h2 className="text-[15px] font-bold tracking-tight text-neutral-900">
                     Bộ lọc hiện tại
                   </h2>
-                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                    Mọi tham số đang được gửi đúng sang endpoint tìm kiếm.
-                  </p>
                 </div>
               </div>
 

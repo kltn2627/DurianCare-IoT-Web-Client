@@ -194,7 +194,7 @@ function EmptyState({ tab }: { tab: ReviewTab }) {
         </b>
         <p className="mt-2 max-w-md text-sm text-neutral-500">
           {tab === "REVIEW"
-            ? "Các bài được kỹ sư gửi duyệt sẽ xuất hiện tại đây."
+            ? "Chưa có bài chờ duyệt."
             : "Hãy thử tab, từ khóa hoặc trang khác."}
         </p>
       </span>

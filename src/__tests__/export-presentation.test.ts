@@ -7,7 +7,7 @@ it("uses one list without widening fixture write access or removing snapshot gua
   const source = readFileSync(join(process.cwd(), "src/components/dashboard/CropQrBuilder.tsx"), "utf8");
   expect(source).not.toMatch(/dataScope|Dữ liệu minh họa|Mô phỏng/);
   expect(source).toContain("!isSyntheticBatch(batch) && isReleaseEligibleBatch(batch)");
-  expect(source).toContain('disabled={isSyntheticRelease(release) || release.status !== "DRAFT"}');
+  expect(source).toMatch(/disabled=\{\s*isSyntheticRelease\(release\) \|\| release\.status !== "DRAFT"\s*\}/);
   expect(source).toContain("canApproveExport && !isSyntheticRelease(release)");
   expect(source).toContain("setSnapshot(null)");
   expect(source).toContain("result.releaseId !== selectedRelease.id");

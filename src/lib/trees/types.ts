@@ -1,5 +1,5 @@
 export type TreeHealthStatus = "HEALTHY" | "DISEASED" | "TREATING" | "SUSPECTED" | "RECOVERED";
-export type TreeStatus = "ACTIVE" | "REMOVED" | "REPLANTED";
+export type TreeStatus = "ACTIVE" | "REMOVED" | "DEAD";
 export type ZoneStatus = "ACTIVE" | "INACTIVE" | "PREPARING";
 
 export interface FarmSummary {
@@ -277,4 +277,25 @@ export interface RecoveryEvaluationResponse {
   currentConfidence?: number | null;
   reason: string;
   evaluatedAt: string;
+}
+
+/** Health statuses the backend allows to be set manually (TreeService.transitionHealthStatus). */
+/** Farmers may set any health status manually (business rule 2026-10-22). */
+export type ManualTreeHealthStatus = TreeHealthStatus;
+
+export interface BulkTreeHealthStatusResult {
+  treeId: string;
+  treeCode?: string | null;
+  updated: boolean;
+  healthStatus?: TreeHealthStatus | null;
+  errorCode?: "NOT_FOUND" | "FORBIDDEN" | "NOT_ACTIVE" | "INVALID" | null;
+  message?: string | null;
+}
+
+export interface BulkTreeHealthStatusResponse {
+  healthStatus: ManualTreeHealthStatus;
+  requested: number;
+  updated: number;
+  failed: number;
+  results: BulkTreeHealthStatusResult[];
 }

@@ -1,6 +1,24 @@
 import { IotApiError, iotClient, normalizeTelemetry } from "./client";
 import type { IotRawTelemetryHistoryResponse, IotTelemetryReading } from "./types";
 
+/**
+ * Server-side downsampled history (per-source time buckets) for long ranges.
+ * Returns null when the deployed IoT service predates the bucket endpoint (404).
+ */
+export async function loadBucketedHistory(
+  device: { deviceUid: string; id: string; telemetrySource?: "registry" | "raw-sensor" },
+  query: { from: string; to: string },
+) {
+  try {
+    return device.telemetrySource === "raw-sensor"
+      ? await iotClient.rawTelemetryBuckets(device.deviceUid, query)
+      : await iotClient.telemetryBuckets(device.id, query);
+  } catch (error) {
+    if (error instanceof IotApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 export async function loadDashboardHistory(deviceUid: string, query: { from: string; to: string }) {
   const response = await iotClient.telemetryHistory(deviceUid, { ...query, limit: 1000 });
   if (response.telemetry.length < 1000) return { readings: response.telemetry, incomplete: false };

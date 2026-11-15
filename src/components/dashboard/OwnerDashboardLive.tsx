@@ -106,9 +106,9 @@ export function OwnerDashboardLive({
 }
 
 function describe(summary: IotSummary) {
-  if (summary.state === "signed-out") return "Đăng nhập để xem telemetry IoT theo farm/khu được cấp quyền.";
-  if (summary.state === "error") return "Không thể tải telemetry IoT lúc này. Web không dùng giá trị mẫu.";
-  if (!summary.primaryName) return "Chưa có device registry nào thuộc phạm vi farm/khu bạn được quyền xem.";
+  if (summary.state === "signed-out") return "Đăng nhập để xem dữ liệu cảm biến.";
+  if (summary.state === "error") return "Không thể tải dữ liệu cảm biến lúc này.";
+  if (!summary.primaryName) return "Chưa có thiết bị cảm biến nào được gắn với vườn của bạn.";
   return `IoT đang đọc từ ${summary.primaryName}. Kết nối: ${connectivityLabel(summary.primaryStatus)}.`;
 }
 
