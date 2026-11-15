@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/auth/client";
 import { treeErrorMessage } from "./errors";
 import type {
+  BulkTreeHealthStatusResponse,
+  ManualTreeHealthStatus,
   AcceptCareRecommendationRequest,
   CarePlanStatus,
   CareRecommendationRequest,
@@ -151,10 +153,17 @@ export const treeClient = {
       `/api/trees/${encodeURIComponent(treeId)}/diagnoses/latest`,
     ),
 
-  updateHealthStatus: (treeId: string, healthStatus: "TREATING" | "RECOVERED") =>
+  updateHealthStatus: (treeId: string, healthStatus: ManualTreeHealthStatus) =>
     treeRequest<TreeDetail>(
       `/api/trees/${encodeURIComponent(treeId)}/health-status`,
       { method: "PATCH", body: JSON.stringify({ healthStatus }) },
+    ),
+
+  /** One request for many trees; the backend checks each tree and returns a per-tree result. */
+  bulkUpdateHealthStatus: (treeIds: string[], healthStatus: ManualTreeHealthStatus) =>
+    treeRequest<BulkTreeHealthStatusResponse>(
+      "/api/trees/health-status/bulk",
+      { method: "PATCH", body: JSON.stringify({ treeIds, healthStatus }) },
     ),
 
   // ── Care Plans ──────────────────────────────────────────────────────────────

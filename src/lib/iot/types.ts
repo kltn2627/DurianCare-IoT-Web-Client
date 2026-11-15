@@ -7,8 +7,14 @@ export type IotTelemetryReading = {
   light: number | null;
   measuredAt: string | null;
   receivedAt: string | null;
+  /** DEVICE = measured; SYNTHETIC_BACKFILL = labelled simulated history. */
+  source?: "DEVICE" | "SYNTHETIC_BACKFILL";
   soil_moisture?: number | null;
   soilMoisture?: number | null;
+  /** Firmware >= 1.4.0: raw ADC value and the probe verdict (soilMoisture is null unless soilStatus is OK). */
+  soilRaw?: number | null;
+  soilStatus?: string | null;
+  dhtStatus?: string | null;
   status?: "DRY_WARNING" | "OPTIMAL" | "WET_WARNING" | null;
   temperature: number | null;
   timestamp?: string | null;
@@ -33,10 +39,14 @@ export type IotDevice = {
     suppressesOfflineAlert?: boolean;
   };
   connectivityStatus?: string;
+  claimedAt?: string | null;
+  deviceType?: "SENSOR" | "CAMERA";
   deviceUid: string;
   farmId: string;
+  firmwareVersion?: string | null;
   id: string;
   lastSeenAt: string | null;
+  provisioningStatus?: "PROVISIONED" | "CLAIMED";
   latestTelemetry: IotTelemetryReading | null;
   name: string;
   status: string;
@@ -66,6 +76,33 @@ export type IotTelemetryHistoryResponse = {
   telemetry: IotTelemetryReading[];
 };
 
+/** Server-side average of one source over one time bucket; DEVICE and SYNTHETIC_BACKFILL never share a bucket. */
+export type IotTelemetryBucket = {
+  bucketEnd: string;
+  bucketStart: string;
+  count: number;
+  humidity: number | null;
+  light: number | null;
+  soilMoisture: number | null;
+  soilStatusCounts: { DRY_WARNING: number; OPTIMAL: number; WET_WARNING: number };
+  source: "DEVICE" | "SYNTHETIC_BACKFILL";
+  temperature: number | null;
+  temperatureMax: number | null;
+  temperatureMin: number | null;
+};
+
+export type IotTelemetryBucketResponse = {
+  device?: IotDeviceSummary;
+  range: {
+    bucketSeconds: number;
+    from: string;
+    maxBuckets: number;
+    resolution: "bucketed";
+    to: string;
+  };
+  buckets: IotTelemetryBucket[];
+};
+
 export type IotRawTelemetryHistoryResponse = {
   count: number;
   data: IotTelemetryReading[];
@@ -93,6 +130,7 @@ export type IotAlert = {
   measuredValue: number | null;
   message: string;
   recoveredAt: string | null;
+  severity?: "INFO" | "WARNING" | "CRITICAL" | null;
   startedAt: string | null;
   status: string;
   thresholdValue: number | null;

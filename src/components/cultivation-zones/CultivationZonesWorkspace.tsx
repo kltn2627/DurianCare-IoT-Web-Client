@@ -83,7 +83,7 @@ export function CultivationZonesWorkspace() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
             <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#fbf2cb] text-[#795e11]"><Trees size={21} /></span>
-            <div><p className="text-xs font-extrabold tracking-[1px] text-[#6f7d73]">KHU CANH TÁC</p><h1 className="mt-1 text-xl font-extrabold text-neutral-900 sm:text-2xl">Quản lý khu canh tác</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500">Dữ liệu được đọc trực tiếp từ catalog Farm/Zone của DurianCare.</p></div>
+            <div><p className="text-xs font-extrabold tracking-[1px] text-[#6f7d73]">KHU CANH TÁC</p><h1 className="mt-1 text-xl font-extrabold text-neutral-900 sm:text-2xl">Quản lý khu canh tác</h1></div>
           </div>
           <Link href="/dashboard/client/cultivation-zones/new" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-sm font-bold text-white"><Plus size={16} />Tạo khu canh tác</Link>
         </div>

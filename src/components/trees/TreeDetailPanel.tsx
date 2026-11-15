@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import JsBarcode from "jsbarcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { treeClient, TreeApiError } from "@/lib/trees/client";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { predictLeafDisease } from "@/lib/ai/client";
 import type { PredictionData } from "@/lib/ai/types";
 import type {
@@ -25,8 +27,14 @@ import type {
   TreeDetail,
   TreeDiagnosis,
 } from "@/lib/trees/types";
+import type { CultivationSeason, TreeYieldObservation } from "@/lib/cultivation/types";
+import { cultivationClient } from "@/lib/cultivation/client";
 import type { DiseaseCategory } from "@/lib/labels";
 import { knowledgeClient } from "@/lib/knowledge/client";
+import { TreeQrCard } from "./TreeQrCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { removeTreeConfirmation } from "@/lib/trees/removal";
+import { HealthStatusPicker } from "./HealthStatusPicker";
 import type { KnowledgeArticle } from "@/lib/knowledge/types";
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -47,6 +55,110 @@ const HEALTH_COLORS: Record<string, string> = {
   RECOVERED: "text-cyan-700 bg-cyan-50 border-cyan-200",
 };
 
+
+function TreeBarcode({ treeCode }: { treeCode: string }) {
+  const barcodeRef = useRef<SVGSVGElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!barcodeRef.current) return;
+    JsBarcode(barcodeRef.current, treeCode, {
+      format: "CODE128",
+      displayValue: false,
+      height: 44,
+      margin: 0,
+      width: 1.35,
+    });
+  }, [treeCode]);
+
+  const copy = async () => {
+    await navigator.clipboard?.writeText(treeCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return <div className="rounded-xl border border-neutral-100 bg-white p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-bold text-neutral-500">MÃ VẠCH CÂY</p><button className="text-xs font-bold text-[#2E5A44] underline" onClick={() => void copy()} type="button">{copied ? "Đã sao chép" : "Sao chép mã"}</button></div><svg aria-label={`Mã vạch CODE128 cho ${treeCode}`} className="mt-2 h-11 max-w-full" ref={barcodeRef} /><p className="mt-1 font-mono text-xs font-semibold text-neutral-700">{treeCode}</p></div>;
+}
+
+function YieldObservationPanel({ treeId, season, farmId, zoneId, onSaved, onSeasonCreated, onYieldSaved }: { treeId: string; season: CultivationSeason | null; farmId: string; zoneId: string; onSaved: () => void; onSeasonCreated: (season: CultivationSeason) => void; onYieldSaved?: () => void }) {
+  const { user } = useAuth();
+  const [fruitCount, setFruitCount] = useState("");
+  const [weightOverride, setWeightOverride] = useState("");
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [observations, setObservations] = useState<TreeYieldObservation[]>([]);
+  const [observationsError, setObservationsError] = useState<string | null>(null);
+  const [seasonName, setSeasonName] = useState(() => `Mùa vụ ${new Date().getFullYear()}`);
+  const [crop, setCrop] = useState("Sầu riêng");
+  const [variety, setVariety] = useState("");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState("");
+
+  const loadObservations = useCallback(async () => {
+    if (!season) {
+      setObservations([]);
+      return;
+    }
+    try {
+      setObservationsError(null);
+      setObservations(await cultivationClient.listTreeYieldObservations(treeId, season.id));
+    } catch (caught) {
+      setObservationsError(caught instanceof Error ? caught.message : "Không thể tải các lần ghi nhận số trái.");
+    }
+  }, [season, treeId]);
+
+  useEffect(() => { void loadObservations(); }, [loadObservations]);
+
+  const createSeason = async () => {
+    if (!user?.userId) {
+      setError("Không xác định được tài khoản để tạo mùa vụ.");
+      return;
+    }
+    if (!seasonName.trim() || !startDate || (endDate && endDate < startDate)) {
+      setError("Nhập tên mùa vụ, ngày bắt đầu và bảo đảm ngày kết thúc không sớm hơn ngày bắt đầu.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await cultivationClient.createSeason({
+        farmId,
+        plotId: zoneId,
+        name: seasonName.trim(),
+        crop: crop.trim() || null,
+        variety: variety.trim() || null,
+        startDate,
+        endDate: endDate || null,
+        createdBy: user.userId,
+      });
+      onSeasonCreated(created);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không thể tạo mùa vụ.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!season) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-extrabold text-amber-900">TẠO MÙA VỤ ĐỂ GHI NHẬN SỐ TRÁI</p><p className="mt-1 text-xs text-amber-800">Khu này chưa có mùa vụ hiệu lực hôm nay. Tạo mùa vụ bên dưới, sau đó nhập số trái ngay tại cây đang chọn.</p><div className="mt-3 grid gap-2"><input className="rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm" onChange={(event) => setSeasonName(event.target.value)} placeholder="Tên mùa vụ" value={seasonName} /><div className="grid grid-cols-2 gap-2"><input className="rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm" onChange={(event) => setCrop(event.target.value)} placeholder="Cây trồng" value={crop} /><input className="rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm" onChange={(event) => setVariety(event.target.value)} placeholder="Giống (tùy chọn)" value={variety} /></div><div className="grid grid-cols-2 gap-2"><label className="text-xs text-neutral-600">Bắt đầu<input className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm" onChange={(event) => setStartDate(event.target.value)} type="date" value={startDate} /></label><label className="text-xs text-neutral-600">Kết thúc (tùy chọn)<input className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-sm" onChange={(event) => setEndDate(event.target.value)} type="date" value={endDate} /></label></div></div>{error ? <p className="mt-2 text-xs font-semibold text-red-600">{error}</p> : null}<button className="mt-3 w-full rounded-lg bg-[#2E5A44] py-2 text-sm font-bold text-white disabled:opacity-50" disabled={saving} onClick={() => void createSeason()} type="button">{saving ? "Đang tạo..." : "Tạo mùa vụ và nhập số trái"}</button></div>;
+  const save = async () => {
+    const fruits = Number(fruitCount);
+    const weight = weightOverride.trim() === "" ? null : Number(weightOverride);
+    if (!Number.isInteger(fruits) || fruits < 0 || (weight != null && (!Number.isFinite(weight) || weight <= 0))) {
+      setError("Số trái phải là số nguyên từ 0; khối lượng riêng phải lớn hơn 0.");
+      return;
+    }
+    setSaving(true); setError(null);
+    try {
+      await cultivationClient.createTreeYieldObservation(treeId, { seasonId: season.id, zoneId, fruitCount: fruits, averageFruitWeightKgOverride: weight });
+      setFruitCount(""); setWeightOverride(""); setEntryOpen(false); await loadObservations(); onSaved(); onYieldSaved?.();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Không thể lưu số trái."); }
+    finally { setSaving(false); }
+  };
+  const latestObservation = observations[0];
+  return <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3"><p className="text-xs font-extrabold text-emerald-800">SỐ LƯỢNG TRÁI · {season.name}</p>{latestObservation ? <p className="mt-1 text-xs font-semibold text-emerald-900">Hiện tại: {latestObservation.fruitCount} trái · {new Date(latestObservation.observedAt).toLocaleString("vi-VN")}</p> : <p className="mt-1 text-xs text-neutral-600">Chưa có lần ghi nhận nào trong mùa vụ này.</p>}{observations.length > 1 ? <p className="mt-1 text-xs text-neutral-600">Hệ thống dùng lần ghi nhận mới nhất để tính dự báo.</p> : null}{observationsError ? <p className="mt-2 text-xs font-semibold text-red-600">{observationsError}</p> : null}<button className="mt-3 w-full rounded-lg border border-emerald-300 bg-white py-2 text-sm font-bold text-[#2E5A44] hover:bg-emerald-50" onClick={() => setEntryOpen((current) => !current)} type="button">{entryOpen ? "Ẩn biểu mẫu" : latestObservation ? "Cập nhật số lượng trái" : "Ghi nhận số lượng trái"}</button>{entryOpen ? <div className="mt-3 border-t border-emerald-200 pt-3"><p className="text-xs text-neutral-600">Khối lượng TB dùng thiết lập khu nếu không nhập giá trị riêng.</p><div className="mt-3 grid gap-2"><input className="rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-sm" inputMode="numeric" min="0" onChange={(event) => setFruitCount(event.target.value)} placeholder="Số trái hiện tại" type="number" value={fruitCount} /><input className="rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-sm" inputMode="decimal" min="0" onChange={(event) => setWeightOverride(event.target.value)} placeholder="Khối lượng riêng (kg/trái, tùy chọn)" type="number" value={weightOverride} /></div>{error ? <p className="mt-2 text-xs font-semibold text-red-600">{error}</p> : null}<button className="mt-3 w-full rounded-lg bg-[#2E5A44] py-2 text-sm font-bold text-white disabled:opacity-50" disabled={saving} onClick={() => void save()} type="button">{saving ? "Đang lưu..." : "Lưu số trái"}</button></div> : null}</div>;
+}
+
 function categoryFromCode(code: string | null | undefined): DiseaseCategory {
   if (!code) return "INVALID_IMAGE";
   const lower = code.toLowerCase();
@@ -64,14 +176,6 @@ const CAT_BADGE: Record<DiseaseCategory, string> = {
   PEST: "bg-amber-50 text-amber-700",
   LOW_CONFIDENCE: "bg-neutral-100 text-neutral-600",
   INVALID_IMAGE: "bg-neutral-100 text-neutral-500",
-};
-
-const CAT_DOT: Record<DiseaseCategory, string> = {
-  HEALTHY: "bg-green-500",
-  DISEASE: "bg-red-500",
-  PEST: "bg-amber-400",
-  LOW_CONFIDENCE: "bg-neutral-400",
-  INVALID_IMAGE: "bg-neutral-300",
 };
 
 const CAT_LABEL: Record<DiseaseCategory, string> = {
@@ -356,15 +460,7 @@ function AIPanel({ treeId, treeCode, onSaved }: AIPanelProps) {
   );
 }
 
-// ── Recovery Panel ────────────────────────────────────────────────────────────
-
-interface RecoveryPanelProps {
-  treeId: string;
-  treeCode: string;
-  onSaved: () => void;
-}
-
-const RECOVERY_OUTCOME_ELIGIBLE = new Set(["RECOVERED", "IMPROVED"]);
+// ── AI recovery evaluation (advisory only; never blocks a manual status change) ─
 
 const RECOVERY_OUTCOME_LABEL: Record<string, string> = {
   RECOVERED: "Đã hồi phục",
@@ -383,9 +479,9 @@ const RECOVERY_OUTCOME_CARD: Record<string, string> = {
 };
 
 const RECOVERY_NEXT_ACTION: Record<string, string> = {
-  RECOVERED: "Có thể xác nhận cây đã hồi phục. Backend vẫn kiểm tra lại điều kiện trước khi cập nhật Tree Map.",
+  RECOVERED: "AI thấy cây đã hồi phục. Bạn có thể cập nhật trạng thái “Đã hồi phục” nếu đồng ý.",
   IMPROVED: "Tiếp tục kế hoạch chăm sóc hiện tại và đặt lịch tái khám tiếp theo nếu cần.",
-  STABLE: "Tiếp tục điều trị/theo dõi. Chưa cho xác nhận hồi phục.",
+  STABLE: "Tiếp tục điều trị/theo dõi và tái khám để có thêm dữ liệu.",
   WORSENED: "Đánh giá lại hướng xử lý, xem lại Knowledge Base hoặc tạo kế hoạch chăm sóc mới.",
   UNCERTAIN: "Chụp/đưa ảnh rõ hơn hoặc kiểm tra thêm trước khi kết luận.",
 };
@@ -394,13 +490,7 @@ function formatPercent(value?: number | null) {
   return value == null ? "—" : `${Math.round(value * 100)}%`;
 }
 
-function RecoveryEvaluationCard({
-  evaluation,
-  eligible,
-}: {
-  evaluation: RecoveryEvaluationResponse;
-  eligible?: boolean;
-}) {
+function RecoveryEvaluationCard({ evaluation }: { evaluation: RecoveryEvaluationResponse }) {
   const tone = RECOVERY_OUTCOME_CARD[evaluation.outcome] ?? RECOVERY_OUTCOME_CARD.UNCERTAIN;
   return (
     <div className={`rounded-xl border p-3 ${tone}`}>
@@ -408,11 +498,6 @@ function RecoveryEvaluationCard({
         <p className="text-xs font-extrabold">
           {RECOVERY_OUTCOME_LABEL[evaluation.outcome] ?? evaluation.outcome}
         </p>
-        {eligible === false ? (
-          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold">
-            Không đủ điều kiện RECOVERED
-          </span>
-        ) : null}
       </div>
       <p className="mt-1 text-xs opacity-85">{evaluation.reason}</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
@@ -430,188 +515,6 @@ function RecoveryEvaluationCard({
       <p className="mt-2 rounded-lg bg-white/70 p-2 text-xs font-semibold">
         {RECOVERY_NEXT_ACTION[evaluation.outcome] ?? RECOVERY_NEXT_ACTION.UNCERTAIN}
       </p>
-    </div>
-  );
-}
-
-function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [notes, setNotes] = useState("");
-  const [evaluating, setEvaluating] = useState(false);
-  const [evaluation, setEvaluation] = useState<RecoveryEvaluationResponse | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleExpand() {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && !evaluation) {
-      setEvaluating(true);
-      setError(null);
-      try {
-        const result = await treeClient.evaluateRecovery(treeId);
-        setEvaluation(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể đánh giá phục hồi.");
-      } finally {
-        setEvaluating(false);
-      }
-    }
-  }
-
-  async function confirm() {
-    if (!notes.trim()) {
-      setError("Vui lòng nhập ghi chú xác nhận phục hồi.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await treeClient.updateHealthStatus(treeId, "RECOVERED");
-      setSavedOk(true);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Cập nhật trạng thái thất bại.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const eligible = evaluation ? RECOVERY_OUTCOME_ELIGIBLE.has(evaluation.outcome) : false;
-
-  if (savedOk) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-3">
-        <CheckCircle size={16} className="text-green-600 shrink-0" />
-        <p className="text-sm font-semibold text-green-700">Xác nhận phục hồi đã lưu cho cây {treeCode}.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between"
-        onClick={handleExpand}
-      >
-        <span className="text-xs font-extrabold text-green-700">XÁC NHẬN PHỤC HỒI</span>
-        {expanded ? (
-          <ChevronUp size={14} className="text-green-600" />
-        ) : (
-          <ChevronDown size={14} className="text-green-600" />
-        )}
-      </button>
-
-      {expanded ? (
-        <div className="mt-3 space-y-3">
-          {evaluating ? (
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <Loader2 size={12} className="animate-spin" />
-              Đang đánh giá tình trạng phục hồi...
-            </div>
-          ) : evaluation ? (
-            <RecoveryEvaluationCard evaluation={evaluation} eligible={eligible} />
-          ) : null}
-
-          {eligible ? (
-            <>
-              <p className="text-xs text-neutral-600">
-                Xác nhận cây đã phục hồi sau điều trị. Backend sẽ kiểm tra lại evaluateRecovery trước khi cập nhật Tree Map.
-              </p>
-              <textarea
-                className="w-full rounded-xl border border-neutral-200 p-2.5 text-sm text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
-                rows={3}
-                placeholder="Ghi chú xác nhận (bắt buộc)..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </>
-          ) : null}
-
-          {error ? (
-            <p className="text-xs font-semibold text-red-600">{error}</p>
-          ) : null}
-
-          {eligible ? (
-            saving ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
-                <Loader2 size={14} className="animate-spin" />
-                Đang lưu...
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={confirm}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
-              >
-                <CheckCircle size={14} />
-                Gửi xác nhận phục hồi
-              </button>
-            )
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ── Treatment panel (DISEASED/SUSPECTED → TREATING) ──────────────────────────
-
-interface TreatmentPanelProps {
-  treeId: string;
-  treeCode: string;
-  onSaved: () => void;
-}
-
-function TreatmentPanel({ treeId, treeCode, onSaved }: TreatmentPanelProps) {
-  const [saving, setSaving] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function startTreatment() {
-    setSaving(true);
-    setError(null);
-    try {
-      await treeClient.updateHealthStatus(treeId, "TREATING");
-      setSavedOk(true);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Lưu thất bại.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (savedOk) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
-        <CheckCircle size={16} className="text-orange-600 shrink-0" />
-        <p className="text-sm font-semibold text-orange-700">Cây {treeCode} đã được đánh dấu đang điều trị.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
-      <p className="text-xs font-extrabold text-orange-700">BẮT ĐẦU ĐIỀU TRỊ</p>
-      <p className="text-xs text-neutral-600">Đánh dấu cây đang trong quá trình điều trị bệnh.</p>
-      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
-      {saving ? (
-        <div className="flex items-center gap-2 text-sm text-neutral-500">
-          <Loader2 size={14} className="animate-spin" />
-          Đang lưu...
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={startTreatment}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700"
-        >
-          Bắt đầu điều trị
-        </button>
-      )}
     </div>
   );
 }
@@ -963,27 +866,68 @@ interface TreeDetailPanelProps {
   treeId: string | null;
   onClose: () => void;
   onDiagnosisSaved?: () => void;
+  season?: CultivationSeason | null;
+  farmId?: string;
+  zoneId?: string;
+  onSeasonCreated?: (season: CultivationSeason) => void;
+  onYieldSaved?: () => void;
   onRemoved?: () => void;
 }
 
-export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }: TreeDetailPanelProps) {
-  const [tree, setTree] = useState<TreeDetail | null>(null);
+function DiagnosisHistoryDialog({ treeId, treeCode, onClose }: { treeId: string; treeCode: string; onClose: () => void }) {
   const [diagnoses, setDiagnoses] = useState<TreeDiagnosis[]>([]);
-  const [progressEvaluation, setProgressEvaluation] =
-    useState<RecoveryEvaluationResponse | null>(null);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalElements, setTotalElements] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    treeClient.listDiagnoses(treeId, page, size)
+      .then((response) => {
+        if (!active) return;
+        setDiagnoses(response.content ?? []);
+        setTotalPages(Math.max(1, response.totalPages ?? 1));
+        setTotalElements(response.totalElements ?? 0);
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setError(caught instanceof TreeApiError || caught instanceof Error ? caught.message : "Không thể tải lịch sử chẩn đoán.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [treeId, page, size]);
+
+  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-end bg-slate-950/35 p-0 sm:items-center sm:justify-center sm:p-6" role="dialog" aria-labelledby="diagnosis-history-title">
+    <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-6">
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-extrabold tracking-[1px] text-neutral-500">LỊCH SỬ CHẨN ĐOÁN BỆNH</p><h2 className="mt-1 text-lg font-extrabold text-neutral-900" id="diagnosis-history-title">{treeCode}</h2><p className="mt-1 text-xs text-neutral-600">{totalElements} bản ghi</p></div><button aria-label="Đóng" className="grid size-9 place-items-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50" onClick={onClose} type="button"><X size={16} /></button></div>
+      {loading ? <div className="flex min-h-36 items-center justify-center gap-2 text-sm font-semibold text-neutral-500"><Loader2 className="animate-spin" size={16} />Đang tải lịch sử...</div> : null}
+      {error ? <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
+      {!loading && !error && diagnoses.length === 0 ? <p className="mt-5 rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm font-semibold text-neutral-400">Chưa có lịch sử chẩn đoán.</p> : null}
+      {!loading && !error && diagnoses.length ? <div className="mt-5 space-y-3">{diagnoses.map((diagnosis) => { const category = categoryFromCode(diagnosis.diseaseCode); return <article className="rounded-2xl border border-neutral-200 p-4" key={diagnosis.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${CAT_BADGE[category]}`}>{CAT_LABEL[category]}</span><p className="mt-2 text-sm font-bold text-neutral-800">{diagnosis.diseaseName || diagnosis.diseaseCode}</p><p className="mt-1 text-xs text-neutral-500">{new Date(diagnosis.diagnosedAt).toLocaleString("vi-VN")}</p></div>{diagnosis.confidence != null ? <span className="text-xs font-bold text-neutral-500">{Math.round(diagnosis.confidence * 100)}%</span> : null}</div>{diagnosis.imageUrl ? <a className="mt-3 block overflow-hidden rounded-xl border border-neutral-100" href={diagnosis.imageUrl} rel="noreferrer" target="_blank"><img alt={`Ảnh chẩn đoán ${diagnosis.diseaseName || diagnosis.diseaseCode}`} className="max-h-64 w-full object-contain bg-neutral-50" src={diagnosis.imageUrl} /></a> : null}{diagnosis.source ? <p className="mt-3 text-xs text-neutral-500">Nguồn: {diagnosis.source}</p> : null}</article>; })}</div> : null}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4"><label className="text-xs font-semibold text-neutral-600">Hiển thị <select className="ml-1 rounded-lg border border-neutral-200 bg-white px-2 py-1" onChange={(event) => { setLoading(true); setError(null); setSize(Number(event.target.value)); setPage(0); }} value={size}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select> bản ghi/trang</label><div className="flex items-center gap-2 text-xs font-semibold text-neutral-600"><button className="rounded-lg border border-neutral-200 px-3 py-1.5 disabled:opacity-40" disabled={page === 0 || loading} onClick={() => { setLoading(true); setError(null); setPage((current) => current - 1); }} type="button">Trước</button><span>{page + 1}/{totalPages}</span><button className="rounded-lg border border-neutral-200 px-3 py-1.5 disabled:opacity-40" disabled={page + 1 >= totalPages || loading} onClick={() => { setLoading(true); setError(null); setPage((current) => current + 1); }} type="button">Sau</button></div></div>
+    </section>
+  </div>;
+}
+
+export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = null, farmId, zoneId, onSeasonCreated, onYieldSaved, onRemoved }: TreeDetailPanelProps) {
+  const [tree, setTree] = useState<TreeDetail | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [diagnoses, setDiagnoses] = useState<TreeDiagnosis[]>([]);
+  const [progressEvaluation, setProgressEvaluation] = useState<RecoveryEvaluationResponse | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     (id: string, active: { value: boolean }) => {
       setLoading(true);
       setError(null);
-      Promise.all([
-        treeClient.getTree(id),
-        treeClient.listDiagnoses(id, 0, 20),
-      ])
+      Promise.all([treeClient.getTree(id), treeClient.listDiagnoses(id, 0, 20)])
         .then(([treeData, diagData]) => {
           if (!active.value) return;
           setTree(treeData);
@@ -1051,6 +995,8 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
 
   function refresh() {
     if (!treeId) return;
+    setLoading(true);
+    setError(null);
     const active = { value: true };
     load(treeId, active);
     onDiagnosisSaved?.();
@@ -1058,17 +1004,15 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
 
   async function removeTree() {
     if (!treeId || !tree) return;
-    const confirmed = window.confirm(
-      `Đã đốn cây ${tree.treeCode}?\n\nCây sẽ được xóa khỏi bản đồ và danh sách cây đang hoạt động. Lịch sử chẩn đoán/kế hoạch chăm sóc vẫn được giữ lại.`,
-    );
-    if (!confirmed) return;
     setRemoving(true);
     setError(null);
     try {
       await treeClient.removeTree(treeId);
+      setConfirmingRemove(false);
       onRemoved?.();
       onClose();
     } catch (err) {
+      setConfirmingRemove(false);
       setError(err instanceof Error ? err.message : "Không thể xóa cây khỏi bản đồ.");
     } finally {
       setRemoving(false);
@@ -1080,8 +1024,6 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
   const health = tree?.healthStatus;
   const healthClass =
     health ? HEALTH_COLORS[health] : "text-neutral-500 bg-neutral-50 border-neutral-200";
-  const needsTreatment = health === "DISEASED" || health === "SUSPECTED";
-  const needsRecovery = health === "TREATING";
 
   return (
     <aside className="flex h-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
@@ -1132,7 +1074,7 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
               {tree.status !== "REMOVED" ? (
                 <button
                   type="button"
-                  onClick={removeTree}
+                  onClick={() => setConfirmingRemove(true)}
                   disabled={removing}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                 >
@@ -1146,15 +1088,16 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
               )}
             </div>
 
-            {/* Treatment start (DISEASED/SUSPECTED → TREATING) */}
-            {needsTreatment ? (
-              <TreatmentPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
+            {/* Per-tree QR (view / PNG / print) */}
+            <TreeQrCard treeId={tree.id} treeCode={tree.treeCode} nickname={tree.nickname} />
+
+            {/* Manual health status: any of the five values; AI diagnosis is optional */}
+            {tree.status !== "REMOVED" ? (
+              <HealthStatusPicker treeId={treeId} treeCode={tree.treeCode} current={health} onSaved={refresh} />
             ) : null}
 
-            {/* Recovery confirmation (TREATING → RECOVERED) */}
-            {needsRecovery ? (
-              <RecoveryPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
-            ) : null}
+            {/* Keep yield information near the top of the selected tree. */}
+            {zoneId && farmId && onSeasonCreated ? <YieldObservationPanel farmId={farmId} onSaved={refresh} onSeasonCreated={onSeasonCreated} onYieldSaved={onYieldSaved} season={season} treeId={tree.id} zoneId={zoneId} /> : null}
 
             {/* Care plan (DISEASED/TREATING/SUSPECTED) */}
             {health === "DISEASED" || health === "TREATING" || health === "SUSPECTED" ? (
@@ -1167,7 +1110,7 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
             ) : null}
 
             {/* Embedded AI panel */}
-            <AIPanel treeId={treeId} treeCode={tree.treeCode} onSaved={refresh} />
+            <AIPanel treeId={tree.id} treeCode={tree.treeCode} onSaved={refresh} />
 
             {progressLoading ? (
               <div className="flex items-center gap-2 rounded-xl border border-neutral-100 bg-neutral-50 p-3 text-xs font-semibold text-neutral-500">
@@ -1201,7 +1144,7 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
                 }
               />
             </dl>
-
+            <TreeBarcode treeCode={tree.treeCode} />
             {tree.notes ? (
               <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
                 <p className="text-xs font-bold text-neutral-500">Ghi chú</p>
@@ -1209,61 +1152,21 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, onRemoved }
               </div>
             ) : null}
 
-            {/* Diagnosis timeline */}
-            <div>
-              <p className="mb-2 text-xs font-extrabold text-neutral-500">
-                LỊCH SỬ CHUẨN ĐOÁN ({diagnoses.length})
-              </p>
-              {diagnoses.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-neutral-200 p-3 text-xs font-semibold text-neutral-400">
-                  Chưa có lịch sử chuẩn đoán.
-                </div>
-              ) : (
-                <div className="space-y-0">
-                  {diagnoses.map((d, idx) => {
-                    const cat = categoryFromCode(d.diseaseCode);
-                    const isLast = idx === diagnoses.length - 1;
-                    return (
-                      <div key={d.id} className="flex gap-3">
-                        {/* Timeline spine */}
-                        <div className="flex w-4 flex-col items-center">
-                          <div className={`mt-1.5 size-2.5 shrink-0 rounded-full ${CAT_DOT[cat]}`} />
-                          {!isLast ? (
-                            <div className="w-0.5 flex-1 bg-neutral-200 my-0.5" />
-                          ) : null}
-                        </div>
-                        {/* Entry */}
-                        <div className={`rounded-xl border border-neutral-100 bg-neutral-50 p-3 flex-1 ${isLast ? "" : "mb-2"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${CAT_BADGE[cat]}`}>
-                              {CAT_LABEL[cat]}
-                            </span>
-                            {d.confidence != null ? (
-                              <span className="text-xs text-neutral-500">
-                                {Math.round(d.confidence * 100)}%
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-1 text-xs font-bold text-neutral-700">{d.diseaseCode}</p>
-                          {d.diseaseName ? (
-                            <p className="mt-0.5 text-xs text-neutral-500">{d.diseaseName}</p>
-                          ) : null}
-                          <p className="mt-1 text-xs text-neutral-400">
-                            {new Date(d.diagnosedAt).toLocaleString("vi-VN")}
-                          </p>
-                          {d.source ? (
-                            <p className="mt-0.5 text-[10px] italic text-neutral-300">{d.source}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <button className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm font-bold text-[#2E5A44] hover:bg-emerald-50" onClick={() => setHistoryOpen(true)} type="button">Xem lịch sử chẩn đoán bệnh</button>
+            {historyOpen ? <DiagnosisHistoryDialog onClose={() => setHistoryOpen(false)} treeCode={tree.treeCode} treeId={tree.id} /> : null}
           </>
         ) : null}
       </div>
+      {tree ? (
+        <ConfirmDialog
+          open={confirmingRemove}
+          {...removeTreeConfirmation(tree.treeCode)}
+          tone="danger"
+          busy={removing}
+          onConfirm={() => void removeTree()}
+          onCancel={() => setConfirmingRemove(false)}
+        />
+      ) : null}
     </aside>
   );
 }

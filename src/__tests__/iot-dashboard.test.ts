@@ -78,6 +78,6 @@ describe("Vietnam sensor calendar boundaries", () => {
     expect(source).not.toContain("Cảnh báo IoT đang mở");
     expect(source).toContain("POLL_INTERVAL_MS = 8000");
     expect(source).toContain("sequence !== requestSequence.current");
-    expect(source).toContain("setHistory([])");
+    expect(source).toContain("setHistory(EMPTY_SERIES)");
   });
 });

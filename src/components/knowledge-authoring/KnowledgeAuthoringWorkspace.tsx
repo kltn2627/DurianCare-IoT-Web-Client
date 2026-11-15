@@ -398,7 +398,7 @@ export function KnowledgeArticleEditor({
       )}
       {!canEditCurrent && (
         <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm font-bold text-amber-700">
-          Bài viết đang ở trạng thái {statusLabels[form.status]}; frontend không mở chỉnh sửa khi backend không cho phép.
+          Bài viết đang ở trạng thái {statusLabels[form.status]} nên không thể chỉnh sửa.
         </div>
       )}
 
@@ -442,7 +442,7 @@ export function KnowledgeArticleEditor({
               disabled={!canEditCurrent}
               rows={18}
               onChange={(event) => update("content", event.target.value)}
-              placeholder="Viết nội dung bài theo dạng plain text hoặc HTML/Rich Text đã được backend hỗ trợ..."
+              placeholder="Viết nội dung bài..."
               className="mt-2 w-full resize-y rounded-2xl border border-neutral-200 p-4 text-[15px] leading-7 outline-none focus:border-[#2E5A44] focus:ring-4 focus:ring-[#2E5A4414] disabled:bg-neutral-100"
             />
             <FieldError>{contentError}</FieldError>
@@ -502,7 +502,7 @@ export function KnowledgeArticleEditor({
               <FieldError>{categoryError}</FieldError>
               {categoryNames.length === 0 && (
                 <p className="mt-2 text-xs font-semibold text-amber-700">
-                  Backend chưa trả danh mục từ `/knowledge/categories`; cần có bài published/category trước khi chọn.
+                  Chưa có danh mục.
                 </p>
               )}
             </label>

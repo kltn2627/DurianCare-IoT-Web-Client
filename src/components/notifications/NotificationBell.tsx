@@ -6,7 +6,8 @@ import { Bell, CheckCheck, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { notificationClient, NotificationApiError } from "@/lib/notification/client";
 import type { NotificationItem } from "@/lib/notification/types";
 import { friendlyApiMessage } from "@/lib/feedback";
-import { Toast } from "@/components/feedback/Toast";
+import { Toast, type ToastTone } from "@/components/feedback/Toast";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 
 export function NotificationBell({ count }: { count: number | null }) {
   const panelId = useId();
@@ -15,7 +16,8 @@ export function NotificationBell({ count }: { count: number | null }) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const [confirmMarkAll, setConfirmMarkAll] = useState(false);
   const [revision, setRevision] = useState(0);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -28,7 +30,10 @@ export function NotificationBell({ count }: { count: number | null }) {
     notificationClient.list({ size: 5 }).then(result => { if (active) setItems(result.notifications); })
       .catch(cause => { if (active) setError(friendlyApiMessage(cause instanceof NotificationApiError ? cause : null, "notification", "Không thể tải thông báo.")); })
       .finally(() => { if (active) setLoading(false); });
-    const closeOutside = (event: MouseEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
+    const closeOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!root.current?.contains(target) && !target.closest?.("[role=alertdialog]")) setOpen(false);
+    };
     const refresh = () => setRevision(value => value + 1);
     document.addEventListener("mousedown", closeOutside);
     window.addEventListener("duriancare:notifications-changed", refresh);
@@ -44,10 +49,10 @@ export function NotificationBell({ count }: { count: number | null }) {
     setBusy(true);
     try {
       const result = await notificationClient.markAllRead();
-      setToast(result.updatedCount ? `Đã đọc ${result.updatedCount} thông báo.` : "Không còn thông báo chưa đọc.");
+      setToast({ tone: "success", message: result.updatedCount ? "Đã đánh dấu tất cả thông báo là đã đọc." : "Không còn thông báo chưa đọc." });
     } catch (cause) {
-      setError(friendlyApiMessage(cause instanceof NotificationApiError ? cause : null, "notification", "Không thể cập nhật thông báo."));
-    } finally { setBusy(false); }
+      setToast({ tone: "error", message: friendlyApiMessage(cause instanceof NotificationApiError ? cause : null, "notification", "Không thể cập nhật thông báo. Vui lòng thử lại.") });
+    } finally { setBusy(false); setConfirmMarkAll(false); }
   }
 
   return <div ref={root} className="relative" onKeyDown={event => {
@@ -64,7 +69,7 @@ export function NotificationBell({ count }: { count: number | null }) {
       </div>
       <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
         <span className="text-xs text-neutral-600">{count == null ? "" : `${count} chưa đọc`}</span>
-        <button type="button" onClick={() => void markAll()} disabled={busy || count === 0 || loading} className="inline-flex items-center gap-2 rounded px-2 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-40"><CheckCheck size={16} />Đánh dấu tất cả đã đọc</button>
+        <button type="button" onClick={() => setConfirmMarkAll(true)} disabled={busy || count === 0 || loading} className="inline-flex items-center gap-2 rounded px-2 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-40"><CheckCheck size={16} />Đánh dấu tất cả đã đọc</button>
       </div>
       <div className="max-h-80 overflow-y-auto">
         {loading ? <div className="flex items-center gap-2 p-5 text-sm text-neutral-500"><LoaderCircle size={16} className="animate-spin" />Đang tải…</div> : error ? <div role="alert" className="p-4 text-sm text-red-700">{error}<button type="button" onClick={() => setRevision(value => value + 1)} className="mt-2 flex items-center gap-2 rounded border px-3 py-2"><RefreshCw size={14} />Thử lại</button></div> : items.length ? items.map(item => <Link key={item.id} href="/notifications" onClick={() => setOpen(false)} className={`block border-b border-neutral-100 px-4 py-3 hover:bg-neutral-50 ${item.isRead ? "" : "bg-emerald-50"}`}>
@@ -73,6 +78,14 @@ export function NotificationBell({ count }: { count: number | null }) {
       </div>
       <Link href="/notifications" onClick={() => setOpen(false)} className="block px-4 py-3 text-center text-sm font-semibold text-emerald-800 hover:bg-neutral-50">Xem tất cả</Link>
     </section>}
-    {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    <ConfirmDialog
+      open={confirmMarkAll}
+      title="Xác nhận đánh dấu tất cả đã đọc"
+      description="Bạn có chắc muốn đánh dấu toàn bộ thông báo là đã đọc không?"
+      busy={busy}
+      onCancel={() => setConfirmMarkAll(false)}
+      onConfirm={() => void markAll()}
+    />
+    {toast && <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />}
   </div>;
 }
