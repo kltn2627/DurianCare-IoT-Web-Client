@@ -63,7 +63,12 @@ export interface ScheduleSlotInput {
 
 export interface CameraDevice {
   cameraId: string;
-  status: "ONLINE" | "OFFLINE" | "UNKNOWN";
+  /** DEGRADED: heartbeat is fresh but the camera's own frame-grab self-test failed. */
+  status: "ONLINE" | "DEGRADED" | "OFFLINE" | "UNKNOWN";
+  previewAvailable?: boolean;
+  cameraReady?: boolean | null;
+  lastError?: string | null;
+  firmwareVersion?: string | null;
   lastSeenAt: string | null;
   endpointVersion: string;
   snapshotUrl: string;

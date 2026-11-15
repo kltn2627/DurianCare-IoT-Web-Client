@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Calendar, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Plus, RefreshCw, Search, X } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListChecks, Loader2, Plus, RefreshCw, Search, X } from "lucide-react";
 import { treeClient, TreeApiError } from "@/lib/trees/client";
-import type { TreeSummary, ZoneDetail, ZoneSafetySummary } from "@/lib/trees/types";
+import type { ManualTreeHealthStatus, TreeSummary, ZoneDetail, ZoneSafetySummary } from "@/lib/trees/types";
+import { isBulkSelectable, pruneBulkSelection, summarizeBulkResult, toggleBulkSelection } from "@/lib/trees/bulkStatus";
 import { cultivationClient } from "@/lib/cultivation/client";
 import type { CultivationSeason, CultivationSeasonStatus, SeasonYieldHistory, ZoneYieldForecast } from "@/lib/cultivation/types";
 import { TreeMapCanvas } from "./TreeMapCanvas";
 import { ZoneSafetySummaryCard } from "./ZoneSafetySummary";
 import { TreeDetailPanel } from "./TreeDetailPanel";
+import { BulkStatusToolbar, type BulkNotice } from "./BulkStatusToolbar";
+import { countByHealth, matchesHealthFilter, toggleFilterValue } from "@/lib/trees/statusCatalog";
 
 const HEALTH_LABELS: Record<string, string> = {
   HEALTHY: "Khỏe mạnh",
@@ -408,6 +411,60 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
   const [currentFruitCounts, setCurrentFruitCounts] = useState<Record<string, number>>({});
   const [bulkYieldOpen, setBulkYieldOpen] = useState(false);
   const [treeListOpen, setTreeListOpen] = useState(false);
+  // Bulk status change: null target = mode off.
+  const [bulkTarget, setBulkTarget] = useState<ManualTreeHealthStatus | null>(null);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(() => new Set());
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState<BulkNotice>(null);
+  const bulkInFlight = useRef(false);
+  const [healthFilter, setHealthFilter] = useState<ReadonlySet<string>>(new Set());
+  const visibleTrees = trees.filter((tree) => matchesHealthFilter(tree, healthFilter));
+
+  function startBulkMode() {
+    setSelectedTreeId(null);
+    setBulkSelected(new Set());
+    setBulkNotice(null);
+    setBulkConfirming(false);
+    setBulkTarget("TREATING");
+  }
+
+  function exitBulkMode() {
+    if (bulkInFlight.current) return;
+    setBulkTarget(null);
+    setBulkSelected(new Set());
+    setBulkConfirming(false);
+    setBulkNotice(null);
+  }
+
+  async function submitBulk() {
+    if (!bulkTarget || bulkSelected.size === 0 || bulkInFlight.current) return;
+    bulkInFlight.current = true;
+    setBulkSubmitting(true);
+    setBulkNotice(null);
+    const codeOf = (id: string) => trees.find((t) => t.id === id)?.treeCode ?? id;
+    try {
+      const response = await treeClient.bulkUpdateHealthStatus([...bulkSelected], bulkTarget);
+      const summary = summarizeBulkResult(response, codeOf);
+      const refreshed = await treeClient.listTrees(zoneId).catch(() => null);
+      if (refreshed) setTrees(refreshed);
+      // Keep failed trees selected so the user can retry or deselect them.
+      setBulkSelected(new Set(summary.failedIds));
+      setBulkNotice({ tone: summary.tone, message: summary.message });
+      setBulkConfirming(false);
+      if (response.updated > 0) {
+        treeClient.getZoneSafety(zoneId).then((s) => { if (s) setSafety(s); }).catch(() => {});
+      }
+    } catch (caught) {
+      // Nothing is reported as changed; the selection stays for a retry.
+      const message = caught instanceof Error ? caught.message : "Không thể cập nhật trạng thái.";
+      setBulkNotice({ tone: "error", message: `Chưa đổi được trạng thái: ${message}` });
+      setBulkConfirming(false);
+    } finally {
+      bulkInFlight.current = false;
+      setBulkSubmitting(false);
+    }
+  }
 
   const load = () => {
     let active = true;
@@ -578,20 +635,60 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
               <h2 className="text-sm font-extrabold text-neutral-900">
                 Bản đồ cây ({trees.length} cây)
               </h2>
-              <div className="flex flex-wrap gap-2"><button
+              <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={!activeSeason || !trees.length}
+                onClick={() => setBulkYieldOpen(true)}
+                className="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-[#2E5A44] transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >Cập nhật số lượng trái hàng loạt</button>
+              {!bulkTarget ? (
+                <button
                   type="button"
-                  disabled={!activeSeason || !trees.length}
-                  onClick={() => setBulkYieldOpen(true)}
-                  className="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-[#2E5A44] transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >Cập nhật số lượng trái hàng loạt</button><button
-                  type="button"
-                  onClick={() => { setGeneratingTrees(true); setGenerateSuccess(null); }}
-                  className="flex items-center gap-1.5 rounded-xl bg-[#2E5A44] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#25493a] transition-colors"
+                  onClick={startBulkMode}
+                  disabled={trees.length === 0}
+                  className="flex items-center gap-1.5 rounded-xl border border-[#2563eb]/40 bg-white px-3 py-1.5 text-xs font-bold text-[#1d4ed8] hover:bg-[#eff6ff] transition-colors disabled:opacity-50"
                 >
-                  <Plus size={14} />
-                  Tạo cây tự động
-                </button></div>
+                  <ListChecks size={14} />
+                  Chọn cây để đổi trạng thái
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => { setGeneratingTrees(true); setGenerateSuccess(null); }}
+                className="flex items-center gap-1.5 rounded-xl bg-[#2E5A44] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#25493a] transition-colors"
+              >
+                <Plus size={14} />
+                Tạo cây tự động
+              </button>
+              </div>
             </div>
+            {bulkTarget ? (
+              <BulkStatusToolbar
+                target={bulkTarget}
+                selectedCount={bulkSelected.size}
+                confirming={bulkConfirming}
+                submitting={bulkSubmitting}
+                notice={bulkNotice}
+                onTargetChange={(target) => {
+                  setBulkTarget(target);
+                  setBulkSelected((current) => pruneBulkSelection(current, trees, target));
+                  setBulkNotice(null);
+                }}
+                onClearSelection={() => { setBulkSelected(new Set()); setBulkNotice(null); }}
+                onCancel={exitBulkMode}
+                onRequestConfirm={() => { if (bulkSelected.size > 0) setBulkConfirming(true); }}
+                onBackFromConfirm={() => setBulkConfirming(false)}
+                onConfirm={() => void submitBulk()}
+                selectableVisibleCount={visibleTrees.filter((tree) => isBulkSelectable(tree, bulkTarget)).length}
+                onSelectAllVisible={() => {
+                  setBulkSelected((current) => new Set([
+                    ...current, ...visibleTrees.filter((tree) => isBulkSelectable(tree, bulkTarget)).map((tree) => tree.id),
+                  ]));
+                  setBulkNotice(null);
+                }}
+              />
+            ) : null}
             {generateSuccess ? (
               <div className="mb-3 rounded-xl bg-green-100 px-3 py-2 text-xs font-semibold text-green-800">
                 {generateSuccess}
@@ -616,14 +713,25 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
               fruitCounts={currentFruitCounts}
               trees={trees}
               selectedTreeId={selectedTreeId}
-              onTreeClick={(tree) =>
-                setSelectedTreeId(tree.id === selectedTreeId ? null : tree.id)
-              }
+              bulkSelectedIds={bulkTarget ? bulkSelected : undefined}
+              healthFilter={healthFilter}
+              healthCounts={countByHealth(trees)}
+              onToggleHealthFilter={(key) => setHealthFilter((current) => toggleFilterValue(current, key))}
+              isBulkSelectable={bulkTarget ? (tree) => isBulkSelectable(tree, bulkTarget) : undefined}
+              onTreeClick={(tree) => {
+                if (bulkTarget) {
+                  if (bulkConfirming || bulkSubmitting) return;
+                  setBulkSelected((current) => toggleBulkSelection(current, tree, bulkTarget));
+                  setBulkNotice(null);
+                  return;
+                }
+                setSelectedTreeId(tree.id === selectedTreeId ? null : tree.id);
+              }}
             />
           </div>
 
           {/* Detail panel */}
-          {selectedTreeId ? (
+          {selectedTreeId && !bulkTarget ? (
             <TreeDetailPanel
               key={selectedTreeId}
               treeId={selectedTreeId}
@@ -660,16 +768,29 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
       {/* Tree list table */}
       {zone ? (
         <div className="panel p-5">
-          <button
-            aria-controls="zone-tree-list"
-            aria-expanded={treeListOpen}
-            className="flex w-full items-center justify-between gap-3 text-left text-sm font-extrabold text-[#2E5A44]"
-            onClick={() => setTreeListOpen((current) => !current)}
-            type="button"
-          >
-            <span>Danh sách cây ({trees.length})</span>
-            {treeListOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              aria-controls="zone-tree-list"
+              aria-expanded={treeListOpen}
+              className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left text-sm font-extrabold text-[#2E5A44]"
+              onClick={() => setTreeListOpen((current) => !current)}
+              type="button"
+            >
+              <span>Danh sách cây ({trees.length})</span>
+              {treeListOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {healthFilter.size > 0 ? (
+              <>
+                <span className="text-xs font-semibold text-neutral-500">
+                  Đang lọc: {visibleTrees.length}/{trees.length} cây
+                </span>
+                <button type="button" onClick={() => setHealthFilter(new Set())}
+                  className="rounded-lg border border-neutral-300 px-2 py-0.5 text-xs font-bold text-neutral-700 hover:bg-neutral-50">
+                  Bỏ lọc
+                </button>
+              </>
+            ) : null}
+          </div>
           {treeListOpen ? <div className="mt-4" id="zone-tree-list">{trees.length === 0 ? (
             <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm font-semibold text-neutral-400">
               Chưa có cây nào trong vùng này.
@@ -688,7 +809,7 @@ export function ZoneTreesWorkspace({ farmId, zoneId }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {trees.map((tree) => (
+                  {visibleTrees.map((tree) => (
                     <tr
                       key={tree.id}
                       onClick={() =>

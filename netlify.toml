@@ -1,0 +1,12 @@
+# Netlify build settings for the DurianCare web client (Next.js 16).
+# Netlify detects Next.js and applies its Next.js runtime automatically;
+# backend URLs and other settings come from Site configuration > Environment variables.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Next.js 16 needs Node >= 20.9; keep in step with the GitHub Actions CI.
+  NODE_VERSION = "24"
+  NEXT_TELEMETRY_DISABLED = "1"

@@ -18,7 +18,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { friendlyApiMessage } from "@/lib/feedback";
-import { Toast } from "@/components/feedback/Toast";
+import { Toast, type ToastTone } from "@/components/feedback/Toast";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { notificationSource, notificationTypeLabel } from "@/lib/notification/presentation";
 import { notificationTargetUrl } from "@/lib/notification/target";
 import { notificationClient, NotificationApiError } from "@/lib/notification/client";
 import type {
@@ -97,6 +99,7 @@ function NotificationCard({
   busy: boolean;
 }) {
   const targetUrl = notificationTargetUrl(item);
+  const source = notificationSource(item);
 
   return (
     <article
@@ -127,7 +130,7 @@ function NotificationCard({
                 item.type,
               )}`}
             >
-              {item.type}
+              {notificationTypeLabel(item.type)}
             </span>
           </div>
           <p className="text-[13px] leading-relaxed text-neutral-600">{item.message}</p>
@@ -136,10 +139,12 @@ function NotificationCard({
               <Clock3 size={12} />
               {formatDate(item.createdAt)}
             </span>
-            <span className="inline-flex items-center gap-1">
-              <Inbox size={12} />
-              {item.id}
-            </span>
+            {source ? (
+              <span className="inline-flex items-center gap-1">
+                <Inbox size={12} />
+                {source}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -162,7 +167,7 @@ function NotificationCard({
           className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}
-          Đánh dấu đã đọc
+          {item.isRead ? "Đã đọc" : "Đánh dấu đã đọc"}
         </button>
         <button
           type="button"
@@ -192,8 +197,9 @@ export function NotificationInbox() {
   const [error, setError] = useState<string | null>(null);
   const [refreshSeed, setRefreshSeed] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [confirmMarkAll, setConfirmMarkAll] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -259,21 +265,29 @@ export function NotificationInbox() {
     setMode(nextMode);
   };
 
+  // Action failures keep the list on screen and explain the problem in an error toast.
+  const actionFailed = (cause: unknown, fallback: string) => {
+    setToast({
+      tone: "error",
+      message: friendlyApiMessage(
+        cause instanceof NotificationApiError
+          ? { status: cause.status, message: cause.message }
+          : null,
+        "notification",
+        fallback,
+      ),
+    });
+  };
+
   const markRead = async (id: string) => {
+    if (busyId) return;
     setBusyId(id);
     try {
       await notificationClient.markRead(id);
+      setToast({ tone: "success", message: "Đã đánh dấu thông báo là đã đọc." });
       refresh();
     } catch (cause) {
-      setError(
-        friendlyApiMessage(
-          cause instanceof NotificationApiError
-            ? { status: cause.status, message: cause.message }
-            : null,
-          "notification",
-          "Không thể đánh dấu đã đọc.",
-        ),
-      );
+      actionFailed(cause, "Không thể cập nhật thông báo. Vui lòng thử lại.");
     } finally {
       setBusyId(null);
     }
@@ -281,7 +295,7 @@ export function NotificationInbox() {
 
   const openNotification = async (item: NotificationItem) => {
     const targetUrl = notificationTargetUrl(item);
-    if (!targetUrl) return;
+    if (!targetUrl || busyId) return;
     setBusyId(item.id);
     try {
       if (!item.isRead) {
@@ -289,15 +303,7 @@ export function NotificationInbox() {
       }
       router.push(targetUrl);
     } catch (cause) {
-      setError(
-        friendlyApiMessage(
-          cause instanceof NotificationApiError
-            ? { status: cause.status, message: cause.message }
-            : null,
-          "notification",
-          "Không thể mở thông báo.",
-        ),
-      );
+      actionFailed(cause, "Không thể mở thông báo. Vui lòng thử lại.");
       setBusyId(null);
     }
   };
@@ -307,19 +313,18 @@ export function NotificationInbox() {
     setBusyId("__all__");
     try {
       const result = await notificationClient.markAllRead();
-      setToast(result.updatedCount > 0 ? `Đã đánh dấu ${result.updatedCount} thông báo đã đọc.` : "Không còn thông báo chưa đọc.");
+      setToast({
+        tone: "success",
+        message: result.updatedCount > 0
+          ? "Đã đánh dấu tất cả thông báo là đã đọc."
+          : "Không còn thông báo chưa đọc.",
+      });
+      setConfirmMarkAll(false);
       setPage(0);
       refresh();
     } catch (cause) {
-      setError(
-        friendlyApiMessage(
-          cause instanceof NotificationApiError
-            ? { status: cause.status, message: cause.message }
-            : null,
-          "notification",
-          "Không thể đánh dấu tất cả đã đọc.",
-        ),
-      );
+      setConfirmMarkAll(false);
+      actionFailed(cause, "Không thể cập nhật thông báo. Vui lòng thử lại.");
     } finally {
       setBusyId(null);
     }
@@ -327,23 +332,16 @@ export function NotificationInbox() {
 
   const removeNotification = async (id: string) => {
     if (busyId) return;
-    setPendingDelete(null);
     setBusyId(id);
     try {
       await notificationClient.delete(id);
-      setToast("Đã xóa thông báo.");
+      setToast({ tone: "success", message: "Đã xóa thông báo." });
+      setPendingDelete(null);
       setPage(0);
       refresh();
     } catch (cause) {
-      setError(
-        friendlyApiMessage(
-          cause instanceof NotificationApiError
-            ? { status: cause.status, message: cause.message }
-            : null,
-          "notification",
-          "Không thể xoá thông báo.",
-        ),
-      );
+      setPendingDelete(null);
+      actionFailed(cause, "Không thể xóa thông báo. Vui lòng thử lại.");
     } finally {
       setBusyId(null);
     }
@@ -351,17 +349,25 @@ export function NotificationInbox() {
 
   return (
     <div className="space-y-5">
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-      {pendingDelete && <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onKeyDown={event => { if (event.key === "Escape") setPendingDelete(null); }}>
-        <section role="alertdialog" aria-modal="true" aria-labelledby="delete-notification-title" className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-          <h2 id="delete-notification-title" className="font-bold">Xóa thông báo này?</h2>
-          <p className="mt-2 text-sm text-neutral-600">Thông báo sẽ được xóa khỏi hộp thư của bạn.</p>
-          <div className="mt-5 flex justify-end gap-3">
-            <button autoFocus type="button" onClick={() => setPendingDelete(null)} className="rounded-lg border px-4 py-2 text-sm">Hủy</button>
-            <button type="button" onClick={() => void removeNotification(pendingDelete)} className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white">Xóa</button>
-          </div>
-        </section>
-      </div>}
+      {toast && <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Xóa thông báo này?"
+        description="Thông báo sẽ được xóa khỏi hộp thư của bạn và không thể khôi phục."
+        confirmLabel="Xóa"
+        tone="danger"
+        busy={pendingDelete !== null && busyId === pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => { if (pendingDelete) void removeNotification(pendingDelete); }}
+      />
+      <ConfirmDialog
+        open={confirmMarkAll}
+        title="Xác nhận đánh dấu tất cả đã đọc"
+        description="Bạn có chắc muốn đánh dấu toàn bộ thông báo là đã đọc không?"
+        busy={busyId === "__all__"}
+        onCancel={() => setConfirmMarkAll(false)}
+        onConfirm={() => void markAllRead()}
+      />
       <section className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 py-4">
         <h1 className="flex items-center gap-3 text-2xl font-bold text-neutral-900"><Bell size={24} />Thông báo</h1>
         <span className="text-sm text-neutral-600">{loading ? "Đang tải…" : `${unreadCount} chưa đọc`}</span>
@@ -441,9 +447,10 @@ export function NotificationInbox() {
               <button
                 type="button"
                 onClick={refresh}
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200"
+                disabled={loading}
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 transition-all duration-200 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-neutral-200 disabled:opacity-50"
               >
-                <RefreshCw size={14} />
+                <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
                 Làm mới
               </button>
             </div>
@@ -462,7 +469,7 @@ export function NotificationInbox() {
               {mode === "UNREAD" ? (
                 <button
                   type="button"
-                  onClick={markAllRead}
+                  onClick={() => setConfirmMarkAll(true)}
                   disabled={busyId !== null || unreadCount === 0 || loading}
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E5A44] px-4 text-xs font-bold text-white transition-all duration-200 hover:bg-[#244a37] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2E5A4430] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
                 >
@@ -478,8 +485,16 @@ export function NotificationInbox() {
 
             {error ? (
               <div className="px-5 py-10 sm:px-6">
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-[13px] leading-relaxed text-red-700">
-                  {error}
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-[13px] leading-relaxed text-red-700">
+                  <span>{error}</span>
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    <RefreshCw size={14} />
+                    Thử lại
+                  </button>
                 </div>
               </div>
             ) : loading ? (
@@ -514,10 +529,6 @@ export function NotificationInbox() {
                       ? "Không còn thông báo chưa đọc"
                       : "Chưa có thông báo nào"}
                   </b>
-                  <p className="mt-2 max-w-md text-xs leading-relaxed text-neutral-500">
-                    Thông báo hệ thống sẽ xuất hiện ở đây khi backend phát sinh OTP, cảnh báo,
-                    hoặc nhắc việc vận hành.
-                  </p>
                 </span>
               </div>
             )}

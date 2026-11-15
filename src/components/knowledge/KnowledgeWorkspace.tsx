@@ -878,8 +878,7 @@ export function KnowledgeWorkspace({
               Quy trình biên tập
             </b>
             <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-              Bản nháp và bài chờ duyệt được lưu trên backend. Admin duyệt bài
-              để xuất bản lên trang kiến thức của nông hộ.
+              Bản nháp và bài chờ duyệt được lưu lại. Admin duyệt bài để xuất bản lên trang kiến thức của nông hộ.
             </p>
           </span>
         </article>
@@ -892,8 +891,7 @@ export function KnowledgeWorkspace({
               Ảnh bìa kiến thức
             </b>
             <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-              FileReader tạo bản xem trước, sau đó ảnh được upload qua API và
-              hiển thị lại từ kho ảnh kiến thức.
+              Xem trước ảnh bìa trước khi tải lên.
             </p>
           </span>
         </article>

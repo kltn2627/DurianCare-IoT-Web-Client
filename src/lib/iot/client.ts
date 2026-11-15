@@ -4,6 +4,8 @@ import type {
   IotDeviceListResponse,
   IotFarmSummary,
   IotRawTelemetryHistoryResponse,
+  IotTelemetryBucket,
+  IotTelemetryBucketResponse,
   IotTelemetryReading,
   IotTelemetryHistoryResponse,
   IotTelemetryLatestResponse,
@@ -34,8 +36,12 @@ export function normalizeTelemetry(reading: Partial<IotTelemetryReading> | null 
     light: reading.light ?? null,
     measuredAt: reading.measuredAt ?? reading.timestamp ?? null,
     receivedAt: reading.receivedAt ?? null,
+    source: reading.source === "SYNTHETIC_BACKFILL" ? "SYNTHETIC_BACKFILL" : "DEVICE",
     soil_moisture: soilMoisture,
     soilMoisture,
+    soilRaw: reading.soilRaw ?? null,
+    soilStatus: reading.soilStatus ?? null,
+    dhtStatus: reading.dhtStatus ?? null,
     status: reading.status ?? statusFromSoil(soilMoisture),
     temperature: reading.temperature ?? null,
     units: reading.units ?? {
@@ -51,6 +57,20 @@ export function statusFromSoil(soilMoisture: number | null | undefined) {
   if (soilMoisture < 60) return "DRY_WARNING";
   if (soilMoisture > 85) return "WET_WARNING";
   return "OPTIMAL";
+}
+
+function normalizeBuckets(response: IotTelemetryBucketResponse): IotTelemetryBucketResponse {
+  if (!response || !Array.isArray(response.buckets) || !Number.isInteger(response.range?.bucketSeconds)) {
+    throw new Error("Phản hồi lịch sử gộp không hợp lệ.");
+  }
+  return {
+    ...response,
+    // Anything not explicitly DEVICE is treated as simulated so it is never shown as a measurement.
+    buckets: response.buckets.map((bucket): IotTelemetryBucket => ({
+      ...bucket,
+      source: bucket.source === "DEVICE" ? "DEVICE" : "SYNTHETIC_BACKFILL",
+    })),
+  };
 }
 
 function historyQuery(query: { from?: string; limit?: number; to?: string }) {
@@ -110,6 +130,14 @@ export const iotClient = {
     );
     return response.data.map(normalizeTelemetry).filter((item): item is IotTelemetryReading => item !== null).reverse();
   },
+  telemetryBuckets: async (deviceId: string, query: { from: string; to: string }) =>
+    normalizeBuckets(await iotRequest<IotTelemetryBucketResponse>(
+      `/api/backend/iot/devices/${encodeURIComponent(deviceId)}/telemetry/buckets${historyQuery({ from: query.from, to: query.to })}`,
+    )),
+  rawTelemetryBuckets: async (deviceUid: string, query: { from: string; to: string }) =>
+    normalizeBuckets(await iotRequest<IotTelemetryBucketResponse>(
+      `/api/backend/v1/sensors/history/buckets?${new URLSearchParams({ device_id: deviceUid, from: query.from, to: query.to })}`,
+    )),
   telemetryHistory: async (
     deviceId: string,
     query: { from?: string; limit?: number; to?: string } = {},

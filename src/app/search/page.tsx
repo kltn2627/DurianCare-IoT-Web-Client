@@ -4,20 +4,23 @@ import { SearchWorkspace } from "@/components/search/SearchWorkspace";
 export const metadata: Metadata = {
   title: "Tìm kiếm",
   description:
-    "Tra cứu bài viết, hồ sơ bệnh hại và tài liệu vận hành đã được backend lập chỉ mục.",
+    "Tra cứu bài viết, hồ sơ bệnh hại và tài liệu vận hành.",
 };
 
 export const dynamic = "force-dynamic";
 
+type SearchParams = {
+  q?: string | string[];
+  type?: string | string[];
+  page?: string | string[];
+  size?: string | string[];
+  sortBy?: string | string[];
+  sortDirection?: string | string[];
+};
+
+// Next.js 15+ passes searchParams as a Promise to server pages.
 type SearchPageProps = {
-  searchParams?: {
-    q?: string | string[];
-    type?: string | string[];
-    page?: string | string[];
-    size?: string | string[];
-    sortBy?: string | string[];
-    sortDirection?: string | string[];
-  };
+  searchParams?: Promise<SearchParams>;
 };
 
 function first(value: string | string[] | undefined) {
@@ -25,7 +28,8 @@ function first(value: string | string[] | undefined) {
   return value;
 }
 
-export default function SearchPage({ searchParams }: SearchPageProps) {
+export default async function SearchPage(props: SearchPageProps) {
+  const searchParams = await props.searchParams;
   const initialQuery = first(searchParams?.q) ?? "";
   const initialType = first(searchParams?.type);
   const initialPage = Number(first(searchParams?.page) ?? 0);

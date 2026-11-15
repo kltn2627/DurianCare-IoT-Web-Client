@@ -26,12 +26,15 @@ import type {
   TreeCareTask,
   TreeDetail,
   TreeDiagnosis,
-  TreeHealthStatus,
 } from "@/lib/trees/types";
 import type { CultivationSeason, TreeYieldObservation } from "@/lib/cultivation/types";
 import { cultivationClient } from "@/lib/cultivation/client";
 import type { DiseaseCategory } from "@/lib/labels";
 import { knowledgeClient } from "@/lib/knowledge/client";
+import { TreeQrCard } from "./TreeQrCard";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { removeTreeConfirmation } from "@/lib/trees/removal";
+import { HealthStatusPicker } from "./HealthStatusPicker";
 import type { KnowledgeArticle } from "@/lib/knowledge/types";
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -52,7 +55,6 @@ const HEALTH_COLORS: Record<string, string> = {
   RECOVERED: "text-cyan-700 bg-cyan-50 border-cyan-200",
 };
 
-const HEALTH_STATUS_OPTIONS: TreeHealthStatus[] = ["HEALTHY", "DISEASED", "TREATING", "SUSPECTED", "RECOVERED"];
 
 function TreeBarcode({ treeCode }: { treeCode: string }) {
   const barcodeRef = useRef<SVGSVGElement>(null);
@@ -458,15 +460,7 @@ function AIPanel({ treeId, treeCode, onSaved }: AIPanelProps) {
   );
 }
 
-// ── Recovery Panel ────────────────────────────────────────────────────────────
-
-interface RecoveryPanelProps {
-  treeId: string;
-  treeCode: string;
-  onSaved: () => void;
-}
-
-const RECOVERY_OUTCOME_ELIGIBLE = new Set(["RECOVERED", "IMPROVED"]);
+// ── AI recovery evaluation (advisory only; never blocks a manual status change) ─
 
 const RECOVERY_OUTCOME_LABEL: Record<string, string> = {
   RECOVERED: "Đã hồi phục",
@@ -485,9 +479,9 @@ const RECOVERY_OUTCOME_CARD: Record<string, string> = {
 };
 
 const RECOVERY_NEXT_ACTION: Record<string, string> = {
-  RECOVERED: "Có thể xác nhận cây đã hồi phục. Backend vẫn kiểm tra lại điều kiện trước khi cập nhật Tree Map.",
+  RECOVERED: "AI thấy cây đã hồi phục. Bạn có thể cập nhật trạng thái “Đã hồi phục” nếu đồng ý.",
   IMPROVED: "Tiếp tục kế hoạch chăm sóc hiện tại và đặt lịch tái khám tiếp theo nếu cần.",
-  STABLE: "Tiếp tục điều trị/theo dõi. Chưa cho xác nhận hồi phục.",
+  STABLE: "Tiếp tục điều trị/theo dõi và tái khám để có thêm dữ liệu.",
   WORSENED: "Đánh giá lại hướng xử lý, xem lại Knowledge Base hoặc tạo kế hoạch chăm sóc mới.",
   UNCERTAIN: "Chụp/đưa ảnh rõ hơn hoặc kiểm tra thêm trước khi kết luận.",
 };
@@ -496,13 +490,7 @@ function formatPercent(value?: number | null) {
   return value == null ? "—" : `${Math.round(value * 100)}%`;
 }
 
-function RecoveryEvaluationCard({
-  evaluation,
-  eligible,
-}: {
-  evaluation: RecoveryEvaluationResponse;
-  eligible?: boolean;
-}) {
+function RecoveryEvaluationCard({ evaluation }: { evaluation: RecoveryEvaluationResponse }) {
   const tone = RECOVERY_OUTCOME_CARD[evaluation.outcome] ?? RECOVERY_OUTCOME_CARD.UNCERTAIN;
   return (
     <div className={`rounded-xl border p-3 ${tone}`}>
@@ -510,11 +498,6 @@ function RecoveryEvaluationCard({
         <p className="text-xs font-extrabold">
           {RECOVERY_OUTCOME_LABEL[evaluation.outcome] ?? evaluation.outcome}
         </p>
-        {eligible === false ? (
-          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold">
-            Không đủ điều kiện RECOVERED
-          </span>
-        ) : null}
       </div>
       <p className="mt-1 text-xs opacity-85">{evaluation.reason}</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
@@ -532,188 +515,6 @@ function RecoveryEvaluationCard({
       <p className="mt-2 rounded-lg bg-white/70 p-2 text-xs font-semibold">
         {RECOVERY_NEXT_ACTION[evaluation.outcome] ?? RECOVERY_NEXT_ACTION.UNCERTAIN}
       </p>
-    </div>
-  );
-}
-
-function RecoveryPanel({ treeId, treeCode, onSaved }: RecoveryPanelProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [notes, setNotes] = useState("");
-  const [evaluating, setEvaluating] = useState(false);
-  const [evaluation, setEvaluation] = useState<RecoveryEvaluationResponse | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleExpand() {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && !evaluation) {
-      setEvaluating(true);
-      setError(null);
-      try {
-        const result = await treeClient.evaluateRecovery(treeId);
-        setEvaluation(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể đánh giá phục hồi.");
-      } finally {
-        setEvaluating(false);
-      }
-    }
-  }
-
-  async function confirm() {
-    if (!notes.trim()) {
-      setError("Vui lòng nhập ghi chú xác nhận phục hồi.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await treeClient.updateHealthStatus(treeId, "RECOVERED");
-      setSavedOk(true);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Cập nhật trạng thái thất bại.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const eligible = evaluation ? RECOVERY_OUTCOME_ELIGIBLE.has(evaluation.outcome) : false;
-
-  if (savedOk) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-3">
-        <CheckCircle size={16} className="text-green-600 shrink-0" />
-        <p className="text-sm font-semibold text-green-700">Xác nhận phục hồi đã lưu cho cây {treeCode}.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between"
-        onClick={handleExpand}
-      >
-        <span className="text-xs font-extrabold text-green-700">XÁC NHẬN PHỤC HỒI</span>
-        {expanded ? (
-          <ChevronUp size={14} className="text-green-600" />
-        ) : (
-          <ChevronDown size={14} className="text-green-600" />
-        )}
-      </button>
-
-      {expanded ? (
-        <div className="mt-3 space-y-3">
-          {evaluating ? (
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <Loader2 size={12} className="animate-spin" />
-              Đang đánh giá tình trạng phục hồi...
-            </div>
-          ) : evaluation ? (
-            <RecoveryEvaluationCard evaluation={evaluation} eligible={eligible} />
-          ) : null}
-
-          {eligible ? (
-            <>
-              <p className="text-xs text-neutral-600">
-                Xác nhận cây đã phục hồi sau điều trị. Backend sẽ kiểm tra lại evaluateRecovery trước khi cập nhật Tree Map.
-              </p>
-              <textarea
-                className="w-full rounded-xl border border-neutral-200 p-2.5 text-sm text-neutral-700 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-green-300 resize-none"
-                rows={3}
-                placeholder="Ghi chú xác nhận (bắt buộc)..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </>
-          ) : null}
-
-          {error ? (
-            <p className="text-xs font-semibold text-red-600">{error}</p>
-          ) : null}
-
-          {eligible ? (
-            saving ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
-                <Loader2 size={14} className="animate-spin" />
-                Đang lưu...
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={confirm}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
-              >
-                <CheckCircle size={14} />
-                Gửi xác nhận phục hồi
-              </button>
-            )
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ── Treatment panel (DISEASED/SUSPECTED → TREATING) ──────────────────────────
-
-interface TreatmentPanelProps {
-  treeId: string;
-  treeCode: string;
-  onSaved: () => void;
-}
-
-function TreatmentPanel({ treeId, treeCode, onSaved }: TreatmentPanelProps) {
-  const [saving, setSaving] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function startTreatment() {
-    setSaving(true);
-    setError(null);
-    try {
-      await treeClient.updateHealthStatus(treeId, "TREATING");
-      setSavedOk(true);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Lưu thất bại.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (savedOk) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
-        <CheckCircle size={16} className="text-orange-600 shrink-0" />
-        <p className="text-sm font-semibold text-orange-700">Cây {treeCode} đã được đánh dấu đang điều trị.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
-      <p className="text-xs font-extrabold text-orange-700">BẮT ĐẦU ĐIỀU TRỊ</p>
-      <p className="text-xs text-neutral-600">Đánh dấu cây đang trong quá trình điều trị bệnh.</p>
-      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
-      {saving ? (
-        <div className="flex items-center gap-2 text-sm text-neutral-500">
-          <Loader2 size={14} className="animate-spin" />
-          Đang lưu...
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={startTreatment}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700"
-        >
-          Bắt đầu điều trị
-        </button>
-      )}
     </div>
   );
 }
@@ -1114,14 +915,11 @@ function DiagnosisHistoryDialog({ treeId, treeCode, onClose }: { treeId: string;
 export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = null, farmId, zoneId, onSeasonCreated, onYieldSaved, onRemoved }: TreeDetailPanelProps) {
   const [tree, setTree] = useState<TreeDetail | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [statusEditorOpen, setStatusEditorOpen] = useState(false);
-  const [nextHealthStatus, setNextHealthStatus] = useState<TreeHealthStatus | "">("");
-  const [statusSaving, setStatusSaving] = useState(false);
-  const [statusError, setStatusError] = useState<string | null>(null);
   const [diagnoses, setDiagnoses] = useState<TreeDiagnosis[]>([]);
   const [progressEvaluation, setProgressEvaluation] = useState<RecoveryEvaluationResponse | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1197,8 +995,6 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
 
   function refresh() {
     if (!treeId) return;
-    setNextHealthStatus("");
-    setStatusEditorOpen(false);
     setLoading(true);
     setError(null);
     const active = { value: true };
@@ -1206,36 +1002,17 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
     onDiagnosisSaved?.();
   }
 
-  async function saveHealthStatus() {
-    if (!tree || !nextHealthStatus || nextHealthStatus === tree.healthStatus) return;
-    setStatusSaving(true);
-    setStatusError(null);
-    try {
-      const updated = await treeClient.updateHealthStatus(tree.id, nextHealthStatus);
-      setTree(updated);
-      setNextHealthStatus("");
-      setStatusEditorOpen(false);
-      onDiagnosisSaved?.();
-    } catch (caught) {
-      setStatusError(caught instanceof Error ? caught.message : "Không thể cập nhật tình trạng cây.");
-    } finally {
-      setStatusSaving(false);
-    }
-  }
-
   async function removeTree() {
     if (!treeId || !tree) return;
-    const confirmed = window.confirm(
-      `Đã đốn cây ${tree.treeCode}?\n\nCây sẽ được xóa khỏi bản đồ và danh sách cây đang hoạt động. Lịch sử chẩn đoán/kế hoạch chăm sóc vẫn được giữ lại.`,
-    );
-    if (!confirmed) return;
     setRemoving(true);
     setError(null);
     try {
       await treeClient.removeTree(treeId);
+      setConfirmingRemove(false);
       onRemoved?.();
       onClose();
     } catch (err) {
+      setConfirmingRemove(false);
       setError(err instanceof Error ? err.message : "Không thể xóa cây khỏi bản đồ.");
     } finally {
       setRemoving(false);
@@ -1247,7 +1024,6 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
   const health = tree?.healthStatus;
   const healthClass =
     health ? HEALTH_COLORS[health] : "text-neutral-500 bg-neutral-50 border-neutral-200";
-  const needsTreatment = health === "DISEASED" || health === "SUSPECTED";
 
   return (
     <aside className="flex h-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
@@ -1298,7 +1074,7 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
               {tree.status !== "REMOVED" ? (
                 <button
                   type="button"
-                  onClick={removeTree}
+                  onClick={() => setConfirmingRemove(true)}
                   disabled={removing}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                 >
@@ -1312,31 +1088,13 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
               )}
             </div>
 
-            <div className="rounded-xl border border-neutral-200 bg-white p-3">
-              <button
-                aria-controls="tree-health-editor"
-                aria-expanded={statusEditorOpen}
-                className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-[#2E5A44]"
-                onClick={() => setStatusEditorOpen((current) => !current)}
-                type="button"
-              >
-                Cập nhật tình trạng cây
-                {statusEditorOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </button>
-              {statusEditorOpen ? <div className="mt-3 space-y-3 border-t border-neutral-100 pt-3" id="tree-health-editor">
-                <p className="text-xs text-neutral-600">Tình trạng hiện tại: <strong>{health ? HEALTH_LABELS[health] : "Chưa đánh giá"}</strong>. Chọn tình trạng mới cho cây này.</p>
-                <label className="block text-xs font-bold text-neutral-600">Tình trạng mới
-                  <select className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-800" onChange={(event) => { setNextHealthStatus(event.target.value as TreeHealthStatus | ""); setStatusError(null); }} value={nextHealthStatus}>
-                    <option value="">Chọn tình trạng</option>
-                    {HEALTH_STATUS_OPTIONS.map((status) => <option disabled={status === health} key={status} value={status}>{HEALTH_LABELS[status]}{status === health ? " (hiện tại)" : ""}</option>)}
-                  </select>
-                </label>
-                {nextHealthStatus === "RECOVERED" ? <RecoveryPanel key={tree.id} treeId={tree.id} treeCode={tree.treeCode} onSaved={refresh} /> : nextHealthStatus === "TREATING" && needsTreatment ? <TreatmentPanel key={tree.id} treeId={tree.id} treeCode={tree.treeCode} onSaved={refresh} /> : nextHealthStatus ? <button className="w-full rounded-lg bg-[#2E5A44] py-2 text-sm font-bold text-white disabled:opacity-50" disabled={statusSaving || nextHealthStatus === health} onClick={() => void saveHealthStatus()} type="button">{statusSaving ? "Đang lưu..." : "Lưu tình trạng cây"}</button> : null}
-                {statusError ? <p className="rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-700">{statusError}</p> : null}
-                <p className="text-xs text-neutral-500">Có thể dùng chẩn đoán lá bên dưới để cập nhật tình trạng bằng kết quả phân tích.</p>
+            {/* Per-tree QR (view / PNG / print) */}
+            <TreeQrCard treeId={tree.id} treeCode={tree.treeCode} nickname={tree.nickname} />
 
-              </div> : null}
-            </div>
+            {/* Manual health status: any of the five values; AI diagnosis is optional */}
+            {tree.status !== "REMOVED" ? (
+              <HealthStatusPicker treeId={treeId} treeCode={tree.treeCode} current={health} onSaved={refresh} />
+            ) : null}
 
             {/* Keep yield information near the top of the selected tree. */}
             {zoneId && farmId && onSeasonCreated ? <YieldObservationPanel farmId={farmId} onSaved={refresh} onSeasonCreated={onSeasonCreated} onYieldSaved={onYieldSaved} season={season} treeId={tree.id} zoneId={zoneId} /> : null}
@@ -1399,6 +1157,16 @@ export function TreeDetailPanel({ treeId, onClose, onDiagnosisSaved, season = nu
           </>
         ) : null}
       </div>
+      {tree ? (
+        <ConfirmDialog
+          open={confirmingRemove}
+          {...removeTreeConfirmation(tree.treeCode)}
+          tone="danger"
+          busy={removing}
+          onConfirm={() => void removeTree()}
+          onCancel={() => setConfirmingRemove(false)}
+        />
+      ) : null}
     </aside>
   );
 }

@@ -620,7 +620,7 @@ export function DiseaseDiagnosisWorkspace({ treeId = null, treeCode = null }: { 
               <div className="mt-4 rounded-xl border border-[#e1e8df] bg-[#f7faf7] px-4 py-3 text-xs text-neutral-500">
                 {captureMode === "esp32cam"
                   ? "Đang lấy ảnh từ ESP32-CAM và phân tích AI. Vui lòng chờ..."
-                  : "Đang xử lý ảnh. Nếu ảnh hợp lệ, kết quả sẽ xuất hiện ngay bên phải."}
+                  : "Đang xử lý ảnh..."}
               </div>
             ) : null}
           </div>

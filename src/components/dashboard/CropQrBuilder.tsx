@@ -130,7 +130,7 @@ function DataTable({
     return (
       <EmptyState
         title={empty}
-        description="Dữ liệu sẽ xuất hiện sau khi hệ thống có bản ghi phù hợp."
+        description="Chưa có dữ liệu."
       />
     );
   return (
@@ -209,6 +209,8 @@ export function CropQrBuilder() {
     user?.role,
     "EXPORT_RELEASE_APPROVE",
   );
+  // Backend approval is limited to technical reviewers; farmers self-inspect and release instead.
+  const canApproveReview = user?.role === "EXPERT" || user?.role === "ENGINEER";
   const canReviewExport =
     hasCultivationPermission(user?.role, "EXPORT_RELEASE_REVIEW") ||
     canApproveExport;
@@ -765,7 +767,7 @@ export function CropQrBuilder() {
                   >
                     Gửi duyệt
                   </button>
-                  {canApproveExport &&
+                  {canApproveReview &&
                   !isSyntheticRelease(release) &&
                   release.status === "UNDER_REVIEW" ? (
                     <button

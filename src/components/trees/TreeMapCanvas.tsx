@@ -1,5 +1,6 @@
 "use client";
 
+import { UNASSESSED, matchesHealthFilter } from "@/lib/trees/statusCatalog";
 import type { TreeSummary } from "@/lib/trees/types";
 import { partitionMapTrees } from "@/lib/trees/map";
 
@@ -98,12 +99,22 @@ function treeColor(tree: TreeSummary): string {
   return HEALTH_COLORS[tree.healthStatus] ?? "#9ca3af";
 }
 
+// Bulk-selection marker: dashed blue ring + check badge, distinct from every health color.
+const BULK_MARK = "#2563eb";
+
 interface TreeMapCanvasProps {
   trees: TreeSummary[];
   /** Latest persisted count for each tree in the active season; never mock data. */
   fruitCounts?: Record<string, number>;
   selectedTreeId?: string | null;
   onTreeClick?: (tree: TreeSummary) => void;
+  /** When set, the map is in multi-select mode for a bulk status change. */
+  bulkSelectedIds?: ReadonlySet<string>;
+  isBulkSelectable?: (tree: TreeSummary) => boolean;
+  /** View filter by health status (empty = all). Filtered-out trees stay in place, dimmed. */
+  healthFilter?: ReadonlySet<string>;
+  healthCounts?: Record<string, number>;
+  onToggleHealthFilter?: (key: string) => void;
 }
 
 export function TreeMapCanvas({
@@ -111,28 +122,53 @@ export function TreeMapCanvas({
   fruitCounts = {},
   selectedTreeId,
   onTreeClick,
+  bulkSelectedIds,
+  isBulkSelectable,
+  healthFilter,
+  healthCounts,
+  onToggleHealthFilter,
 }: TreeMapCanvasProps) {
-  const { positioned: positionedTrees, unpositionedCount } =
-    partitionMapTrees(trees);
+  const legend = [...Object.entries(HEALTH_LABELS), [UNASSESSED, "Chưa đánh giá"] as [string, string]];
+  const filtering = Boolean(healthFilter && healthFilter.size > 0);
+  const bulkMode = Boolean(bulkSelectedIds);
+  const { positioned: positionedTrees, unpositionedCount } = partitionMapTrees(trees);
 
   return (
     <div className="space-y-3">
       {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-neutral-500">
-        {Object.entries(HEALTH_LABELS).map(([key, label]) => (
-          <span key={key} className="flex items-center gap-1.5">
+        {onToggleHealthFilter ? <span className="text-neutral-600">Lọc theo sức khỏe:</span> : null}
+        {legend.map(([key, label]) => {
+          const dot = (
             <svg aria-hidden="true" className="size-5" viewBox="-20 -20 40 40">
-              <DurianTreeMarker color={HEALTH_COLORS[key]} selected={false} />
+              <DurianTreeMarker color={HEALTH_COLORS[key] ?? "#9ca3af"} selected={false} />
             </svg>
-            {label}
+          );
+          const count = healthCounts ? ` (${healthCounts[key] ?? 0})` : "";
+          if (!onToggleHealthFilter) {
+            return <span key={key} className="flex items-center gap-1.5">{dot}{label}</span>;
+          }
+          const active = healthFilter?.has(key) ?? false;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggleHealthFilter(key)}
+              className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors ${
+                active ? "border-[#2E5A44] bg-[#2E5A44] text-white" : "border-neutral-200 bg-white hover:bg-neutral-50"
+              }`}
+            >
+              {dot}{label}{count}
+            </button>
+          );
+        })}
+        {bulkMode ? (
+          <span className="flex items-center gap-1.5 text-[#2563eb]">
+            <span className="inline-block size-3 rounded-full border-2 border-dashed border-[#2563eb]" />
+            Đã chọn để đổi trạng thái
           </span>
-        ))}
-        <span className="flex items-center gap-1.5">
-          <svg aria-hidden="true" className="size-5" viewBox="-20 -20 40 40">
-            <DurianTreeMarker color="#9ca3af" selected={false} />
-          </svg>
-          Chưa đánh giá
-        </span>
+        ) : null}
       </div>
 
       {/* Canvas */}
@@ -172,28 +208,45 @@ export function TreeMapCanvas({
             const cx = 30 + (tree.positionX ?? 0) * 940;
             const cy = 30 + (tree.positionY ?? 0) * 620;
             const color = treeColor(tree);
-            const isSelected = tree.id === selectedTreeId;
+            const isSelected = !bulkMode && tree.id === selectedTreeId;
             const fruitCount = fruitCounts[tree.id] ?? 0;
+            const isBulkSelected = bulkMode && bulkSelectedIds!.has(tree.id);
+            const selectable = !bulkMode || isBulkSelected || (isBulkSelectable?.(tree) ?? true);
+            const visible = !filtering || matchesHealthFilter(tree, healthFilter!);
             return (
               <g
                 key={tree.id}
                 onClick={() => onTreeClick?.(tree)}
+                className={`${selectable ? "cursor-pointer" : "cursor-not-allowed"} outline-none`}
+                opacity={!visible ? 0.15 : selectable ? 1 : 0.35}
+                role={bulkMode ? "checkbox" : "button"}
+                aria-checked={bulkMode ? isBulkSelected : undefined}
+                aria-disabled={bulkMode && !selectable ? true : undefined}
+                tabIndex={0}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     onTreeClick?.(tree);
                   }
                 }}
-                className="cursor-pointer outline-none"
-                role="button"
-                tabIndex={0}
                 aria-label={`Cây ${tree.treeCode}${fruitCount > 0 ? `, ${fruitCount} trái` : ""}`}
               >
                 <title>{`${tree.treeCode}${fruitCount > 0 ? ` · ${fruitCount} trái` : ""}`}</title>
                 <g transform={`translate(${cx} ${cy})`}>
+                  {isBulkSelected ? (
+                    <circle cx={0} cy={-2} r={22} fill="none" stroke={BULK_MARK}
+                      strokeWidth={2.5} strokeDasharray="4 3" />
+                  ) : null}
                   <DurianTreeMarker color={color} selected={isSelected} />
                   {fruitCount > 0 ? (
                     <FruitBadge fruitCount={fruitCount} />
+                  ) : null}
+                  {isBulkSelected ? (
+                    <g transform="translate(-17 -19)">
+                      <circle r={6} fill={BULK_MARK} stroke="white" strokeWidth={1.5} />
+                      <path d="M -2.6 0 l 1.8 1.9 l 3.4 -3.6" fill="none" stroke="white"
+                        strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+                    </g>
                   ) : null}
                 </g>
                 <text

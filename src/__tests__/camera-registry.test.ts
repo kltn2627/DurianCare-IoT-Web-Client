@@ -23,7 +23,10 @@ it("loads current registry metadata rather than a private camera address", async
 it("keeps generation and endpoint-change guards and avoids claiming a video stream", () => {
   const source = readFileSync(join(process.cwd(),"src/components/camera/CameraSection.tsx"),"utf8");
   expect(source).toContain("generation !== snapshotGeneration.current");
-  expect(source).toContain("[refreshSnapshot, endpointVersion]");
+  expect(source).toContain("[refreshSnapshot, endpointVersion, canPreview, clearSnapshot]");
+  // Snapshots are requested only for an ONLINE camera, with backoff instead of a fixed interval.
+  expect(source).toContain("if (!canPreview) { setPreviewLoading(false); return; }");
+  expect(source).toContain("snapshotDelayMs(failuresRef.current)");
   expect(source).toContain("setInterval(poll, 8_000)");
   expect(source).not.toMatch(/LIVE ·|FALLBACK_DEVICES|192\.168\./);
 });
