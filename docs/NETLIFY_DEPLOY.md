@@ -37,7 +37,9 @@ GitHub (kltn2627/DurianCare-IoT-Web-Client)
 ## 3. Biến môi trường trên Netlify
 
 Vào **Project configuration → Environment variables → Add a variable → Add a single variable**.
-Với mỗi biến: **Scopes** = *All scopes* (hoặc tối thiểu *Builds* + *Functions*); **Values** = *Same value for all deploy contexts*.
+Với mỗi biến: **Scopes** = *All scopes* (gói miễn phí chỉ có lựa chọn này); **Values** = *Same value for all deploy contexts*. Không tick *Contains secret values*, vì không biến nào ở đây là secret.
+
+Site hiện có: project `leafy-tulumba-63cf69`, domain `https://duriancare.io.vn`, deploy từ nhánh `main`. Đã đặt sẵn `NEXT_PUBLIC_WEB_BASE_URL=https://duriancare.io.vn`.
 Biến `NEXT_PUBLIC_*` được nhúng vào bundle lúc build, nên **sau khi đổi phải deploy lại** (**Deploys → Trigger deploy → Deploy project without cache**).
 
 | Biến | Bắt buộc | Giá trị ví dụ | Dùng ở đâu |
