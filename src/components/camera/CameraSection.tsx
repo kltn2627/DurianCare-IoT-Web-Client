@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cameraStatusView, snapshotDelayMs } from "@/lib/camera/status";
+import {
+  LIVE_PREVIEW_INTERVAL_MS, cameraStatusView, canLivePreview, frameAgeView, liveSnapshotDelayMs, snapshotDelayMs,
+} from "@/lib/camera/status";
 import {
   AlertCircle,
   AlertTriangle,
@@ -386,6 +388,8 @@ export function CameraSection() {
   const selectedDevice = registeredDevices.find((d) => d.device_id === deviceId);
   const statusView = cameraStatusView(selectedDevice);
   const canPreview = statusView.canPreview;
+  // PUSH cameras: live view = small preview frames requested while the page is open (see "Live view" below).
+  const livePush = canLivePreview(selectedDevice, canPreview);
 
   // ── Live snapshot ─────────────────────────────────────────────────────────
   // Requested only while the registry says ONLINE (fresh heartbeat + successful self-test), through the
@@ -451,7 +455,8 @@ export function CameraSection() {
     const loop = async () => {
       await refreshSnapshot();
       if (generation !== snapshotGeneration.current) return;
-      snapshotTimer.current = setTimeout(loop, snapshotDelayMs(failuresRef.current));
+      snapshotTimer.current = setTimeout(loop,
+        livePush ? liveSnapshotDelayMs(failuresRef.current) : snapshotDelayMs(failuresRef.current));
     };
     void loop();
     return () => {
@@ -459,7 +464,7 @@ export function CameraSection() {
       if (snapshotTimer.current) clearTimeout(snapshotTimer.current);
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     };
-  }, [refreshSnapshot, endpointVersion, canPreview, clearSnapshot]);
+  }, [refreshSnapshot, endpointVersion, canPreview, clearSnapshot, livePush]);
 
   // ── Capture now ───────────────────────────────────────────────────────────
   type CaptureStep = "idle" | "capturing" | "analyzing";
@@ -506,6 +511,26 @@ export function CameraSection() {
       setCaptureStep("idle");
     }
   };
+
+  // ── Live view (PUSH) ──────────────────────────────────────────────────────
+  // While this page is visible and no "Chụp hình ngay" is running, ask the camera for a small preview frame
+  // every few seconds. Preview frames stay in backend memory (no history, no AI); stops when the tab hides.
+  const [pageVisible, setPageVisible] = useState(true);
+  useEffect(() => {
+    const onVisibility = () => setPageVisible(document.visibilityState === "visible");
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+  const liveActive = livePush && pageVisible && captureStep === "idle";
+  useEffect(() => {
+    if (!liveActive || !deviceId) return;
+    let cancelled = false;
+    const tick = () => { if (!cancelled) void cameraClient.requestLivePreview(deviceId); };
+    tick();
+    const timer = setInterval(tick, LIVE_PREVIEW_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [liveActive, deviceId]);
 
   // ── History gallery ───────────────────────────────────────────────────────
   const [history, setHistory]       = useState<CameraCapture[]>([]);
@@ -637,14 +662,25 @@ export function CameraSection() {
         {/* Live stream preview + capture controls */}
         <div className="overflow-hidden rounded-2xl border border-[#e8ece7] bg-white">
           <div className="flex items-center justify-between border-b border-[#e8ece7] px-4 py-2.5">
-            <span className="text-[12px] font-semibold text-[#536259]">Ảnh camera định kỳ</span>
+            <span className="text-[12px] font-semibold text-[#536259]">
+              {livePush ? "Ảnh camera (tự cập nhật vài giây/lần)" : "Ảnh camera định kỳ"}
+            </span>
             <div className="flex items-center gap-2">
-              {snapshotAt && !previewError && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eaf4ec] px-2.5 py-1 text-[10px] font-bold text-[#37704f]">
-                  <span className="inline-block size-1.5 rounded-full bg-[#4b9666]" />
-                  Ảnh lúc {snapshotAt.toLocaleTimeString("vi-VN")}
-                </span>
-              )}
+              {snapshotAt && !previewError && (() => {
+                const age = frameAgeView(snapshotAt);
+                const live = liveActive && !age.stale;
+                return (
+                  <span
+                    title={age.stale ? "Ảnh này đã cũ, chưa phải hình hiện tại" : undefined}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      age.stale ? "bg-[#fdf1e4] text-[#9a5b13]" : "bg-[#eaf4ec] text-[#37704f]"}`}
+                  >
+                    <span className={`inline-block size-1.5 rounded-full ${
+                      age.stale ? "bg-[#d98a2b]" : live ? "animate-pulse bg-[#d64545]" : "bg-[#4b9666]"}`} />
+                    {live ? "Tự cập nhật · " : ""}{age.text}{age.stale ? " (ảnh cũ)" : ""}
+                  </span>
+                );
+              })()}
               <a
                 href="/dashboard/client/devices/setup"
                 title="Hướng dẫn kết nối thiết bị"

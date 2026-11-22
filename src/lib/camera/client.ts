@@ -72,6 +72,20 @@ export const cameraClient = {
     return { kind: "capture", capture: payload as unknown as CameraCapture };
   },
 
+  /**
+   * Live view: ask a push camera for one small preview frame (not stored in history, no AI). Repeated calls
+   * while one is still open reuse it on the backend. Never throws: a missed live frame is not an error.
+   */
+  requestLivePreview: async (deviceId: string): Promise<boolean> => {
+    try {
+      const response = await apiFetch(`/api/v1/camera/capture-now?device_id=${encodeURIComponent(deviceId)}`,
+        { method: "POST", body: JSON.stringify({ device_id: deviceId, preview: true }) });
+      return response.status === 202;
+    } catch {
+      return false;
+    }
+  },
+
   getCommand: (deviceId: string, commandId: string): Promise<CameraCommand> =>
     cameraFetch<CameraCommand>(
       `/api/v1/camera/commands/${encodeURIComponent(commandId)}?device_id=${encodeURIComponent(deviceId)}`,

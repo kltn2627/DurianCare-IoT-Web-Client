@@ -56,3 +56,38 @@ export function cameraStatusView(device: StatusInput | null | undefined): Camera
 export function snapshotDelayMs(failures: number): number {
   return Math.min(60_000, 8_000 * 2 ** Math.max(0, failures));
 }
+
+/** Refresh interval during live view: fast while frames load, the normal back-off after errors. */
+export function liveSnapshotDelayMs(failures: number): number {
+  return failures <= 0 ? LIVE_SNAPSHOT_MS : snapshotDelayMs(failures);
+}
+
+/**
+ * Live view (PUSH cameras): while the page is visible the Web asks the camera for a small preview frame
+ * every LIVE_PREVIEW_INTERVAL_MS and refreshes the image every LIVE_SNAPSHOT_MS. Preview frames are kept
+ * in backend memory only (no history, no AI).
+ */
+export const LIVE_PREVIEW_INTERVAL_MS = 6_000;
+export const LIVE_SNAPSHOT_MS = 3_000;
+/** A frame older than this is flagged as old, so a stale photo is never mistaken for the live view. */
+export const STALE_FRAME_MS = 2 * 60_000;
+
+/** Live view is possible only for push firmware that the registry says can deliver frames now. */
+export function canLivePreview(device: Pick<CameraDevice, "deliveryMode"> | undefined, canPreview: boolean): boolean {
+  return canPreview && device?.deliveryMode === "PUSH";
+}
+
+export interface FrameAgeView {
+  /** e.g. "Ảnh lúc 17:05:12" today, "Ảnh lúc 14:54 19/10/2026" on another day. */
+  text: string;
+  /** Older than STALE_FRAME_MS. */
+  stale: boolean;
+}
+
+export function frameAgeView(capturedAt: Date, now: Date = new Date()): FrameAgeView {
+  const sameDay = capturedAt.toDateString() === now.toDateString();
+  const text = sameDay
+    ? `Ảnh lúc ${capturedAt.toLocaleTimeString("vi-VN")}`
+    : `Ảnh lúc ${capturedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${capturedAt.toLocaleDateString("vi-VN")}`;
+  return { text, stale: now.getTime() - capturedAt.getTime() > STALE_FRAME_MS };
+}
