@@ -29,6 +29,7 @@ import {
   UserRound,
   UsersRound,
   X,
+  Wifi,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { authClient } from "@/lib/auth/client";
@@ -66,6 +67,7 @@ const ownerNav: NavItem[] = [
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
   { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
+  { href: "/dashboard/client/devices/setup", label: "Kết nối thiết bị", icon: Wifi },
   {
     href: "/dashboard/client/authorization",
     label: "Ủy quyền",
@@ -153,6 +155,7 @@ const ownerNavFixed: NavItem[] = [
   },
   { href: "/dashboard/client/diagnosis", label: "Phân tích AI", icon: Bot },
   { href: "/dashboard/client/camera", label: "Camera ESP32", icon: Camera },
+  { href: "/dashboard/client/devices/setup", label: "Kết nối thiết bị", icon: Wifi },
   { href: "/dashboard/client/crops", label: "Vụ mùa & QR", icon: QrCode },
   {
     href: "/dashboard/client/authorization",

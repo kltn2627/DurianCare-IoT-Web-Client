@@ -2,8 +2,9 @@ import { apiFetch } from "@/lib/auth/client";
 import type {
   AssignTreeInput,
   CameraCapture,
+  CameraCommand,
+  CaptureNowResult,
   CaptureHistoryResponse,
-  CameraDevice,
   DeviceListResponse,
   DeviceResponse,
   ScheduleResponse,
@@ -37,6 +38,15 @@ async function cameraFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function captureErrorMessage(payload: Record<string, unknown> | null, status: number): string {
+  const code = typeof payload?.code === "string" ? payload.code : "";
+  if (code === "CAMERA_PUSH_UNSUPPORTED") return "Firmware camera quá cũ, chưa hỗ trợ gửi ảnh lên máy chủ. Cần cập nhật firmware.";
+  if (code === "CAMERA_OFFLINE") return "Camera đang offline — không nhận lệnh chụp.";
+  if (code === "CAMERA_NOT_READY") return "Camera báo không chụp được (lỗi cảm biến). Thiết bị đang tự thử lại.";
+  if (typeof payload?.error === "string") return payload.error;
+  return status === 502 ? "Camera không trả ảnh." : "Lỗi kết nối camera.";
+}
+
 function safeJson<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T;
@@ -46,23 +56,56 @@ function safeJson<T>(value: string): T | null {
 }
 
 export const cameraClient = {
-  captureNow: (deviceId: string): Promise<CameraCapture> =>
-    cameraFetch<CameraCapture>(
-      `/api/v1/camera/capture-now?device_id=${encodeURIComponent(deviceId)}`,
-      { method: "POST", body: JSON.stringify({ device_id: deviceId }) },
+  /**
+   * Push firmware: the backend queues a command (202) and the camera uploads the frame within seconds.
+   * Legacy LAN firmware: the backend downloads the frame itself and answers 201 with the capture.
+   */
+  captureNow: async (deviceId: string): Promise<CaptureNowResult> => {
+    const response = await apiFetch(`/api/v1/camera/capture-now?device_id=${encodeURIComponent(deviceId)}`,
+      { method: "POST", body: JSON.stringify({ device_id: deviceId }) });
+    const text = await response.text().catch(() => "");
+    const payload = text ? safeJson<Record<string, unknown>>(text) : null;
+    if (!response.ok) {
+      throw new CameraApiError(captureErrorMessage(payload, response.status), response.status);
+    }
+    if (response.status === 202) return { kind: "queued", command: payload as unknown as CameraCommand };
+    return { kind: "capture", capture: payload as unknown as CameraCapture };
+  },
+
+  getCommand: (deviceId: string, commandId: string): Promise<CameraCommand> =>
+    cameraFetch<CameraCommand>(
+      `/api/v1/camera/commands/${encodeURIComponent(commandId)}?device_id=${encodeURIComponent(deviceId)}`,
     ),
 
+  /** Polls a queued capture until it completes, fails or expires (or `signal` aborts). */
+  waitForCommand: async (deviceId: string, commandId: string, options: { intervalMs?: number; timeoutMs?: number;
+    isCancelled?: () => boolean } = {}): Promise<CameraCommand> => {
+    const interval = options.intervalMs ?? 2_000;
+    const deadline = Date.now() + (options.timeoutMs ?? 150_000);
+    for (;;) {
+      const command = await cameraClient.getCommand(deviceId, commandId);
+      if (["COMPLETED", "FAILED", "EXPIRED"].includes(command.status)) return command;
+      if (options.isCancelled?.() || Date.now() >= deadline) return { ...command, status: "EXPIRED" };
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  },
+
   // Returns a blob URL for use in <img src={}> — caller is responsible for revoking it.
-  fetchSnapshotBlob: async (deviceId: string, snapshotPath?: string): Promise<string> => {
+  fetchSnapshotBlob: async (deviceId: string, snapshotPath?: string): Promise<string> =>
+    (await cameraClient.fetchLatestFrame(deviceId, snapshotPath)).url,
+
+  /** Latest frame through the backend (never the camera's address) and when the camera took it. */
+  fetchLatestFrame: async (deviceId: string, snapshotPath?: string): Promise<{ url: string; capturedAt: Date | null }> => {
     const expectedPath = `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`;
     if (snapshotPath && snapshotPath !== expectedPath) throw new CameraApiError("Đường dẫn camera không hợp lệ", 502);
-    const response = await apiFetch(
-      snapshotPath ?? expectedPath,
-    );
+    const response = await apiFetch(snapshotPath ?? expectedPath);
+    if (response.status === 404) throw new CameraApiError("Camera chưa gửi ảnh nào.", 404);
     if (!response.ok) throw new CameraApiError("Snapshot không khả dụng", response.status);
     const blob = await response.blob();
     if (blob.type.split(";")[0] !== "image/jpeg" || blob.size < 4) throw new CameraApiError("Ảnh camera không hợp lệ", 502);
-    return URL.createObjectURL(blob);
+    const header = response.headers.get("X-Frame-Captured-At");
+    const capturedAt = header && !Number.isNaN(Date.parse(header)) ? new Date(header) : null;
+    return { url: URL.createObjectURL(blob), capturedAt };
   },
 
   history: (params: {
@@ -106,21 +149,4 @@ export const cameraClient = {
       { method: "PATCH", body: JSON.stringify(input) },
     ),
 
-  updateConfig: (deviceId: string, cameraUrl: string): Promise<{ device: CameraDevice; camera_url: string }> =>
-    cameraFetch<{ device: CameraDevice; camera_url: string }>("/api/v1/camera/config", {
-      method: "POST",
-      body: JSON.stringify({ device_id: deviceId, camera_url: cameraUrl }),
-    }),
-
-  pingSnapshot: async (deviceId: string): Promise<boolean> => {
-    try {
-      const response = await apiFetch(
-        `/api/v1/camera/snapshot?device_id=${encodeURIComponent(deviceId)}`,
-        { method: "GET" },
-      );
-      return response.ok && response.headers.get("content-type")?.split(";")[0] === "image/jpeg" && (await response.blob()).size >= 4;
-    } catch {
-      return false;
-    }
-  },
 };

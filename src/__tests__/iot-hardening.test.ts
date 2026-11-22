@@ -14,6 +14,16 @@ describe("camera status view", () => {
     expect(cameraStatusView(null).canPreview).toBe(false);
   });
 
+  it("a camera degraded only by weak Wi-Fi still previews and captures, with the reason shown", () => {
+    const weak = cameraStatusView({ status: "DEGRADED", statusReasons: ["WIFI_WEAK"], previewAvailable: true, cameraReady: true });
+    expect(weak).toMatchObject({ tone: "degraded", canPreview: true, canCapture: true });
+    expect(weak.message).toContain("Wi-Fi");
+    const broken = cameraStatusView({ status: "DEGRADED", statusReasons: ["CAMERA_INIT_FAILED", "WIFI_WEAK"],
+      previewAvailable: false, cameraReady: false, lastError: "CAMERA_INIT_FAILED" });
+    expect(broken).toMatchObject({ canPreview: false, canCapture: false });
+    expect(broken.reasons).toHaveLength(2);
+  });
+
   it("snapshot polling backs off on failures and is capped", () => {
     expect([0, 1, 2, 3, 10].map(snapshotDelayMs)).toEqual([8_000, 16_000, 32_000, 60_000, 60_000]);
   });

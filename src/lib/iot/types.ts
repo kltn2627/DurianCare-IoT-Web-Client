@@ -39,6 +39,9 @@ export type IotDevice = {
     suppressesOfflineAlert?: boolean;
   };
   connectivityStatus?: string;
+  /** Why a reachable device is not fully healthy: TELEMETRY_DELAYED, NO_DATA_5_MIN, WIFI_WEAK. */
+  statusReasons?: string[];
+  wifiRssi?: number | null;
   claimedAt?: string | null;
   deviceType?: "SENSOR" | "CAMERA";
   deviceUid: string;
