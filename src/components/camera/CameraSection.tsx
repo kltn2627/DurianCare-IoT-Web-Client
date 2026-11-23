@@ -513,8 +513,11 @@ export function CameraSection() {
   };
 
   // ── Live view (PUSH) ──────────────────────────────────────────────────────
-  // While this page is visible and no "Chụp hình ngay" is running, ask the camera for a small preview frame
-  // every few seconds. Preview frames stay in backend memory (no history, no AI); stops when the tab hides.
+  // While this page is visible and no "Chụp hình ngay" is running:
+  //  - firmware >= 3.1.0: real-time MJPEG stream (camera pushes frames, backend fans them out), renewed every
+  //    ~15 s so the camera stops streaming soon after the viewer leaves;
+  //  - older firmware (409): a small preview frame every few seconds, shown by the snapshot loop.
+  // Live frames stay in backend memory (no history, no AI); everything stops when the tab hides.
   const [pageVisible, setPageVisible] = useState(true);
   useEffect(() => {
     const onVisibility = () => setPageVisible(document.visibilityState === "visible");
@@ -523,14 +526,43 @@ export function CameraSection() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
   const liveActive = livePush && pageVisible && captureStep === "idle";
+  const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
+  const [liveUnsupported, setLiveUnsupported] = useState(false);
+  const [liveRetry, setLiveRetry] = useState(0);
+  const [streamLoaded, setStreamLoaded] = useState(false);
+  useEffect(() => { if (!liveStreamUrl) setStreamLoaded(false); }, [liveStreamUrl]);
+  useEffect(() => { setLiveUnsupported(false); }, [deviceId]);
   useEffect(() => {
-    if (!liveActive || !deviceId) return;
+    if (!liveActive || !deviceId || liveUnsupported) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let opened = false;
+    const renew = async () => {
+      try {
+        const { streamUrl, renewAfterMs } = await cameraClient.startLive(deviceId);
+        if (cancelled) return;
+        // Renewal only extends the session: keep the open stream (a new src would reconnect).
+        if (!opened) { setLiveStreamUrl(streamUrl); opened = true; }
+        timer = setTimeout(() => void renew(), renewAfterMs);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof CameraApiError && err.status === 409) { setLiveUnsupported(true); return; }
+        timer = setTimeout(() => void renew(), 10_000);
+      }
+    };
+    void renew();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); setLiveStreamUrl(null); };
+  }, [liveActive, deviceId, liveUnsupported, liveRetry]);
+  // Older firmware: refresh with preview captures instead.
+  useEffect(() => {
+    if (!liveActive || !deviceId || !liveUnsupported) return;
     let cancelled = false;
     const tick = () => { if (!cancelled) void cameraClient.requestLivePreview(deviceId); };
     tick();
     const timer = setInterval(tick, LIVE_PREVIEW_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [liveActive, deviceId]);
+  }, [liveActive, deviceId, liveUnsupported]);
+  const streaming = liveActive && !liveUnsupported && liveStreamUrl !== null;
 
   // ── History gallery ───────────────────────────────────────────────────────
   const [history, setHistory]       = useState<CameraCapture[]>([]);
@@ -663,10 +695,16 @@ export function CameraSection() {
         <div className="overflow-hidden rounded-2xl border border-[#e8ece7] bg-white">
           <div className="flex items-center justify-between border-b border-[#e8ece7] px-4 py-2.5">
             <span className="text-[12px] font-semibold text-[#536259]">
-              {livePush ? "Ảnh camera (tự cập nhật vài giây/lần)" : "Ảnh camera định kỳ"}
+              {streaming && streamLoaded ? "Camera trực tiếp"
+                : livePush ? "Ảnh camera (tự cập nhật vài giây/lần)" : "Ảnh camera định kỳ"}
             </span>
             <div className="flex items-center gap-2">
-              {snapshotAt && !previewError && (() => {
+              {streaming && streamLoaded ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fdecec] px-2.5 py-1 text-[10px] font-bold text-[#b33a3a]">
+                  <span className="inline-block size-1.5 animate-pulse rounded-full bg-[#d64545]" />
+                  Trực tiếp
+                </span>
+              ) : snapshotAt && !previewError && (() => {
                 const age = frameAgeView(snapshotAt);
                 const live = liveActive && !age.stale;
                 return (
@@ -730,6 +768,23 @@ export function CameraSection() {
                 }}
               />
             ) : null}
+
+            {/* Real-time stream over the snapshot: until its first frame arrives, the snapshot stays visible. */}
+            {streaming && liveStreamUrl && (
+              <img
+                key={liveStreamUrl}
+                src={liveStreamUrl}
+                alt="Camera trực tiếp"
+                className={`absolute inset-0 h-full w-full object-cover transition-opacity ${streamLoaded ? "opacity-100" : "opacity-0"}`}
+                onLoad={() => setStreamLoaded(true)}
+                onError={() => {
+                  // Stream closed (camera idle, token expired, network): reopen with a fresh token.
+                  setStreamLoaded(false);
+                  setLiveStreamUrl(null);
+                  setTimeout(() => setLiveRetry((n) => n + 1), 3_000);
+                }}
+              />
+            )}
 
             {/* Capture-step overlay */}
             {isCapturing && (

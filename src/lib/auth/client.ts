@@ -150,7 +150,10 @@ export async function apiFetch(
   init?: RequestInit,
 ) {
   const normalized = backendPath.replace(/^\/api\//, "").replace(/^\//, "");
-  const response = await fetch(`/api/backend/${normalized}`, init);
+  // A string body is JSON here; without the header the backend's JSON parser ignores it (e.g. preview: true).
+  const headers = new Headers(init?.headers);
+  if (typeof init?.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+  const response = await fetch(`/api/backend/${normalized}`, { ...init, headers });
   if (response.status !== 401) return response;
   if (typeof window !== "undefined") window.location.assign("/login");
   return response;

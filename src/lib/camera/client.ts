@@ -86,6 +86,28 @@ export const cameraClient = {
     }
   },
 
+  /**
+   * Opens or renews the real-time view (camera firmware >= 3.1.0). Returns the MJPEG stream URL for an <img>
+   * and when to renew; call it again before `renewAfterMs` or the camera stops streaming.
+   * Throws CameraApiError 409 for older firmware (the caller falls back to refreshed snapshots).
+   */
+  startLive: async (deviceId: string): Promise<{ streamUrl: string; renewAfterMs: number }> => {
+    const response = await fetch(`/api/camera/live?device_id=${encodeURIComponent(deviceId)}`,
+      { method: "POST", cache: "no-store" });
+    const payload = safeJson<Record<string, unknown>>(await response.text().catch(() => "")) ?? {};
+    if (!response.ok) {
+      if (response.status === 401 && typeof window !== "undefined") window.location.assign("/login");
+      throw new CameraApiError(typeof payload.error === "string" ? payload.error : "Không mở được camera trực tiếp",
+        response.status);
+    }
+    const streamUrl = payload.streamUrl;
+    if (typeof streamUrl !== "string" || !/^https?:\/\/[^/]+\/api\/v1\/public\/cameras\/[^/]+\/live\.mjpeg\?token=/.test(streamUrl)) {
+      throw new CameraApiError("Địa chỉ camera trực tiếp không hợp lệ", 502);
+    }
+    const renew = Number(payload.renewAfterMs);
+    return { streamUrl, renewAfterMs: Number.isFinite(renew) && renew >= 5_000 ? renew : 15_000 };
+  },
+
   getCommand: (deviceId: string, commandId: string): Promise<CameraCommand> =>
     cameraFetch<CameraCommand>(
       `/api/v1/camera/commands/${encodeURIComponent(commandId)}?device_id=${encodeURIComponent(deviceId)}`,
