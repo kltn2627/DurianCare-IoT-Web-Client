@@ -61,35 +61,75 @@ export interface ScheduleSlotInput {
   enabled: boolean;
 }
 
+export interface CameraDiagnostics {
+  vdd33?: number;
+  resetReason?: string;
+  uptimeSec?: number;
+  freeHeap?: number;
+  minFreeHeap?: number;
+  freePsram?: number;
+  captureOk?: number;
+  captureFailures?: number;
+  consecutiveCaptureFailures?: number;
+  wifiRssi?: number;
+  wifiChannel?: number;
+  xclkMhz?: number;
+  frameSize?: string;
+  endpointSource?: string;
+}
+
+/**
+ * Camera as returned by the backend. The camera's LAN address (ip_address/port/protocol/mac) is not sent to
+ * farmers: the UI only ever uses backend URLs (snapshotUrl, image URLs), never the camera itself.
+ */
 export interface CameraDevice {
   cameraId: string;
-  /** DEGRADED: heartbeat is fresh but the camera's own frame-grab self-test failed. */
+  /** DEGRADED: heartbeat is fresh but the self-test failed, the Wi-Fi link is weak or captures keep failing. */
   status: "ONLINE" | "DEGRADED" | "OFFLINE" | "UNKNOWN";
+  statusReasons?: string[];
   previewAvailable?: boolean;
   cameraReady?: boolean | null;
   lastError?: string | null;
   firmwareVersion?: string | null;
+  wifiRssi?: number | null;
+  diagnostics?: CameraDiagnostics | null;
+  /** PUSH: the camera uploads frames and takes commands; PULL: legacy LAN-only firmware. */
+  deliveryMode?: "PUSH" | "PULL";
+  lastFrameAt?: string | null;
   lastSeenAt: string | null;
   endpointVersion: string;
   snapshotUrl: string;
   streamAvailable: boolean;
   id: string;
   device_id: string;
-  mac_address: string | null;
-  ip_address: string;
-  port: number;
-  protocol: "http" | "https";
   online: boolean;
   last_seen: string | null;
   firmware_version: string | null;
-  ssid: string | null;
   tree_id: string | null;
   zone_id: string | null;
   farm_id: string | null;
-  capabilities: string[] | null;
   created_at: string;
   updated_at: string;
 }
+
+export type CameraCommandStatus = "PENDING" | "DELIVERED" | "COMPLETED" | "FAILED" | "EXPIRED";
+
+export interface CameraCommand {
+  id: string;
+  cameraId: string;
+  reason: "ON_DEMAND" | "SCHEDULED";
+  status: CameraCommandStatus;
+  createdAt: string;
+  expiresAt: string;
+  captureId: string | null;
+  error: string | null;
+  capture: CameraCapture | null;
+}
+
+/** capture-now: 201 with a capture (legacy LAN pull) or 202 with a queued command (camera pushes the frame). */
+export type CaptureNowResult =
+  | { kind: "capture"; capture: CameraCapture }
+  | { kind: "queued"; command: CameraCommand };
 
 export interface DeviceListResponse {
   devices: CameraDevice[];
