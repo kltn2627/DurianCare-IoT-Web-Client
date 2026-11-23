@@ -12,9 +12,14 @@ import {
 
 const CONNECTIVITY: Record<string, { label: string; tone: string }> = {
   ONLINE: { label: "Đang kết nối", tone: "bg-green-100 text-green-800" },
-  STALE: { label: "Dữ liệu đã cũ", tone: "bg-amber-100 text-amber-800" },
+  STALE: { label: "Hoạt động hạn chế", tone: "bg-amber-100 text-amber-800" },
   OFFLINE: { label: "Mất kết nối", tone: "bg-red-100 text-red-700" },
   UNKNOWN: { label: "Chưa có dữ liệu", tone: "bg-neutral-100 text-neutral-600" },
+};
+const STATUS_REASONS: Record<string, string> = {
+  TELEMETRY_DELAYED: "Dữ liệu về trễ hơn chu kỳ gửi.",
+  NO_DATA_5_MIN: "Không nhận dữ liệu quá 5 phút — kiểm tra nguồn và Wi-Fi.",
+  WIFI_WEAK: "Sóng Wi-Fi yếu (dưới −80 dBm).",
 };
 const SEVERITY_TONE: Record<string, string> = {
   CRITICAL: "border-red-200 bg-red-50 text-red-800",
@@ -79,6 +84,9 @@ export function IotDevicePanel({ deviceId }: { deviceId: string }) {
         <span className="text-base font-extrabold text-neutral-900">{device.name}</span>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${status.tone}`}>{status.label}</span>
       </div>
+      {(device.statusReasons ?? []).length > 0 && <ul className="space-y-0.5 text-xs text-amber-800">
+        {(device.statusReasons ?? []).map((reason) => <li key={reason}>• {STATUS_REASONS[reason] ?? reason}</li>)}
+      </ul>}
       <dl className="grid grid-cols-2 gap-3 text-sm">
         <Info label="Mã thiết bị" value={device.deviceUid} />
         <Info label="Loại" value={device.deviceType === "CAMERA" ? "Camera" : "Cảm biến"} />
